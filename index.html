@@ -539,6 +539,100 @@ async function deleteData(key, shared=true){
   }catch(e){}
 }
 
+/* ---------------- قفل الجهاز الواحد للطالب (student_devices) ----------------
+   نفّذ هذا مرة واحدة في Supabase SQL Editor لإنشاء الجدول والصلاحيات:
+
+   create table if not exists public.student_devices (
+     phone text primary key,
+     user_id uuid not null,
+     device_id text not null,
+     device_label text,
+     first_login_at timestamptz not null default now(),
+     last_login_at timestamptz not null default now()
+   );
+   alter table public.student_devices enable row level security;
+
+   -- الطالب يقرأ فقط صف جهازه الخاص
+   create policy "student select own device" on public.student_devices
+     for select using ( auth.uid() = user_id );
+   -- الطالب يستطيع إنشاء صف جهازه أول مرة فقط (لا توجد سياسة UPDATE له عمدًا،
+   -- حتى لا يقدر أي جهاز ثانٍ "يسرق" الصف بالكتابة فوقه بنفسه)
+   create policy "student insert own device" on public.student_devices
+     for insert with check ( auth.uid() = user_id );
+   -- المشرف يقرأ كل الصفوف
+   create policy "admin select all devices" on public.student_devices
+     for select using ( (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' );
+   -- المشرف فقط يملك صلاحية "إعادة تعيين الجهاز" (حذف الصف)
+   create policy "admin delete any device" on public.student_devices
+     for delete using ( (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' );
+
+   -- لتفعيل الإشعار الفوري (خروج تلقائي من الجهاز القديم فور إعادة التعيين
+   -- دون انتظار تحديث الصفحة)، فعّل Realtime على الجدول:
+   alter publication supabase_realtime add table public.student_devices;
+*/
+
+/* هوية ثابتة لهذا المتصفح/الجهاز، تُخزَّن محليًا ولا تُشارَك أبدًا */
+function getDeviceId(){
+  let id = localStorage.getItem('medora_device_id');
+  if(!id){
+    id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('dev-'+Date.now()+'-'+Math.random().toString(16).slice(2));
+    localStorage.setItem('medora_device_id', id);
+  }
+  return id;
+}
+
+/* يتحقّق أن الجهاز الحالي هو الجهاز الوحيد المسموح له بهذا الحساب.
+   - إن لم يوجد صف بعد: هذا أول دخول على الإطلاق، فيُسجَّل هذا الجهاز كجهازه الوحيد.
+   - إن وُجد صف ويطابق جهازنا: الدخول مسموح.
+   - إن وُجد صف ولا يطابق: يُسجَّل الخروج فورًا ويُمنع الدخول (بغض النظر عن الوقت،
+     وليس فقط عند التزامن اللحظي)، إلى أن يعيد المشرف تعيين جهاز الحساب. */
+async function enforceDeviceLock(phone, userId){
+  if(!supabaseClient) return true;
+  const deviceId = getDeviceId();
+  try{
+    const { data: existing, error } = await supabaseClient
+      .from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
+    if(error) return true; // لا نمنع الدخول بسبب خطأ شبكة عابر
+    if(existing){
+      if(existing.device_id === deviceId) return true;
+      await supabaseClient.auth.signOut();
+      return false;
+    }
+    const { error: insErr } = await supabaseClient.from('student_devices').insert({
+      phone, user_id: userId, device_id: deviceId, device_label: navigator.userAgent.slice(0,140)
+    });
+    if(insErr && insErr.code === '23505'){
+      // جهاز آخر سبقنا بجزء من الثانية بالتسجيل لنفس الحساب - نعيد التحقق منه
+      const { data: raceRow } = await supabaseClient.from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
+      if(raceRow && raceRow.device_id !== deviceId){
+        await supabaseClient.auth.signOut();
+        return false;
+      }
+    }
+    return true;
+  }catch(e){ return true; }
+}
+
+/* يراقب صف جهاز هذا الطالب لحظيًا: إن غيّره/حذفه المشرف (إعادة تعيين) بينما
+   الطالب لا يزال مسجّلاً بجهازه القديم، يُخرَج فورًا دون انتظار تحديث الصفحة. */
+let deviceLockChannel = null;
+function watchDeviceLock(phone){
+  if(!supabaseClient || !phone) return;
+  if(deviceLockChannel){ supabaseClient.removeChannel(deviceLockChannel); deviceLockChannel = null; }
+  deviceLockChannel = supabaseClient.channel('device-lock-'+phone)
+    .on('postgres_changes', { event:'*', schema:'public', table:'student_devices', filter:`phone=eq.${phone}` }, async (payload)=>{
+      const deviceId = getDeviceId();
+      const newRow = payload.new;
+      if(!newRow || newRow.device_id !== deviceId){
+        await supabaseClient.auth.signOut();
+        state.session = null;
+        navigate('login');
+        render();
+        alert('تم تسجيل خروجك: تم إعادة تعيين جهاز هذا الحساب من قِبل الإدارة.');
+      }
+    }).subscribe();
+}
+
 /* ---------------- App state ---------------- */
 let state = {
   courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [],
@@ -559,12 +653,16 @@ async function syncSessionFromAuth(){
         name: meta.fullName || 'مشرف المنصة',
       };
     } else {
+      const phone = meta.phone || (authUser.email||'').split('@')[0];
+      const allowed = await enforceDeviceLock(phone, authUser.id);
+      if(!allowed){ state.session = null; return; }
       state.session = {
         type: 'student',
-        phone: meta.phone || (authUser.email||'').split('@')[0],
+        phone,
         name: meta.fullName || 'مستخدم',
         university: meta.university || null,
       };
+      watchDeviceLock(phone);
     }
   }catch(e){ state.session = null; }
 }
@@ -976,6 +1074,7 @@ function pageCourseDetail(courseId){
       ${priceBadgeHtml(course, true)}
       <button class="btn edit small" id="editCourseBtn">${ICONS.edit} تعديل بيانات الكورس</button>
       <button class="btn teal solid small" id="enrollStudentBtn">${ICONS.plus} تفعيل للطلاب</button>
+      <button class="btn danger small" id="resetDeviceBtn">${ICONS.lock} إعادة تعيين أجهزة الطالب</button>
     </div>
     <div class="enroll-box">
       <h4>الطلاب المفعّل لهم الكورس</h4>
@@ -1509,6 +1608,30 @@ function modalEnrollStudent(courseId){
   });
 }
 
+function modalResetStudentDevice(){
+  openModal(`
+    <h3>${ICONS.lock} إعادة تعيين أجهزة الطالب</h3>
+    <p style="color:var(--muted); font-size:13.5px; margin-bottom:10px;">أدخل رقم هاتف الطالب لإلغاء ربط حسابه بجهازه الحالي، ليتمكّن من تسجيل الدخول من جهاز جديد.</p>
+    <form id="resetDeviceForm">
+      <div class="field"><label>رقم هاتف الطالب</label><input type="tel" name="phone" required placeholder="اكتب رقم الهاتف كما سجّل به" style="direction:ltr;"></div>
+      <div id="resetDeviceMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn danger small">إعادة تعيين الجهاز</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('resetDeviceForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const phone = normalizePhone(fd.get('phone'));
+    const msgBox = document.getElementById('resetDeviceMsg');
+    if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
+    const { error, count } = await supabaseClient.from('student_devices').delete({ count:'exact' }).eq('phone', phone);
+    if(error){ msgBox.innerHTML = `<div class="form-msg error">تعذّرت العملية، تأكد أن جدول student_devices وصلاحياته مُعدّة بشكل صحيح.</div>`; return; }
+    if(!count){ msgBox.innerHTML = `<div class="form-msg error">لا يوجد جهاز مسجَّل بهذا الرقم أصلًا.</div>`; return; }
+    msgBox.innerHTML = `<div class="form-msg ok">تم إلغاء ربط الجهاز بنجاح، يمكن للطالب الآن الدخول من جهاز جديد.</div>`;
+    e.target.reset();
+  });
+}
+
 function modalAddLecture(courseId){
   openModal(`
     <h3>${ICONS.plus} إضافة محاضرة جديدة</h3>
@@ -1709,6 +1832,8 @@ function bindPageEvents(route){
     if(editCourseBtn) editCourseBtn.addEventListener('click', ()=> modalEditCourse(courseId));
     const enrollBtn = document.getElementById('enrollStudentBtn');
     if(enrollBtn) enrollBtn.addEventListener('click', ()=> modalEnrollStudent(courseId));
+    const resetDeviceBtn = document.getElementById('resetDeviceBtn');
+    if(resetDeviceBtn) resetDeviceBtn.addEventListener('click', modalResetStudentDevice);
     document.querySelectorAll('[data-unenroll]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const phone = btn.dataset.unenroll;
@@ -1906,17 +2031,26 @@ async function handleAuthSubmit(e){
     if(!data.session){
       msgBox.innerHTML = `<div class="form-msg error">تم إنشاء الحساب، لكن يبدو أن تأكيد البريد مفعّل في إعدادات Supabase. عطّل خيار "Confirm email" من Authentication → Providers → Email ثم أعد المحاولة.</div>`; return;
     }
+    await enforceDeviceLock(phone, data.user.id); // أول تسجيل للحساب، يربط هذا الجهاز به تلقائيًا
     state.students.push({ phone, fullName, university });
     await setData('students', state.students, true);
     state.session = { type:'student', phone, name: fullName, university };
     state.courseFilter = university;
+    watchDeviceLock(phone);
     navigate('home'); render();
   } else {
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email: pseudoEmail, password });
     if(error){ msgBox.innerHTML = `<div class="form-msg error">رقم الهاتف أو كلمة المرور غير صحيحة.</div>`; return; }
     const meta = data.user.user_metadata || {};
-    state.session = { type:'student', phone: meta.phone||phone, name: meta.fullName||phone, university: meta.university||null };
+    const finalPhone = meta.phone || phone;
+    const allowed = await enforceDeviceLock(finalPhone, data.user.id);
+    if(!allowed){
+      msgBox.innerHTML = `<div class="form-msg error">${ICONS.lock} هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`;
+      return;
+    }
+    state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null };
     if(state.session.university) state.courseFilter = state.session.university;
+    watchDeviceLock(finalPhone);
     navigate('home'); render();
   }
 }
