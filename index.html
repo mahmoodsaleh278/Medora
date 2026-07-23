@@ -520,6 +520,30 @@ let state = {
   session: null, loaded: false, courseFilter: 'الكل', bankAdminView: false, content: {},
 };
 
+async function syncSessionFromAuth(){
+  if(!supabaseClient){ state.session = null; return; }
+  try{
+    const { data } = await supabaseClient.auth.getSession();
+    const authUser = data && data.session ? data.session.user : null;
+    if(!authUser){ state.session = null; return; }
+    const meta = authUser.user_metadata || {};
+    if(meta.role === 'admin'){
+      state.session = {
+        type: 'admin',
+        username: meta.username || (authUser.email||'').split('@')[0],
+        name: meta.fullName || 'مشرف المنصة',
+      };
+    } else {
+      state.session = {
+        type: 'student',
+        phone: meta.phone || (authUser.email||'').split('@')[0],
+        name: meta.fullName || 'مستخدم',
+        university: meta.university || null,
+      };
+    }
+  }catch(e){ state.session = null; }
+}
+
 async function initData(){
   state.courses = await getData('courses', SEED_COURSES, true);
   state.lectures = await getData('lectures', SEED_LECTURES, true);
@@ -527,7 +551,7 @@ async function initData(){
   state.students = await getData('students', [], true);
   state.messages = await getData('messages', [], true);
   state.enrollments = await getData('enrollments', [], true);
-  state.session = await getData('session', null, false);
+  await syncSessionFromAuth();
   const savedContent = await getData('content', {}, true);
   state.content = Object.assign({}, CONTENT_DEFAULTS, savedContent);
   state.loaded = true;
@@ -536,7 +560,7 @@ async function initData(){
 /* ---------------- Enrollment helpers ---------------- */
 function isEnrolled(courseId){
   if(!state.session || state.session.type !== 'student') return false;
-  return state.enrollments.some(e=> e.courseId===courseId && e.username===state.session.username);
+  return state.enrollments.some(e=> e.courseId===courseId && e.phone===state.session.phone);
 }
 function courseUnlocked(courseId){
   const isAdmin = state.session && state.session.type === 'admin';
@@ -548,9 +572,9 @@ function enrollmentsFor(courseId){
 }
 async function selfEnroll(courseId){
   if(!state.session || state.session.type !== 'student') return;
-  const username = state.session.username;
-  if(state.enrollments.some(e=>e.courseId===courseId && e.username===username)) return;
-  state.enrollments.push({ courseId, username });
+  const phone = state.session.phone;
+  if(state.enrollments.some(e=>e.courseId===courseId && e.phone===phone)) return;
+  state.enrollments.push({ courseId, phone });
   await setData('enrollments', state.enrollments, true);
   render();
 }
@@ -623,8 +647,8 @@ function renderNavState(){
 }
 
 async function logout(){
+  if(supabaseClient) await supabaseClient.auth.signOut();
   state.session = null;
-  await deleteData('session', false);
   navigate('home'); render();
 }
 
@@ -857,7 +881,7 @@ function pageMyCourses(){
   if(!state.session || state.session.type !== 'student'){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لعرض الكورسات المفعّلة لديهم. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
-  const myCourseIds = state.enrollments.filter(e=>e.username===state.session.username).map(e=>e.courseId);
+  const myCourseIds = state.enrollments.filter(e=>e.phone===state.session.phone).map(e=>e.courseId);
   const courses = state.courses.filter(c=>myCourseIds.includes(c.id));
   const cards = courses.map(c => {
     const lectureCount = state.lectures.filter(l=>l.courseId===c.id).length;
@@ -927,7 +951,7 @@ function pageCourseDetail(courseId){
     </div>
     <div class="enroll-box">
       <h4>الطلاب المفعّل لهم الكورس</h4>
-      ${enrollmentsFor(courseId).length ? `<div class="enroll-list">${enrollmentsFor(courseId).map(e=>`<span class="enroll-chip">🎓 ${escapeHtml(e.username)} <button data-unenroll="${escapeHtml(e.username)}" title="إلغاء التفعيل">✕</button></span>`).join('')}</div>` : `<p style="color:var(--muted); font-size:13.5px;">لا يوجد طلاب مفعّلين لهذا الكورس بعد.</p>`}
+      ${enrollmentsFor(courseId).length ? `<div class="enroll-list">${enrollmentsFor(courseId).map(e=>`<span class="enroll-chip">🎓 ${escapeHtml(e.phone)} <button data-unenroll="${escapeHtml(e.phone)}" title="إلغاء التفعيل">✕</button></span>`).join('')}</div>` : `<p style="color:var(--muted); font-size:13.5px;">لا يوجد طلاب مفعّلين لهذا الكورس بعد.</p>`}
     </div>`;
   } else if(unlocked){
     statusBanner = `<div style="margin-top:14px;"><span class="lecture-tier-tag">✅ الكورس مفعّل لديك</span></div>`;
@@ -1337,7 +1361,7 @@ function pageLogin(){
             <option value="" disabled selected>— اختر جامعتك —</option>
             ${UNIVERSITIES.map(u=>`<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)}</option>`).join('')}
           </select></div>` : ''}
-          <div class="field"><label>اسم المستخدم</label><input type="text" name="username" placeholder="اسم المستخدم" required></div>
+          <div class="field"><label>رقم الهاتف</label><input type="tel" name="phone" placeholder="مثال: 0791234567" style="direction:ltr; text-align:right;" required></div>
           <div class="field"><label>كلمة المرور</label><input type="password" name="password" placeholder="••••••••" required></div>
           <button type="submit" class="btn solid" style="width:100%; justify-content:center;">${authMode==='login' ? 'دخول' : 'إنشاء الحساب'}</button>
         </form>
@@ -1365,7 +1389,7 @@ function pageAdminLogin(){
           <div class="field"><label>كلمة المرور</label><input type="password" name="password" placeholder="••••••••" required></div>
           <button type="submit" class="btn teal solid" style="width:100%; justify-content:center;">دخول لوحة التحكم</button>
         </form>
-        <p style="text-align:center; margin-top:16px; font-size:12.5px; color:var(--muted);">بيانات الدخول الافتراضية: admin / medora2026</p>
+        <p style="text-align:center; margin-top:16px; font-size:12.5px; color:var(--muted);">حساب المشرف يُنشأ يدويًا من لوحة Supabase (Authentication → Users)</p>
       </div>
     </div>
   </section>`;
@@ -1439,7 +1463,7 @@ function modalEnrollStudent(courseId){
   openModal(`
     <h3>${ICONS.plus} تفعيل الكورس لطالب</h3>
     <form id="enrollForm">
-      <div class="field"><label>اسم المستخدم (Username) للطالب</label><input type="text" name="username" required placeholder="اكتب اسم المستخدم كما سجّل به" style="direction:ltr;"></div>
+      <div class="field"><label>رقم هاتف الطالب</label><input type="tel" name="phone" required placeholder="اكتب رقم الهاتف كما سجّل به" style="direction:ltr;"></div>
       <div id="enrollMsg"></div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">تفعيل الكورس</button></div>
     </form>`);
@@ -1447,12 +1471,12 @@ function modalEnrollStudent(courseId){
   document.getElementById('enrollForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    const username = fd.get('username').trim();
+    const phone = normalizePhone(fd.get('phone'));
     const msgBox = document.getElementById('enrollMsg');
-    const student = state.students.find(s=>s.username===username);
-    if(!student){ msgBox.innerHTML = `<div class="form-msg error">لا يوجد طالب مسجّل بهذا الاسم. تأكد من اسم المستخدم.</div>`; return; }
-    if(state.enrollments.some(en=>en.courseId===courseId && en.username===username)){ msgBox.innerHTML = `<div class="form-msg error">هذا الطالب مفعّل بالفعل لهذا الكورس.</div>`; return; }
-    state.enrollments.push({ courseId, username });
+    const student = state.students.find(s=>s.phone===phone);
+    if(!student){ msgBox.innerHTML = `<div class="form-msg error">لا يوجد طالب مسجّل بهذا الرقم. تأكد من رقم الهاتف.</div>`; return; }
+    if(state.enrollments.some(en=>en.courseId===courseId && en.phone===phone)){ msgBox.innerHTML = `<div class="form-msg error">هذا الطالب مفعّل بالفعل لهذا الكورس.</div>`; return; }
+    state.enrollments.push({ courseId, phone });
     await setData('enrollments', state.enrollments, true);
     closeModal(); render();
   });
@@ -1660,8 +1684,8 @@ function bindPageEvents(route){
     if(enrollBtn) enrollBtn.addEventListener('click', ()=> modalEnrollStudent(courseId));
     document.querySelectorAll('[data-unenroll]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
-        const username = btn.dataset.unenroll;
-        state.enrollments = state.enrollments.filter(e=> !(e.courseId===courseId && e.username===username));
+        const phone = btn.dataset.unenroll;
+        state.enrollments = state.enrollments.filter(e=> !(e.courseId===courseId && e.phone===phone));
         await setData('enrollments', state.enrollments, true);
         render();
       });
@@ -1817,29 +1841,55 @@ function startQuiz(){
   render();
 }
 
+/* رقم الهاتف هو معرّف دخول الطالب. نطبّعه (نحذف المسافات والشرطات والأقواس)
+   ثم نبني منه "بريد وهمي" ثابت يُستخدم فقط داخليًا مع Supabase Auth،
+   فالمصادقة الفعلية (كلمة المرور، الجلسة، التوكن) تبقى بالكامل من Supabase. */
+function normalizePhone(raw){
+  return (raw||'').trim().replace(/[\s\-()]/g,'');
+}
+function isValidPhone(phone){
+  return /^\+?[0-9]{8,14}$/.test(phone);
+}
+function phoneToPseudoEmail(phone){
+  return 's'+phone.replace(/\D/g,'')+'@medora.app';
+}
+
 async function handleAuthSubmit(e){
   e.preventDefault();
   const fd = new FormData(e.target);
-  const username = fd.get('username').trim();
+  const phone = normalizePhone(fd.get('phone'));
   const password = fd.get('password');
   const msgBox = document.getElementById('authMsg');
+  if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
+  if(!isValidPhone(phone)){ msgBox.innerHTML = `<div class="form-msg error">رقم الهاتف غير صالح، اكتبه بالأرقام فقط (مثال: 0791234567).</div>`; return; }
+  const pseudoEmail = phoneToPseudoEmail(phone);
   if(authMode === 'register'){
     const fullName = fd.get('fullName').trim();
     const university = (fd.get('university') || '').trim();
     if(!university){ msgBox.innerHTML = `<div class="form-msg error">يرجى اختيار الجامعة.</div>`; return; }
-    if(state.students.find(s=>s.username===username)){ msgBox.innerHTML = `<div class="form-msg error">اسم المستخدم موجود بالفعل، جرّب اسمًا آخر.</div>`; return; }
-    state.students.push({ username, password, fullName, university });
+    const { data, error } = await supabaseClient.auth.signUp({
+      email: pseudoEmail,
+      password,
+      options: { data: { phone, fullName, university, role:'student' } }
+    });
+    if(error){
+      const msg = /registered|exists/i.test(error.message) ? 'رقم الهاتف هذا مسجّل بالفعل، جرّب تسجيل الدخول بدلًا من ذلك.' : 'تعذّر إنشاء الحساب، تأكد أن كلمة المرور 6 أحرف على الأقل.';
+      msgBox.innerHTML = `<div class="form-msg error">${msg}</div>`; return;
+    }
+    if(!data.session){
+      msgBox.innerHTML = `<div class="form-msg error">تم إنشاء الحساب، لكن يبدو أن تأكيد البريد مفعّل في إعدادات Supabase. عطّل خيار "Confirm email" من Authentication → Providers → Email ثم أعد المحاولة.</div>`; return;
+    }
+    state.students.push({ phone, fullName, university });
     await setData('students', state.students, true);
-    state.session = { type:'student', username, name: fullName, university };
-    await setData('session', state.session, false);
+    state.session = { type:'student', phone, name: fullName, university };
     state.courseFilter = university;
     navigate('home'); render();
   } else {
-    const found = state.students.find(s=>s.username===username && s.password===password);
-    if(!found){ msgBox.innerHTML = `<div class="form-msg error">اسم المستخدم أو كلمة المرور غير صحيحة.</div>`; return; }
-    state.session = { type:'student', username, name: found.fullName, university: found.university || null };
-    await setData('session', state.session, false);
-    if(found.university) state.courseFilter = found.university;
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email: pseudoEmail, password });
+    if(error){ msgBox.innerHTML = `<div class="form-msg error">رقم الهاتف أو كلمة المرور غير صحيحة.</div>`; return; }
+    const meta = data.user.user_metadata || {};
+    state.session = { type:'student', phone: meta.phone||phone, name: meta.fullName||phone, university: meta.university||null };
+    if(state.session.university) state.courseFilter = state.session.university;
     navigate('home'); render();
   }
 }
@@ -1850,14 +1900,17 @@ async function handleAdminSubmit(e){
   const username = fd.get('username').trim();
   const password = fd.get('password');
   const msgBox = document.getElementById('adminMsg');
-  const admin = await getData('admin-credentials', { username:'admin', password:'medora2026' }, true);
-  if(username === admin.username && password === admin.password){
-    state.session = { type:'admin', username, name: 'مشرف المنصة' };
-    await setData('session', state.session, false);
-    navigate('home'); render();
-  } else {
-    msgBox.innerHTML = `<div class="form-msg error">بيانات دخول المشرف غير صحيحة.</div>`;
+  if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
+  const pseudoEmail = username.toLowerCase()+'@medora.app';
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email: pseudoEmail, password });
+  if(error){ msgBox.innerHTML = `<div class="form-msg error">بيانات دخول المشرف غير صحيحة.</div>`; return; }
+  const meta = data.user.user_metadata || {};
+  if(meta.role !== 'admin'){
+    await supabaseClient.auth.signOut();
+    msgBox.innerHTML = `<div class="form-msg error">هذا الحساب لا يملك صلاحية دخول لوحة التحكم.</div>`; return;
   }
+  state.session = { type:'admin', username: meta.username||username, name: meta.fullName || 'مشرف المنصة' };
+  navigate('home'); render();
 }
 
 document.getElementById('mobileToggle').addEventListener('click', ()=>{ document.getElementById('navLinks').classList.toggle('open'); });
