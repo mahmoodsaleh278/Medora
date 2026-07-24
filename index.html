@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MEDORA | منصة طلاب التمريض</title>
+<title>MEDORA | منصة طلاب التمريض وطب الأسنان</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -153,6 +153,9 @@
   .toolbar h2{ font-size:28px; color:var(--ink); font-weight:800; }
   .toolbar-actions{ display:flex; gap:10px; flex-wrap:wrap; }
   .filter-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:26px; }
+  .filter-group{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+  .filter-group .filter-row{ margin-bottom:0; }
+  .filter-label{ font-weight:800; color:var(--ink); font-size:14.5px; white-space:nowrap; }
   .chip{ padding:7px 16px; border-radius:999px; border:1.5px solid var(--border); font-size:13.5px; font-weight:700; color:var(--muted); background:#fff; }
   .chip.active{ background:var(--navy); border-color:var(--ink); color:#fff; }
 
@@ -402,11 +405,11 @@
     <button class="mobile-toggle" id="mobileToggle" aria-label="فتح القائمة">☰</button>
     <nav class="links" id="navLinks">
       <a href="#/home" data-route="home">الصفحة الرئيسية</a>
-      <a href="#/courses" data-route="courses">الكورسات</a>
+      <a href="#/courses" data-route="courses">الدورات</a>
       <a href="#/bank" data-route="bank">بنك الأسئلة</a>
       <a href="#/about" data-route="about">من نحن</a>
       <a href="#/contact" data-route="contact">تواصل معنا</a>
-      <a href="#/my-courses" data-route="my-courses" id="navMyCoursesLink" class="hidden">كورساتي</a>
+      <a href="#/my-courses" data-route="my-courses" id="navMyCoursesLink" class="hidden">دوراتي</a>
       <a href="#/login" data-route="login" id="navLoginLink">تسجيل الدخول</a>
     </nav>
     <div class="nav-actions">
@@ -419,7 +422,7 @@
 
 <div id="adminBannerWrap"></div>
 
-<main id="app"></main>
+<main id="app"><div style="min-height:80vh; display:flex; align-items:center; justify-content:center; text-align:center; padding:20px;"><span class="loading-dot"></span> جارِ التحميل...</div></main>
 
 <footer>
   <div class="footer-inner">
@@ -428,7 +431,7 @@
         <img src="data:image/jpeg;base64,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" alt="MEDORA">
         <span class="wordmark">MEDORA</span>
       </div>
-      <p id="footerDescText" style="margin-top:14px; max-width:280px; font-size:13.5px;">منصة تعليمية متخصصة لطلاب التمريض، تجمع الكورسات، المحاضرات، وبنك الأسئلة في مكان واحد لدعم رحلتكم الأكاديمية.</p>
+      <p id="footerDescText" style="margin-top:14px; max-width:280px; font-size:13.5px;">منصة تعليمية متخصصة لطلاب التمريض وطب الأسنان، تجمع الدورات، المحاضرات، وبنك الأسئلة في مكان واحد لدعم رحلتكم الأكاديمية.</p>
       <div class="footer-social">
         <a href="https://wa.me/962790000000" target="_blank" rel="noopener" class="social-ic wa" aria-label="واتساب" title="واتساب"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.9c0 1.77.46 3.5 1.34 5.02L2.05 22l5.2-1.36a9.94 9.94 0 0 0 4.78 1.22h.01c5.46 0 9.9-4.45 9.9-9.9 0-2.65-1.03-5.13-2.9-7C17.16 3.03 14.68 2 12.04 2m0 1.67c2.2 0 4.26.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.81c0 4.53-3.7 8.23-8.24 8.23a8.2 8.2 0 0 1-4.18-1.15l-.3-.17-3.09.81.82-3-.2-.32a8.15 8.15 0 0 1-1.25-4.4c0-4.53 3.7-8.23 8.21-8.23m-4.5 4.73c-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02s.87 2.34 1 2.5c.12.17 1.7 2.69 4.19 3.7 2.32.9 2.32.6 2.74.56.42-.04 1.36-.55 1.55-1.09.19-.54.19-1 .13-1.09-.06-.1-.22-.15-.46-.27-.24-.12-1.4-.7-1.62-.77-.22-.08-.37-.12-.53.12s-.62.77-.75.93c-.14.15-.28.17-.52.05-.24-.12-1.01-.37-1.92-1.19-.71-.63-1.19-1.42-1.33-1.66-.14-.24-.02-.36.1-.48.11-.11.24-.28.37-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.53-1.3-.73-1.78-.19-.46-.39-.4-.53-.41z"/></svg></a>
         <a href="https://facebook.com/medora" target="_blank" rel="noopener" class="social-ic fb" aria-label="فيسبوك" title="فيسبوك"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.44 2.91h-2.34V22c4.78-.76 8.44-4.92 8.44-9.94z"/></svg></a>
@@ -438,10 +441,15 @@
     <div class="footer-cols">
       <div class="footer-col">
         <h5>روابط سريعة</h5>
-        <a href="#/courses">الكورسات</a>
+        <a href="#/courses">الدورات</a>
         <a href="#/bank">بنك الأسئلة</a>
         <a href="#/about">من نحن</a>
         <a href="#/contact">تواصل معنا</a>
+      </div>
+      <div class="footer-col">
+        <h5>التخصصات</h5>
+        <p>التمريض</p>
+        <p>طب الأسنان</p>
       </div>
       <div class="footer-col">
         <h5>الجامعات المستهدفة</h5>
@@ -468,15 +476,25 @@ const UNIVERSITIES = [
   { id:'just', name:'جامعة العلوم والتكنولوجيا الأردنية', loc:'إربد' },
 ];
 
+const MAJORS = [
+  { id:'nursing', name:'التمريض' },
+  { id:'dentistry', name:'طب الأسنان' },
+];
+
 const SEED_COURSES = [
-  { id:'c1', title:'أساسيات التمريض - فيرست', university:'عام', hours:4, description:'المفاهيم والمهارات الأساسية لممارسة التمريض الآمن والفعّال (الجزء الأول).', isFree:true },
-  { id:'c1b', title:'أساسيات التمريض - ميد', university:'عام', hours:4, description:'المفاهيم والمهارات الأساسية لممارسة التمريض الآمن والفعّال (الجزء الثاني).', isFree:false },
-  { id:'c1c', title:'أساسيات التمريض - فاينل', university:'عام', hours:4, description:'المفاهيم والمهارات الأساسية لممارسة التمريض الآمن والفعّال (الجزء الأخير).', isFree:false },
-  { id:'c2', title:'تمريض صحة الأم والطفل', university:'جامعة مؤتة', hours:3, description:'رعاية الأمهات والأطفال حديثي الولادة خلال مراحل الحمل والولادة.', isFree:false },
-  { id:'c3', title:'التمريض في الرعاية الحرجة', university:'جامعة العلوم التطبيقية الخاصة', hours:3, description:'أساليب المراقبة والتدخل في وحدات العناية المركزة.', isFree:false },
-  { id:'c4', title:'الصحة النفسية والتمريض النفسي', university:'جامعة العلوم والتكنولوجيا الأردنية', hours:3, description:'التعامل مع الاضطرابات النفسية ومهارات التواصل العلاجي.', isFree:false },
-  { id:'c5', title:'الصيدلة السريرية للتمريض', university:'عام', hours:2, description:'الأدوية الشائعة، الجرعات، والتفاعلات الدوائية المهمة للممرض.', isFree:false },
-  { id:'c6', title:'تمريض المسنين', university:'جامعة مؤتة', hours:2, description:'احتياجات الرعاية الخاصة بكبار السن والأمراض المزمنة.', isFree:false },
+  { id:'c1', title:'أساسيات التمريض - فيرست', university:'عام', major:'التمريض', hours:4, description:'المفاهيم والمهارات الأساسية لممارسة التمريض الآمن والفعّال (الجزء الأول).', isFree:true },
+  { id:'c1b', title:'أساسيات التمريض - ميد', university:'عام', major:'التمريض', hours:4, description:'المفاهيم والمهارات الأساسية لممارسة التمريض الآمن والفعّال (الجزء الثاني).', isFree:false },
+  { id:'c1c', title:'أساسيات التمريض - فاينل', university:'عام', major:'التمريض', hours:4, description:'المفاهيم والمهارات الأساسية لممارسة التمريض الآمن والفعّال (الجزء الأخير).', isFree:false },
+  { id:'c2', title:'تمريض صحة الأم والطفل', university:'جامعة مؤتة', major:'التمريض', hours:3, description:'رعاية الأمهات والأطفال حديثي الولادة خلال مراحل الحمل والولادة.', isFree:false },
+  { id:'c3', title:'التمريض في الرعاية الحرجة', university:'جامعة العلوم التطبيقية الخاصة', major:'التمريض', hours:3, description:'أساليب المراقبة والتدخل في وحدات العناية المركزة.', isFree:false },
+  { id:'c4', title:'الصحة النفسية والتمريض النفسي', university:'جامعة العلوم والتكنولوجيا الأردنية', major:'التمريض', hours:3, description:'التعامل مع الاضطرابات النفسية ومهارات التواصل العلاجي.', isFree:false },
+  { id:'c5', title:'الصيدلة السريرية للتمريض', university:'عام', major:'التمريض', hours:2, description:'الأدوية الشائعة، الجرعات، والتفاعلات الدوائية المهمة للممرض.', isFree:false },
+  { id:'c6', title:'تمريض المسنين', university:'جامعة مؤتة', major:'التمريض', hours:2, description:'احتياجات الرعاية الخاصة بكبار السن والأمراض المزمنة.', isFree:false },
+  { id:'d1', title:'أساسيات طب الأسنان', university:'عام', major:'طب الأسنان', hours:4, description:'المفاهيم والمهارات الأساسية في تشريح الفم والأسنان وممارسات العيادة الآمنة.', isFree:true },
+  { id:'d2', title:'علاج جذور الأسنان', university:'جامعة مؤتة', major:'طب الأسنان', hours:3, description:'تشخيص وعلاج مشاكل لب السن وقنوات الجذور.', isFree:false },
+  { id:'d3', title:'تقويم الأسنان', university:'جامعة العلوم التطبيقية الخاصة', major:'طب الأسنان', hours:3, description:'مبادئ تقويم الأسنان والفكين وخطط العلاج الشائعة.', isFree:false },
+  { id:'d4', title:'جراحة الفم والفكين', university:'جامعة العلوم والتكنولوجيا الأردنية', major:'طب الأسنان', hours:3, description:'الإجراءات الجراحية الشائعة في الفم والفكين وطرق التخدير الموضعي.', isFree:false },
+  { id:'d5', title:'طب أسنان الأطفال', university:'عام', major:'طب الأسنان', hours:2, description:'التعامل مع أسنان الأطفال والوقاية من التسوس المبكر.', isFree:false },
 ];
 
 const SEED_LECTURES = [
@@ -485,6 +503,8 @@ const SEED_LECTURES = [
   { id:'l3', courseId:'c2', title:'مراحل الحمل الطبيعي', description:'المتابعة الدورية للحامل خلال الثلاثيات الثلاث.', videoUrl:'', fileUrl:'' },
   { id:'l4', courseId:'c3', title:'أساسيات المراقبة في العناية المركزة', description:'قراءة المونيتور والتعامل مع الحالات الحرجة.', videoUrl:'', fileUrl:'' },
   { id:'l5', courseId:'c5', title:'حساب الجرعات الدوائية', description:'طرق حساب الجرعة بدقة لتفادي الأخطاء الدوائية.', videoUrl:'', fileUrl:'' },
+  { id:'l6', courseId:'d1', title:'تشريح الفم والأسنان', description:'نظرة عامة على تركيب الأسنان والأنسجة المحيطة بها.', videoUrl:'', fileUrl:'' },
+  { id:'l7', courseId:'d2', title:'خطوات علاج العصب', description:'الإجراء العملي لعلاج قنوات الجذور خطوة بخطوة.', videoUrl:'', fileUrl:'' },
 ];
 
 const SEED_QUESTIONS = [
@@ -496,6 +516,9 @@ const SEED_QUESTIONS = [
   { id:'q6', courseId:'c5', lectureId:'l5', nature:'ref', question:'أي فئة دوائية تُستخدم لعلاج ارتفاع ضغط الدم؟', options:['المضادات الحيوية','حاصرات بيتا (Beta Blockers)','مضادات الهيستامين','الفيتامينات'], correctIndex:1, explanation:'حاصرات بيتا تقلل من معدل ضربات القلب وقوة تقلص عضلة القلب، مما يخفض ضغط الدم.' },
   { id:'q7', courseId:'c1', lectureId:'l2', nature:'past', question:'ما الأداة المستخدمة لقياس درجة حرارة الجسم؟', options:['السماعة الطبية','مقياس الحرارة (الترمومتر)','جهاز قياس الضغط','منظار العين'], correctIndex:1, explanation:'الترمومتر هو الأداة المخصصة لقياس درجة حرارة الجسم بدقة.' },
   { id:'q8', courseId:'c1', lectureId:null, nature:'ref', question:'ما هو المعدل الطبيعي للتنفس لدى البالغين في الدقيقة؟', options:['4-8','12-20','30-40','45-60'], correctIndex:1, explanation:'المعدل الطبيعي لتنفس البالغين يتراوح بين 12 و20 نفسًا في الدقيقة.' },
+  { id:'q9', courseId:'d1', lectureId:'l6', nature:'past', question:'كم عدد الأسنان الدائمة لدى الإنسان البالغ؟', options:['20 سنًا','28 سنًا','32 سنًا','36 سنًا'], correctIndex:2, explanation:'يمتلك الإنسان البالغ 32 سنًا دائمًا شاملةً أضراس العقل الأربعة.' },
+  { id:'q10', courseId:'d1', lectureId:'l6', nature:'ref', question:'ما هي الطبقة الأكثر صلابة في السن؟', options:['اللب (Pulp)','العاج (Dentin)','الميناء (Enamel)','الملاط (Cementum)'], correctIndex:2, explanation:'الميناء هي أصلب طبقة في السن وتغطي التاج لحمايته من التآكل والتسوس.' },
+  { id:'q11', courseId:'d2', lectureId:'l7', nature:'past', question:'ما هو الهدف الرئيسي من علاج قناة الجذر؟', options:['تبييض السن','إزالة اللب المصاب وتعقيم القناة','تقويم موضع السن','إزالة الجير'], correctIndex:1, explanation:'علاج قناة الجذر يهدف لإزالة اللب المصاب أو الملتهب وتنظيف وتعقيم القنوات لإنقاذ السن.' },
 ];
 
 /* ---------------- Storage helpers (Supabase backend) ----------------
@@ -636,7 +659,7 @@ function watchDeviceLock(phone){
 /* ---------------- App state ---------------- */
 let state = {
   courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [],
-  session: null, loaded: false, courseFilter: 'الكل', bankAdminView: false, content: {},
+  session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', bankAdminView: false, content: {},
 };
 
 async function syncSessionFromAuth(){
@@ -661,21 +684,28 @@ async function syncSessionFromAuth(){
         phone,
         name: meta.fullName || 'مستخدم',
         university: meta.university || null,
+        major: meta.major || null,
       };
+      if(state.session.university) state.courseFilter = state.session.university;
+      if(state.session.major) state.majorFilter = state.session.major;
       watchDeviceLock(phone);
     }
   }catch(e){ state.session = null; }
 }
 
 async function initData(){
-  state.courses = await getData('courses', SEED_COURSES, true);
-  state.lectures = await getData('lectures', SEED_LECTURES, true);
-  state.questions = await getData('questions', SEED_QUESTIONS, true);
-  state.students = await getData('students', [], true);
-  state.messages = await getData('messages', [], true);
-  state.enrollments = await getData('enrollments', [], true);
-  await syncSessionFromAuth();
-  const savedContent = await getData('content', {}, true);
+  const [courses, lectures, questions, students, messages, enrollments, savedContent] = await Promise.all([
+    getData('courses', SEED_COURSES, true),
+    getData('lectures', SEED_LECTURES, true),
+    getData('questions', SEED_QUESTIONS, true),
+    getData('students', [], true),
+    getData('messages', [], true),
+    getData('enrollments', [], true),
+    getData('content', {}, true),
+    syncSessionFromAuth(),
+  ]);
+  state.courses = courses; state.lectures = lectures; state.questions = questions;
+  state.students = students; state.messages = messages; state.enrollments = enrollments;
   state.content = Object.assign({}, CONTENT_DEFAULTS, savedContent);
   state.loaded = true;
 }
@@ -720,8 +750,8 @@ function courseSubscribeActionHtml(c, isAdmin){
 }
 
 /* ---------------- Quiz wizard state ---------------- */
-let quiz = { step:'setup', university:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{} };
-function resetQuiz(){ quiz = { step:'setup', university:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{} }; }
+let quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{} };
+function resetQuiz(){ quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{} }; }
 
 /* ---------------- Router ---------------- */
 function currentRoute(){ return location.hash.replace('#/', '') || 'home'; }
@@ -762,7 +792,7 @@ function renderNavState(){
   const bannerWrap = document.getElementById('adminBannerWrap');
   if(state.session && state.session.type === 'admin'){
     bannerWrap.innerHTML = `<div class="admin-banner">
-        <span>🛡️ أنت الآن في وضع المشرف — يمكنك إضافة أو حذف الكورسات والمحاضرات والأسئلة مباشرة من الصفحات.</span>
+        <span>🛡️ أنت الآن في وضع المشرف — يمكنك إضافة أو حذف الدورات والمحاضرات والأسئلة مباشرة من الصفحات.</span>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
       </div>`;
     document.getElementById('bannerLogout').addEventListener('click', logout);
@@ -804,29 +834,29 @@ function stethDivider(){
 
 /* ---------------- Editable site content (admin can edit every field) ---------------- */
 const CONTENT_DEFAULTS = {
-  hero_title: 'رفيقك الأكاديمي في مسيرة <em>التمريض</em>',
-  hero_lead: 'MEDORA منصة تعليمية موحّدة لطلاب التمريض من عدّة جامعات أردنية، تجمع الكورسات والمحاضرات وبنك الأسئلة في تجربة واحدة سهلة ومنظّمة.',
+  hero_title: 'رفيقك الأكاديمي في مسيرة <em>التمريض وطب الأسنان</em>',
+  hero_lead: 'MEDORA منصة تعليمية موحّدة لطلاب التمريض وطب الأسنان من عدّة جامعات أردنية، تجمع الدورات والمحاضرات وبنك الأسئلة في تجربة واحدة سهلة ومنظّمة.',
   hero_card_title: 'الجامعات المشمولة بالمنصة',
   stat_partners_value: '3',
   stat_partners_label: 'جامعات شريكة',
   why_eyebrow: 'لماذا MEDORA',
-  why_title: 'كل ما يحتاجه طالب التمريض في مكان واحد',
+  why_title: 'كل ما يحتاجه طالب التمريض وطب الأسنان في مكان واحد',
   why_desc: 'محتوى مركّز، منظّم حسب المقرر، ومحدّث باستمرار من قبل فريق المنصة.',
   feature1_title: 'كورسات ومحاضرات',
   feature1_desc: 'كل كورس يحتوي على محاضراته الخاصة، مع إمكانية المشاهدة والتحميل مباشرة.',
   feature2_title: 'بنك أسئلة تفاعلي',
   feature2_desc: 'اختبارات ذكية حسب الكورس، بنمط دراسي أو نمط اختبار حقيقي مع نتيجة نهائية.',
-  feature3_title: 'لجميع طلاب التمريض',
-  feature3_desc: 'منصّة موحّدة تخدم طلاب مؤتة والعلوم التطبيقية الخاصة والعلوم والتكنولوجيا الأردنية.',
+  feature3_title: 'لطلاب التمريض وطب الأسنان',
+  feature3_desc: 'منصّة موحّدة تخدم طلاب مؤتة والعلوم التطبيقية الخاصة والعلوم والتكنولوجيا الأردنية، في تخصصي التمريض وطب الأسنان.',
   cta_eyebrow: 'جاهز تبدأ؟',
   cta_title: 'سجّل الدخول وابدأ رحلتك التعليمية',
-  cta_desc: 'أنشئ حسابك الآن لتتابع الكورسات وتحلّ أسئلة بنك المراجعة.',
-  about_title: 'MEDORA — منصة طلاب التمريض',
-  about_text: 'MEDORA منصة تعليمية إلكترونية متخصصة، صُممت خصيصًا لخدمة طلاب كلية التمريض في أكثر من جامعة أردنية. تجمع المنصة بين المحتوى الدراسي المنظّم، المحاضرات المسجّلة والملفات القابلة للتحميل، وبنك أسئلة مراجعة شامل، بهدف تسهيل رحلة الطالب الأكاديمية وتوفير مصدر موحّد وموثوق للمراجعة والاستعداد للامتحانات.',
+  cta_desc: 'أنشئ حسابك الآن لتتابع الدورات وتحلّ أسئلة بنك المراجعة.',
+  about_title: 'MEDORA — منصة طلاب التمريض وطب الأسنان',
+  about_text: 'MEDORA منصة تعليمية إلكترونية متخصصة، صُممت خصيصًا لخدمة طلاب كليتي التمريض وطب الأسنان في أكثر من جامعة أردنية. تجمع المنصة بين المحتوى الدراسي المنظّم، المحاضرات المسجّلة والملفات القابلة للتحميل، وبنك أسئلة مراجعة شامل، بهدف تسهيل رحلة الطالب الأكاديمية وتوفير مصدر موحّد وموثوق للمراجعة والاستعداد للامتحانات.',
   mission1_title: '🎯 رسالتنا',
-  mission1_desc: 'تمكين طلاب التمريض من الوصول لمحتوى تعليمي عالي الجودة ومنظّم، بغض النظر عن الجامعة التي ينتمون إليها.',
+  mission1_desc: 'تمكين طلاب التمريض وطب الأسنان من الوصول لمحتوى تعليمي عالي الجودة ومنظّم، بغض النظر عن الجامعة أو التخصص الذي ينتمون إليه.',
   mission2_title: '👁️ رؤيتنا',
-  mission2_desc: 'أن نكون المرجع الرقمي الأول لطلاب التمريض في الأردن، من خلال محتوى محدّث باستمرار ومبني على احتياجات الطلاب الفعلية.',
+  mission2_desc: 'أن نكون المرجع الرقمي الأول لطلاب التمريض وطب الأسنان في الأردن، من خلال محتوى محدّث باستمرار ومبني على احتياجات الطلاب الفعلية.',
   mission3_title: '📚 المحتوى',
   mission3_desc: 'كورسات مصنّفة حسب المقرر والجامعة، مع محاضرات قابلة للمشاهدة والتحميل.',
   mission4_title: '❓ بنك الأسئلة',
@@ -837,7 +867,7 @@ const CONTENT_DEFAULTS = {
   contact_email: 'info@medora-nursing.com',
   contact_phone: '+962 7 9000 0000',
   contact_location: 'الأردن — خدمة عن بعد لجميع الجامعات الشريكة',
-  footer_desc: 'منصة تعليمية متخصصة لطلاب التمريض، تجمع الكورسات، المحاضرات، وبنك الأسئلة في مكان واحد لدعم رحلتكم الأكاديمية.',
+  footer_desc: 'منصة تعليمية متخصصة لطلاب التمريض وطب الأسنان، تجمع الدورات، المحاضرات، وبنك الأسئلة في مكان واحد لدعم رحلتكم الأكاديمية.',
   footer_copy: '© 2026 MEDORA — جميع الحقوق محفوظة',
   app_title: 'حمّل تطبيق MEDORA',
   app_desc: 'تابع كورساتك وبنك الأسئلة من هاتفك في أي وقت.',
@@ -913,8 +943,8 @@ function pageHome(){
         <h1>${cval('hero_title')}${editBtn('hero_title')}</h1>
         <p class="lead">${escapeHtml(cval('hero_lead'))}${editBtn('hero_lead')}</p>
         <div class="hero-actions">
-          <a href="#/courses" class="btn solid">تصفّح الكورسات</a>
-          <a href="#/bank" class="btn">جرّب بنك الأسئلة</a>
+          <a href="#/courses" class="btn solid">تصفّح الدورات</a>
+          <a href="#/bank" class="btn">بنك الأسئلة</a>
         </div>
       </div>
       <div class="hero-card"><h3>${escapeHtml(cval('hero_card_title'))}${editBtn('hero_card_title')}</h3>${uniRows}</div>
@@ -958,10 +988,13 @@ function pageHome(){
    ========================================================= */
 function pageCourses(){
   const filters = ['الكل', ...UNIVERSITIES.map(u=>u.name), 'عام'];
+  const majorFilters = ['الكل', ...MAJORS.map(m=>m.name)];
   const isAdmin = state.session && state.session.type === 'admin';
   let courses = state.courses;
   if(state.courseFilter !== 'الكل') courses = courses.filter(c => c.university === state.courseFilter);
+  if(state.majorFilter !== 'الكل') courses = courses.filter(c => (c.major || 'التمريض') === state.majorFilter);
   const chips = filters.map(f => `<button class="chip ${state.courseFilter===f?'active':''}" data-filter="${escapeHtml(f)}">${escapeHtml(f)}</button>`).join('');
+  const majorChips = majorFilters.map(f => `<button class="chip ${state.majorFilter===f?'active':''}" data-major-filter="${escapeHtml(f)}">${escapeHtml(f)}</button>`).join('');
 
   const cards = courses.map(c => {
     const lectureCount = state.lectures.filter(l=>l.courseId===c.id).length;
@@ -970,7 +1003,10 @@ function pageCourses(){
       <div class="course-top"></div>
       <div class="course-body">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-          <div class="course-uni">${escapeHtml(c.university)}</div>
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <div class="course-uni">${escapeHtml(c.university)}</div>
+            <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
+          </div>
           ${priceBadgeHtml(c, isAdmin)}
         </div>
         <h3>${escapeHtml(c.title)}</h3>
@@ -990,10 +1026,11 @@ function pageCourses(){
   <section class="section">
     <div class="container">
       <div class="toolbar">
-        <h2>الكورسات</h2>
+        <h2>الدورات</h2>
         ${isAdmin ? `<button class="btn teal solid" id="addCourseBtn">${ICONS.plus} إضافة كورس جديد</button>` : ''}
       </div>
-      <div class="filter-row">${chips}</div>
+      <div class="filter-group"><span class="filter-label">التخصص:</span><div class="filter-row">${majorChips}</div></div>
+      <div class="filter-group"><span class="filter-label">الجامعة:</span><div class="filter-row">${chips}</div></div>
       ${courses.length ? `<div class="course-grid">${cards}</div>` : `<div class="empty-state"><h3>لا توجد كورسات ضمن هذا التصنيف</h3><p>جرّب تصنيفًا آخر${isAdmin ? '، أو أضف كورسًا جديدًا.' : '.'}</p></div>`}
     </div>
   </section>
@@ -1005,7 +1042,7 @@ function pageCourses(){
    ========================================================= */
 function pageMyCourses(){
   if(!state.session || state.session.type !== 'student'){
-    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لعرض الكورسات المفعّلة لديهم. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لعرض الدورات المفعّلة لديهم. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
   const myCourseIds = state.enrollments.filter(e=>e.phone===state.session.phone).map(e=>e.courseId);
   const courses = state.courses.filter(c=>myCourseIds.includes(c.id));
@@ -1015,7 +1052,10 @@ function pageMyCourses(){
     <div class="course-card">
       <div class="course-top"></div>
       <div class="course-body">
-        <div class="course-uni">${escapeHtml(c.university)}</div>
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+          <div class="course-uni">${escapeHtml(c.university)}</div>
+          <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
+        </div>
         <h3>${escapeHtml(c.title)}</h3>
         <p>${escapeHtml(c.description)}</p>
         <div class="course-foot"><span>⏱ ${c.hours} ساعات معتمدة</span><span>🎬 ${lectureCount} محاضرة</span></div>
@@ -1029,8 +1069,8 @@ function pageMyCourses(){
   return `
   <section class="section">
     <div class="container">
-      <div class="toolbar"><h2>كورساتي</h2></div>
-      ${courses.length ? `<div class="course-grid">${cards}</div>` : `<div class="empty-state"><h3>لا توجد كورسات مفعّلة بعد</h3><p>تواصل مع الإدارة لتفعيل الكورسات التي تحتاجها.</p></div>`}
+      <div class="toolbar"><h2>دوراتي</h2></div>
+      ${courses.length ? `<div class="course-grid">${cards}</div>` : `<div class="empty-state"><h3>لا توجد كورسات مفعّلة بعد</h3><p>تواصل مع الإدارة لتفعيل الدورات التي تحتاجها.</p></div>`}
     </div>
   </section>
   `;
@@ -1043,7 +1083,7 @@ function pageCourseDetail(courseId){
   const course = state.courses.find(c=>c.id===courseId);
   const isAdmin = state.session && state.session.type === 'admin';
   if(!course){
-    return `<section class="section"><div class="container"><div class="empty-state"><h3>الكورس غير موجود</h3><p>ربما تم حذفه. <a href="#/courses" style="color:var(--teal); font-weight:800;">عودة إلى الكورسات</a></p></div></div></section>`;
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>الكورس غير موجود</h3><p>ربما تم حذفه. <a href="#/courses" style="color:var(--teal); font-weight:800;">عودة إلى الدورات</a></p></div></div></section>`;
   }
   const lectures = state.lectures.filter(l=>l.courseId===courseId);
   const unlocked = courseUnlocked(courseId);
@@ -1096,9 +1136,12 @@ function pageCourseDetail(courseId){
   return `
   <section class="section">
     <div class="container">
-      <div class="breadcrumb"><a href="#/courses">الكورسات</a> / ${escapeHtml(course.title)}</div>
+      <div class="breadcrumb"><a href="#/courses">الدورات</a> / ${escapeHtml(course.title)}</div>
       <div class="course-detail-head">
-        <div class="course-uni">${escapeHtml(course.university)}</div>
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
+          <div class="course-uni" style="margin-bottom:0;">${escapeHtml(course.university)}</div>
+          <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(course.major || 'التمريض')}</span>
+        </div>
         <h1>${escapeHtml(course.title)}</h1>
         <p>${escapeHtml(course.description)}</p>
         <div class="course-detail-meta">
@@ -1153,7 +1196,7 @@ function pageBankManage(){
           <button class="btn teal solid" id="addQuestionBtn">${ICONS.plus} إضافة سؤال جديد</button>
         </div>
       </div>
-      ${state.courses.length ? groups : `<div class="empty-state"><h3>لا يوجد كورسات بعد</h3><p>أضف كورسات أولًا من صفحة الكورسات.</p></div>`}
+      ${state.courses.length ? groups : `<div class="empty-state"><h3>لا يوجد كورسات بعد</h3><p>أضف كورسات أولًا من صفحة الدورات.</p></div>`}
     </div>
   </section>
   `;
@@ -1167,21 +1210,42 @@ function isLectureIncluded(lid){
   return quiz.selectedLectures.includes(lid);
 }
 
-const NUM_EMOJI = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣'];
+const NUM_EMOJI = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣'];
 function pageBankSetup(){
   const isAdmin = state.session && state.session.type === 'admin';
   const adminToggle = isAdmin ? `<div style="text-align:center; margin-bottom:22px;"><button class="btn small" id="toManageBtn">🛠 إدارة بنك الأسئلة (إضافة / تعديل / حذف)</button></div>` : '';
-  const stepOffset = isAdmin ? 0 : 1;
+  const stepOffset = isAdmin ? 0 : 2;
 
   let universityBlock = '';
+  let majorBlock = '';
   let eligibleCourses = state.courses;
   if(!isAdmin){
+    const studentMajor = (state.session && state.session.type === 'student') ? state.session.major : null;
+    if(studentMajor){
+      quiz.major = studentMajor;
+      majorBlock = `
+      <div class="bank-block">
+        <div class="bank-block-label">${NUM_EMOJI[1]} التخصص</div>
+        <div class="bank-select" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:default;">
+          <span>🦷 ${escapeHtml(studentMajor)}</span>
+          <span class="lecture-tier-tag">تخصصك</span>
+        </div>
+      </div>`;
+    } else {
+      const majorOptions = `<option value="">— اختر التخصص —</option>` + MAJORS.map(m=>`<option value="${escapeHtml(m.name)}" ${quiz.major===m.name?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
+      majorBlock = `
+      <div class="bank-block">
+        <div class="bank-block-label">${NUM_EMOJI[1]} التخصص</div>
+        <select id="bankMajorSelect" class="bank-select">${majorOptions}</select>
+      </div>`;
+    }
+
     const studentUni = (state.session && state.session.type === 'student') ? state.session.university : null;
     if(studentUni){
       quiz.university = studentUni;
       universityBlock = `
       <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[1]} الجامعة</div>
+        <div class="bank-block-label">${NUM_EMOJI[2]} الجامعة</div>
         <div class="bank-select" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:default;">
           <span>🎓 ${escapeHtml(studentUni)}</span>
           <span class="lecture-tier-tag">جامعتك</span>
@@ -1191,19 +1255,19 @@ function pageBankSetup(){
       const uniOptions = `<option value="">— اختر الجامعة —</option>` + UNIVERSITIES.map(u=>`<option value="${escapeHtml(u.name)}" ${quiz.university===u.name?'selected':''}>${escapeHtml(u.name)}</option>`).join('');
       universityBlock = `
       <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[1]} الجامعة</div>
+        <div class="bank-block-label">${NUM_EMOJI[2]} الجامعة</div>
         <select id="bankUniversitySelect" class="bank-select">${uniOptions}</select>
       </div>`;
     }
-    eligibleCourses = quiz.university
-      ? state.courses.filter(c => (c.university === quiz.university || c.university === 'عام') && courseUnlocked(c.id))
+    eligibleCourses = (quiz.university && quiz.major)
+      ? state.courses.filter(c => (c.university === quiz.university || c.university === 'عام') && (c.major || 'التمريض') === quiz.major && courseUnlocked(c.id))
       : [];
   }
 
   const courseOptions = `<option value="">— اختر المادة —</option>` + eligibleCourses.map(c=>`<option value="${c.id}" ${quiz.courseId===c.id?'selected':''}>${escapeHtml(c.title)}</option>`).join('');
-  const courseSelectDisabled = (!isAdmin && !quiz.university) ? 'disabled' : '';
-  const noEligibleHint = (!isAdmin && quiz.university && eligibleCourses.length===0)
-    ? `<p class="hint" style="margin:10px 0 0;">لا توجد لديك مواد مشترك بها ضمن هذه الجامعة. اشترك بكورس من صفحة الكورسات أولًا.</p>` : '';
+  const courseSelectDisabled = (!isAdmin && !(quiz.university && quiz.major)) ? 'disabled' : '';
+  const noEligibleHint = (!isAdmin && quiz.university && quiz.major && eligibleCourses.length===0)
+    ? `<p class="hint" style="margin:10px 0 0;">لا توجد لديك مواد مشترك بها ضمن هذا التخصص والجامعة. اشترك بكورس من صفحة الدورات أولًا.</p>` : '';
 
   let natureBlock = '', lecturesBlock = '', countBlock = '', modeBlock = '', startBlock = '';
 
@@ -1247,12 +1311,14 @@ function pageBankSetup(){
       .length;
 
     const presets = [5,10,15,20];
+    const isCustomCount = quiz.count !== null && !presets.includes(quiz.count);
     const chips = presets.map(n=>`<button class="count-chip ${quiz.count===n?'active':''}" data-count="${n}">${n}</button>`).join('')
       + `<button class="count-chip ${quiz.count===null?'active':''}" data-count="all">كل الأسئلة (${available})</button>`;
     countBlock = `
     <div class="bank-block">
       <div class="bank-block-label">عدد الأسئلة <span style="font-weight:600; color:var(--muted); font-size:13px;">المتاح: ${available}</span></div>
-      <div class="count-input-row">${chips}</div>
+      <div class="count-input-row">${chips}<input type="number" id="customCountInput" class="count-chip ${isCustomCount?'active':''}" style="width:90px; text-align:center;" min="1" max="50" placeholder="عدد آخر" value="${isCustomCount?quiz.count:''}"></div>
+      <p class="hint" style="margin:8px 0 0; text-align:center;">يمكنك كتابة عدد مخصص للأسئلة (الحد الأقصى 50 سؤالًا)</p>
     </div>`;
 
     modeBlock = `
@@ -1276,7 +1342,8 @@ function pageBankSetup(){
     <div class="wizard-wrap">
       <div class="wizard-card">
         <h3>ابدأ اختبارًا من بنك الأسئلة</h3>
-        <p class="hint">حدد ${(isAdmin || (state.session && state.session.type==='student' && state.session.university)) ? '' : 'الجامعة ثم '}المادة، ثم طبيعة الأسئلة والمحاضرات، ونمط الاختبار، ثم ابدأ — كل ذلك في هذه الصفحة</p>
+        <p class="hint">حدد ${(isAdmin || (state.session && state.session.type==='student' && state.session.university && state.session.major)) ? '' : 'التخصص والجامعة ثم '}المادة، ثم طبيعة الأسئلة والمحاضرات، ونمط الاختبار، ثم ابدأ — كل ذلك في هذه الصفحة</p>
+        ${majorBlock}
         ${universityBlock}
         <div class="bank-block">
           <div class="bank-block-label">${NUM_EMOJI[1+stepOffset]} المادة</div>
@@ -1474,7 +1541,7 @@ function pageContact(){
    ========================================================= */
 let authMode = 'login';
 function pageLogin(){
-  if(state.session) return `<section class="section"><div class="container"><div class="empty-state"><h3>أنت مسجّل الدخول بالفعل</h3><p>يمكنك تصفّح الكورسات وبنك الأسئلة مباشرة.</p></div></div></section>`;
+  if(state.session) return `<section class="section"><div class="container"><div class="empty-state"><h3>أنت مسجّل الدخول بالفعل</h3><p>يمكنك تصفّح الدورات وبنك الأسئلة مباشرة.</p></div></div></section>`;
   return `
   <section class="section">
     <div class="auth-wrap">
@@ -1484,6 +1551,10 @@ function pageLogin(){
         <div id="authMsg"></div>
         <form id="authForm">
           ${authMode==='register' ? `<div class="field"><label>الاسم الكامل</label><input type="text" name="fullName" placeholder="مثال: سارة أحمد" required></div>` : ''}
+          ${authMode==='register' ? `<div class="field"><label>التخصص</label><select name="major" required>
+            <option value="" disabled selected>— اختر تخصصك —</option>
+            ${MAJORS.map(m=>`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('')}
+          </select></div>` : ''}
           ${authMode==='register' ? `<div class="field"><label>الجامعة</label><select name="university" required>
             <option value="" disabled selected>— اختر جامعتك —</option>
             ${UNIVERSITIES.map(u=>`<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)}</option>`).join('')}
@@ -1503,7 +1574,7 @@ function pageLogin(){
    PAGE: ADMIN LOGIN
    ========================================================= */
 function pageAdminLogin(){
-  if(state.session && state.session.type === 'admin') return `<section class="section"><div class="container"><div class="empty-state"><h3>أنت مسجّل الدخول كمشرف</h3><p>يمكنك إدارة الكورسات والمحاضرات وبنك الأسئلة من صفحاتها مباشرة.</p></div></div></section>`;
+  if(state.session && state.session.type === 'admin') return `<section class="section"><div class="container"><div class="empty-state"><h3>أنت مسجّل الدخول كمشرف</h3><p>يمكنك إدارة الدورات والمحاضرات وبنك الأسئلة من صفحاتها مباشرة.</p></div></div></section>`;
   return `
   <section class="section">
     <div class="auth-wrap">
@@ -1532,10 +1603,12 @@ function closeModal(){ document.getElementById('modalRoot').innerHTML = ''; }
 
 function modalAddCourse(){
   const uniOptions = ['عام', ...UNIVERSITIES.map(u=>u.name)].map(u=>`<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
+  const majorOptions = MAJORS.map(m=>`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
   openModal(`
     <h3>${ICONS.plus} إضافة كورس جديد</h3>
     <form id="courseForm">
-      <div class="field"><label>اسم الكورس</label><input type="text" name="title" required placeholder="مثال: تمريض الطوارئ"></div>
+      <div class="field"><label>اسم الكورس</label><input type="text" name="title" required placeholder="مثال: تمريض الطوارئ أو جراحة الفم والفكين"></div>
+      <div class="field"><label>التخصص</label><select name="major">${majorOptions}</select></div>
       <div class="field"><label>الجامعة</label><select name="university">${uniOptions}</select></div>
       <div class="field"><label>عدد الساعات المعتمدة</label><input type="number" name="hours" min="1" max="10" value="3" required></div>
       <div class="field"><label>وصف مختصر</label><textarea name="description" required placeholder="اكتب وصفًا مختصرًا عن محتوى الكورس"></textarea></div>
@@ -1549,7 +1622,7 @@ function modalAddCourse(){
   document.getElementById('courseForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    state.courses.push({ id:'c'+Date.now(), title:fd.get('title').trim(), university:fd.get('university'), hours:Number(fd.get('hours')), description:fd.get('description').trim(), isFree: fd.get('pricing')==='free' });
+    state.courses.push({ id:'c'+Date.now(), title:fd.get('title').trim(), university:fd.get('university'), major:fd.get('major'), hours:Number(fd.get('hours')), description:fd.get('description').trim(), isFree: fd.get('pricing')==='free' });
     await setData('courses', state.courses, true);
     closeModal(); render();
   });
@@ -1559,10 +1632,12 @@ function modalEditCourse(courseId){
   const course = state.courses.find(c=>c.id===courseId);
   if(!course) return;
   const uniOptions = ['عام', ...UNIVERSITIES.map(u=>u.name)].map(u=>`<option value="${escapeHtml(u)}" ${course.university===u?'selected':''}>${escapeHtml(u)}</option>`).join('');
+  const majorOptions = MAJORS.map(m=>`<option value="${escapeHtml(m.name)}" ${course.major===m.name?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
   openModal(`
     <h3>${ICONS.edit} تعديل بيانات الكورس</h3>
     <form id="courseEditForm">
       <div class="field"><label>اسم الكورس</label><input type="text" name="title" required value="${escapeHtml(course.title)}"></div>
+      <div class="field"><label>التخصص</label><select name="major">${majorOptions}</select></div>
       <div class="field"><label>الجامعة</label><select name="university">${uniOptions}</select></div>
       <div class="field"><label>عدد الساعات المعتمدة</label><input type="number" name="hours" min="1" max="10" value="${course.hours}" required></div>
       <div class="field"><label>وصف مختصر</label><textarea name="description" required>${escapeHtml(course.description)}</textarea></div>
@@ -1576,7 +1651,7 @@ function modalEditCourse(courseId){
   document.getElementById('courseEditForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    course.title = fd.get('title').trim(); course.university = fd.get('university');
+    course.title = fd.get('title').trim(); course.university = fd.get('university'); course.major = fd.get('major');
     course.hours = Number(fd.get('hours')); course.description = fd.get('description').trim();
     course.isFree = fd.get('pricing')==='free';
     await setData('courses', state.courses, true);
@@ -1772,7 +1847,7 @@ function confirmDelete(message, onConfirm){
    ========================================================= */
 async function render(){
   if(!state.loaded){
-    document.getElementById('app').innerHTML = `<div style="text-align:center; padding:120px 20px;"><span class="loading-dot"></span> جارِ التحميل...</div>`;
+    document.getElementById('app').innerHTML = `<div style="min-height:80vh; display:flex; align-items:center; justify-content:center; text-align:center; padding:20px;"><span class="loading-dot"></span> جارِ التحميل...</div>`;
     return;
   }
   const route = currentRoute();
@@ -1804,6 +1879,7 @@ function bindPageEvents(route){
   });
   if(route === 'courses'){
     document.querySelectorAll('[data-filter]').forEach(chip=> chip.addEventListener('click', ()=>{ state.courseFilter = chip.dataset.filter; render(); }));
+    document.querySelectorAll('[data-major-filter]').forEach(chip=> chip.addEventListener('click', ()=>{ state.majorFilter = chip.dataset.majorFilter; render(); }));
     const addBtn = document.getElementById('addCourseBtn');
     if(addBtn) addBtn.addEventListener('click', modalAddCourse);
     document.querySelectorAll('[data-edit-course]').forEach(btn=>{
@@ -1883,6 +1959,12 @@ function bindPageEvents(route){
     if(toManageBtn) toManageBtn.addEventListener('click', ()=>{ state.bankAdminView = true; render(); });
 
     if(quiz.step === 'setup'){
+      const majorSelect = document.getElementById('bankMajorSelect');
+      if(majorSelect) majorSelect.addEventListener('change', ()=>{
+        quiz.major = majorSelect.value || null;
+        quiz.courseId = null; quiz.selectedLectures = null; quiz.nature = 'both'; quiz.count = 10; quiz.mode = 'study';
+        render();
+      });
       const universitySelect = document.getElementById('bankUniversitySelect');
       if(universitySelect) universitySelect.addEventListener('change', ()=>{
         quiz.university = universitySelect.value || null;
@@ -1918,6 +2000,17 @@ function bindPageEvents(route){
       document.querySelectorAll('[data-count]').forEach(chip=>{
         chip.addEventListener('click', ()=>{ quiz.count = chip.dataset.count === 'all' ? null : Number(chip.dataset.count); render(); });
       });
+      const customCountInput = document.getElementById('customCountInput');
+      if(customCountInput){
+        customCountInput.addEventListener('change', ()=>{
+          let val = Math.floor(Number(customCountInput.value));
+          if(!val || val < 1) val = 1;
+          if(val > 50) val = 50;
+          quiz.count = val;
+          render();
+        });
+        customCountInput.addEventListener('click', (e)=> e.stopPropagation());
+      }
       document.querySelectorAll('[data-mode]').forEach(card=>{
         card.addEventListener('click', ()=>{ quiz.mode = card.dataset.mode; render(); });
       });
@@ -2018,11 +2111,13 @@ async function handleAuthSubmit(e){
   if(authMode === 'register'){
     const fullName = fd.get('fullName').trim();
     const university = (fd.get('university') || '').trim();
+    const major = (fd.get('major') || '').trim();
+    if(!major){ msgBox.innerHTML = `<div class="form-msg error">يرجى اختيار التخصص.</div>`; return; }
     if(!university){ msgBox.innerHTML = `<div class="form-msg error">يرجى اختيار الجامعة.</div>`; return; }
     const { data, error } = await supabaseClient.auth.signUp({
       email: pseudoEmail,
       password,
-      options: { data: { phone, fullName, university, role:'student' } }
+      options: { data: { phone, fullName, university, major, role:'student' } }
     });
     if(error){
       const msg = /registered|exists/i.test(error.message) ? 'رقم الهاتف هذا مسجّل بالفعل، جرّب تسجيل الدخول بدلًا من ذلك.' : 'تعذّر إنشاء الحساب، تأكد أن كلمة المرور 6 أحرف على الأقل.';
@@ -2032,10 +2127,11 @@ async function handleAuthSubmit(e){
       msgBox.innerHTML = `<div class="form-msg error">تم إنشاء الحساب، لكن يبدو أن تأكيد البريد مفعّل في إعدادات Supabase. عطّل خيار "Confirm email" من Authentication → Providers → Email ثم أعد المحاولة.</div>`; return;
     }
     await enforceDeviceLock(phone, data.user.id); // أول تسجيل للحساب، يربط هذا الجهاز به تلقائيًا
-    state.students.push({ phone, fullName, university });
+    state.students.push({ phone, fullName, university, major });
     await setData('students', state.students, true);
-    state.session = { type:'student', phone, name: fullName, university };
+    state.session = { type:'student', phone, name: fullName, university, major };
     state.courseFilter = university;
+    state.majorFilter = major;
     watchDeviceLock(phone);
     navigate('home'); render();
   } else {
@@ -2048,8 +2144,9 @@ async function handleAuthSubmit(e){
       msgBox.innerHTML = `<div class="form-msg error">${ICONS.lock} هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`;
       return;
     }
-    state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null };
+    state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null, major: meta.major||null };
     if(state.session.university) state.courseFilter = state.session.university;
+    if(state.session.major) state.majorFilter = state.session.major;
     watchDeviceLock(finalPhone);
     navigate('home'); render();
   }
@@ -2097,6 +2194,7 @@ document.getElementById('themeToggleBtn').addEventListener('click', async ()=>{
 
 (async function boot(){
   if(!location.hash) location.hash = '#/home';
+  render(); // إظهار شاشة التحميل فورًا بدل ترك المحتوى فارغًا أثناء جلب البيانات
   await initData();
   const savedTheme = await getData('darkMode', false, false);
   applyTheme(savedTheme);
@@ -2105,3 +2203,4 @@ document.getElementById('themeToggleBtn').addEventListener('click', async ()=>{
 </script>
 </body>
 </html>
+
