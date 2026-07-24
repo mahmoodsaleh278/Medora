@@ -38,12 +38,14 @@
     --teal-light:#123338;
   }
   body.dark header{ background:rgba(11,20,31,0.92); }
-  body.dark .stats-strip, body.dark .chip, body.dark .empty-state, body.dark .course-detail-head,
-  body.dark .lecture-card, body.dark .q-card, body.dark .q-opt, body.dark .card-panel, body.dark .modal-box,
+  body.dark .stats-strip, body.dark .chip, body.dark .empty-state,
+  body.dark .lecture-row, body.dark .course-side-card, body.dark .q-card, body.dark .q-opt, body.dark .card-panel, body.dark .modal-box,
   body.dark .uni-card, body.dark .mission-card, body.dark .contact-info-card, body.dark .wizard-dot,
   body.dark .wizard-card, body.dark .option-card, body.dark .count-chip, body.dark .bank-select,
   body.dark nav.links, body.dark .message-card{ background:var(--card); }
   body.dark .field input, body.dark .field select, body.dark .field textarea{ background:#0c1723; color:var(--text); border-color:var(--border); }
+  body.dark .link-row input{ background:#0c1723; color:var(--text); border-color:var(--border); }
+  body.dark .course-hero-banner .chip{ background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.35); color:#fff; }
   body.dark .field input:focus, body.dark .field select:focus, body.dark .field textarea:focus{ background:#0c1723; }
   body.dark .hero .btn.solid{ background:#132030; color:#eef5fb; }
   body.dark .hero .btn:hover{ background:#132030; color:#eef5fb; }
@@ -159,15 +161,69 @@
   .chip{ padding:7px 16px; border-radius:999px; border:1.5px solid var(--border); font-size:13.5px; font-weight:700; color:var(--muted); background:#fff; }
   .chip.active{ background:var(--navy); border-color:var(--ink); color:#fff; }
 
-  .course-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:22px; }
-  .course-card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:0; overflow:hidden; display:flex; flex-direction:column; }
-  .course-top{ background:linear-gradient(135deg, var(--navy), var(--teal)); height:8px; }
-  .course-body{ padding:22px; flex:1; display:flex; flex-direction:column; }
+  .course-canvas{
+    background:linear-gradient(155deg, #142c47 0%, #1c4a63 55%, #1f6478 100%);
+    border-radius:28px; padding:30px; margin-bottom:4px; position:relative; overflow:hidden;
+  }
+  .course-canvas::after{ content:""; position:absolute; inset:0; background-image:radial-gradient(circle at 15% 85%, rgba(255,255,255,0.06), transparent 45%); pointer-events:none; }
+  body.dark .course-canvas{ background:linear-gradient(155deg, #060c14 0%, #0b1c26 55%, #0d2830 100%); }
+  .course-emblem{ width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24px; margin-bottom:12px; flex-shrink:0;
+    background:linear-gradient(135deg, var(--navy), var(--teal)); box-shadow:0 4px 14px rgba(15,39,69,0.25); }
+  .course-stats-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .course-stat-chip{ display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:800; color:var(--ink); background:rgba(255,255,255,0.75); border:1px solid rgba(255,255,255,0.7); padding:5px 10px; border-radius:999px; }
+  body.dark .course-stat-chip{ background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.18); color:var(--text); }
+  .course-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:24px; perspective:1400px; }
+  .courses-hero{ background:linear-gradient(150deg, var(--navy) 0%, var(--navy-2) 55%, var(--teal) 130%); color:#fff; border-radius:var(--radius); padding:44px 24px 38px; text-align:center; margin-bottom:26px; position:relative; overflow:hidden; }
+  .courses-hero::after{ content:""; position:absolute; inset:0; background-image: radial-gradient(circle at 85% 20%, rgba(255,255,255,0.10), transparent 45%); }
+  .courses-hero-inner{ position:relative; z-index:2; }
+  .courses-hero h2{ font-size:30px; font-weight:800; color:#fff; margin-bottom:8px; }
+  .courses-hero p{ color:#d7e6ee; font-size:15px; margin-bottom:22px; }
+  .courses-search{ max-width:440px; margin:0 auto; position:relative; }
+  .courses-search input{ width:100%; padding:13px 46px 13px 18px; border-radius:999px; border:none; font-size:14.5px; font-family:inherit; color:var(--ink); background:#fff; }
+  .courses-search input:focus{ outline:2px solid #8be0e8; }
+  .courses-search .search-icon{ position:absolute; inset-inline-start:18px; top:50%; transform:translateY(-50%); font-size:15px; pointer-events:none; }
+  .filter-dropdown-bar{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:24px; }
+  .filter-dropdown{ display:flex; flex-direction:column; gap:6px; min-width:170px; }
+  .filter-dropdown label{ font-size:13px; font-weight:800; color:var(--ink); }
+  .filter-dropdown select{ padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); color:var(--text); font-family:inherit; font-size:14px; font-weight:700; }
+  .filter-dropdown select:focus{ outline:none; border-color:var(--teal); }
+  .course-card{
+    position:relative; aspect-ratio:1/1; border-radius:22px; padding:0; overflow:hidden;
+    display:flex; flex-direction:column; cursor:pointer;
+    background:linear-gradient(160deg, rgba(255,255,255,0.92), rgba(255,255,255,0.72));
+    border:1px solid rgba(255,255,255,0.6);
+    -webkit-backdrop-filter:blur(18px) saturate(180%); backdrop-filter:blur(18px) saturate(180%);
+    box-shadow:0 8px 28px rgba(15,39,69,0.16), inset 0 1px 0 rgba(255,255,255,0.7);
+    transform-style:preserve-3d; will-change:transform;
+    transition:transform .45s cubic-bezier(.2,.9,.25,1), box-shadow .4s ease, background .4s ease, border-color .4s ease;
+  }
+  .course-card::before{
+    content:""; position:absolute; inset:0; z-index:1; pointer-events:none; opacity:0;
+    background:radial-gradient(280px circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,0.65), transparent 62%);
+    transition:opacity .35s ease;
+  }
+  .course-card:hover::before{ opacity:1; }
+  .course-card:hover{
+    box-shadow:0 24px 50px rgba(15,39,69,0.26), 0 0 0 1px rgba(34,152,171,0.4), inset 0 1px 0 rgba(255,255,255,0.8);
+    border-color:rgba(34,152,171,0.55);
+  }
+  body.dark .course-card{
+    background:linear-gradient(160deg, rgba(24,40,56,0.92), rgba(16,28,40,0.85));
+    border-color:rgba(255,255,255,0.16);
+    box-shadow:0 8px 28px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+  body.dark .course-card::before{ background:radial-gradient(280px circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,0.14), transparent 62%); }
+  body.dark .course-card:hover{ box-shadow:0 24px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(34,152,171,0.45); }
+  .course-top{ background:linear-gradient(135deg, var(--navy), var(--teal)); height:6px; flex-shrink:0; position:relative; z-index:2; }
+  .course-body{ padding:20px; flex:1; display:flex; flex-direction:column; position:relative; z-index:2; min-height:0; overflow:hidden; }
   .course-uni{ font-size:12px; font-weight:800; color:var(--teal); letter-spacing:.5px; margin-bottom:8px; }
-  .course-body h3{ font-size:18.5px; color:var(--ink); font-weight:800; margin-bottom:10px; }
-  .course-body p{ font-size:14px; color:var(--muted); flex:1; margin-bottom:14px; }
-  .course-foot{ display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--muted); border-top:1px solid var(--border); padding-top:12px; margin-bottom:14px; }
-  .course-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .course-body h3{ font-size:18px; color:var(--ink); font-weight:800; margin-bottom:10px; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .course-body p{ font-size:13.5px; color:var(--text); font-weight:500; opacity:.85; flex:1; margin-bottom:12px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .course-foot{ display:flex; justify-content:space-between; align-items:center; font-size:12.5px; color:var(--muted); border-top:1px solid var(--border); padding-top:10px; margin-bottom:12px; flex-wrap:wrap; gap:6px; }
+  .course-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  @media (max-width:680px){
+    .course-card{ aspect-ratio:auto; min-height:260px; }
+  }
 
   .empty-state{ text-align:center; padding:60px 20px; color:var(--muted); background:#fff; border:1.5px dashed var(--border); border-radius:var(--radius); }
   .empty-state h3{ color:var(--ink); margin-bottom:8px; font-size:18px; }
@@ -176,24 +232,70 @@
   .breadcrumb{ font-size:13.5px; color:var(--muted); margin-bottom:18px; }
   .breadcrumb a{ color:var(--teal); font-weight:700; }
 
-  /* Course detail header */
-  .course-detail-head{ background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:30px; margin-bottom:34px; }
-  .course-detail-head .course-uni{ margin-bottom:10px; }
-  .course-detail-head h1{ font-size:26px; color:var(--ink); font-weight:800; margin-bottom:12px; }
-  .course-detail-head p{ color:var(--muted); font-size:15px; max-width:720px; margin-bottom:14px; }
+  .course-hero-banner{ background:linear-gradient(150deg, var(--navy) 0%, var(--navy-2) 55%, var(--teal) 130%); color:#fff; border-radius:var(--radius); padding:36px 30px; margin-bottom:28px; position:relative; overflow:hidden; }
+  .course-hero-banner::after{ content:""; position:absolute; inset:0; background-image: radial-gradient(circle at 85% 20%, rgba(255,255,255,0.10), transparent 45%); }
+  .course-hero-banner-inner{ position:relative; z-index:2; }
+  .course-hero-banner .course-uni{ color:#bfe4ea; margin-bottom:10px; }
+  .course-hero-banner h1{ font-size:26px; color:#fff; font-weight:800; margin-bottom:10px; }
+  .course-hero-banner p{ color:#d7e6ee; font-size:14.5px; max-width:720px; margin-bottom:14px; }
+  .course-hero-banner .course-detail-meta{ color:#d7e6ee; }
+  .course-hero-banner .course-detail-meta b{ color:#fff; }
+  .course-hero-banner .chip{ background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.35); color:#fff; }
+
+  .course-detail-layout{ display:grid; grid-template-columns:1fr 300px; gap:28px; align-items:start; }
+  .course-detail-main{ min-width:0; }
+  .course-detail-side{ position:sticky; top:90px; display:flex; flex-direction:column; gap:18px; }
+  .course-side-card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:22px; }
+  .course-side-card h4{ font-size:14.5px; color:var(--ink); font-weight:800; margin-bottom:14px; }
+  .course-side-card .btn{ width:100%; }
+  .course-spec-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13.5px; color:var(--muted); }
+  .course-spec-row:last-child{ border-bottom:none; }
+  .course-spec-row b{ color:var(--ink); }
+
+  .lecture-list{ display:flex; flex-direction:column; gap:12px; }
+  .lecture-row{ background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .lecture-row.locked{ background:#fbfbfc; }
+  .lecture-row-summary{ display:flex; align-items:center; gap:14px; padding:16px 20px; cursor:pointer; list-style:none; }
+  .lecture-row-summary::-webkit-details-marker{ display:none; }
+  .lecture-row-summary::marker{ content:''; }
+  .lecture-row-summary:hover{ background:var(--teal-light); }
+  .lecture-row-main{ flex:1; min-width:0; }
+  .lecture-row-main h4{ font-size:15.5px; color:var(--ink); font-weight:800; margin-bottom:0; }
+  .lecture-row-main p{ font-size:13px; color:var(--muted); margin:4px 0 0; }
+  .lecture-toggle-icon{ margin-inline-start:auto; width:36px; height:36px; border-radius:50%; background:var(--teal-light); color:var(--teal); display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:.25s; }
+  .lecture-toggle-icon svg{ width:16px; height:16px; transition:transform .25s; }
+  .lecture-row-summary:hover .lecture-toggle-icon{ background:var(--teal); color:#fff; }
+  .lecture-row[open] .lecture-toggle-icon{ background:var(--navy); color:#fff; }
+  .lecture-row[open] .lecture-toggle-icon svg{ transform:rotate(180deg); }
+  .lecture-row-content{ padding:0 20px 18px; border-top:1px solid var(--border); padding-top:14px; }
+  .lecture-row .lecture-actions{ flex-direction:column; gap:10px; }
+  .lecture-action-btn{ display:flex; align-items:center; gap:12px; padding:12px 18px; border-radius:12px; font-weight:800; font-size:14.5px; border:1.5px solid var(--border); background:var(--bg); color:var(--ink); transition:.2s; width:100%; }
+  .lecture-action-btn .action-icon{ width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+  .lecture-action-btn.watch{ background:var(--teal); color:#fff; border-color:var(--teal); }
+  .lecture-action-btn.watch .action-icon{ background:rgba(255,255,255,0.22); }
+  .lecture-action-btn.watch:hover{ background:var(--teal-2); border-color:var(--teal-2); }
+  .lecture-action-btn.download{ background:#fff; color:var(--navy); border-color:var(--navy); }
+  .lecture-action-btn.download .action-icon{ background:var(--teal-light); color:var(--teal); }
+  .lecture-action-btn.download:hover{ background:var(--navy); color:#fff; }
+  .lecture-action-btn.download:hover .action-icon{ background:rgba(255,255,255,0.22); color:#fff; }
+  .lecture-action-btn[disabled]{ opacity:.55; cursor:not-allowed; pointer-events:none; background:var(--bg); color:var(--muted); border-color:var(--border); }
+  .lecture-action-btn[disabled] .action-icon{ background:var(--border); color:var(--muted); }
+  .lecture-action-btn span.label-main{ display:block; }
+  .lecture-action-btn span.label-sub{ display:block; font-size:11.5px; font-weight:600; opacity:.8; margin-top:1px; }
+  .lecture-row-admin{ width:100%; display:flex; justify-content:flex-end; border-top:1px dashed var(--border); padding-top:10px; margin-top:10px; }
+
+  @media (max-width:900px){
+    .course-detail-layout{ grid-template-columns:1fr; }
+    .course-detail-side{ position:static; }
+  }
+
+  /* Course detail meta (used inside the hero banner) */
   .course-detail-meta{ display:flex; gap:20px; font-size:13.5px; color:var(--muted); flex-wrap:wrap; }
   .course-detail-meta b{ color:var(--ink); }
 
-  /* Lecture cards */
-  .lecture-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:20px; }
-  .lecture-card{ background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:22px; display:flex; flex-direction:column; gap:12px; }
-  .lecture-num{ width:34px; height:34px; border-radius:10px; background:var(--navy); color:#fff; font-weight:800; font-size:14px; display:flex; align-items:center; justify-content:center; }
-  .lecture-card h4{ font-size:16.5px; color:var(--ink); font-weight:800; }
-  .lecture-card p{ font-size:13.5px; color:var(--muted); flex:1; }
+  /* Lecture rows */
+  .lecture-num{ width:34px; height:34px; border-radius:10px; background:var(--navy); color:#fff; font-weight:800; font-size:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .lecture-actions{ display:flex; gap:8px; flex-wrap:wrap; }
-  .lecture-actions .btn{ flex:1; }
-  .lecture-admin-row{ display:flex; justify-content:flex-end; border-top:1px dashed var(--border); padding-top:10px; }
-  .lecture-card.locked{ background:#fbfbfc; }
   .lecture-tier-tag{ display:inline-block; font-size:11.5px; font-weight:800; padding:3px 10px; border-radius:999px; background:var(--teal-light); color:var(--teal); width:fit-content; }
   .lecture-tier-tag.locked{ background:#f3e8d8; color:#8a5a1c; }
   .lecture-lock-msg{ display:flex; align-items:center; gap:8px; background:var(--bg); border:1px dashed var(--border); border-radius:10px; padding:10px 14px; font-size:13.5px; font-weight:700; color:var(--muted); }
@@ -234,6 +336,14 @@
   .field input, .field select, .field textarea{ width:100%; padding:11px 14px; border:1.5px solid var(--border); border-radius:10px; font-family:inherit; font-size:14.5px; color:var(--text); background:#fbfdfe; }
   .field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--teal); background:#fff; }
   .field textarea{ resize:vertical; min-height:80px; }
+  .link-rows{ display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+  .link-row{ display:flex; gap:8px; align-items:center; }
+  .link-row input{ padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:13.5px; color:var(--text); background:#fbfdfe; }
+  .link-row input:focus{ outline:none; border-color:var(--teal); background:#fff; }
+  .link-row .link-label{ flex:0 0 36%; }
+  .link-row .link-url{ flex:1; min-width:0; direction:ltr; }
+  .link-row .link-remove{ flex-shrink:0; width:32px; height:32px; border-radius:8px; border:1.5px solid var(--danger); color:var(--danger); background:transparent; font-size:14px; }
+  .link-row .link-remove:hover{ background:var(--danger); color:#fff; }
   .form-msg{ font-size:13.5px; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
   .form-msg.error{ background:#fdeceb; color:var(--danger-dark); }
   .form-msg.ok{ background:var(--good-light); color:var(--good); }
@@ -356,7 +466,6 @@
     .hero-inner{ grid-template-columns:1fr; }
     .grid-3{ grid-template-columns:1fr; }
     .course-grid{ grid-template-columns:1fr 1fr; }
-    .lecture-grid{ grid-template-columns:1fr; }
     .uni-cards{ grid-template-columns:1fr; }
     .mission-grid{ grid-template-columns:1fr; }
     .option-cards{ grid-template-columns:1fr; }
@@ -445,6 +554,8 @@
         <a href="#/bank">بنك الأسئلة</a>
         <a href="#/about">من نحن</a>
         <a href="#/contact">تواصل معنا</a>
+        <a href="#/privacy">سياسة الخصوصية</a>
+        <a href="#/terms">الشروط والأحكام</a>
       </div>
       <div class="footer-col">
         <h5>التخصصات</h5>
@@ -659,7 +770,7 @@ function watchDeviceLock(phone){
 /* ---------------- App state ---------------- */
 let state = {
   courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [],
-  session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', bankAdminView: false, content: {},
+  session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', bankAdminView: false, content: {},
 };
 
 async function syncSessionFromAuth(){
@@ -693,6 +804,16 @@ async function syncSessionFromAuth(){
   }catch(e){ state.session = null; }
 }
 
+/* يدعم المحاضرات القديمة (رابط فيديو واحد + ملف واحد) ويحوّلها تلقائيًا
+   لقوائم videos[] / files[] بحيث يقدر المشرف يضيف أكثر من فيديو أو ملف. */
+function normalizeLecture(l){
+  let videos = Array.isArray(l.videos) ? l.videos.filter(v=>v && v.url) : [];
+  let files = Array.isArray(l.files) ? l.files.filter(f=>f && f.url) : [];
+  if(!videos.length && l.videoUrl) videos = [{ label:'', url:l.videoUrl }];
+  if(!files.length && l.fileUrl) files = [{ label:'', url:l.fileUrl }];
+  return Object.assign({}, l, { videos, files });
+}
+
 async function initData(){
   const [courses, lectures, questions, students, messages, enrollments, savedContent] = await Promise.all([
     getData('courses', SEED_COURSES, true),
@@ -704,7 +825,7 @@ async function initData(){
     getData('content', {}, true),
     syncSessionFromAuth(),
   ]);
-  state.courses = courses; state.lectures = lectures; state.questions = questions;
+  state.courses = courses; state.lectures = lectures.map(normalizeLecture); state.questions = questions;
   state.students = students; state.messages = messages; state.enrollments = enrollments;
   state.content = Object.assign({}, CONTENT_DEFAULTS, savedContent);
   state.loaded = true;
@@ -730,6 +851,10 @@ async function selfEnroll(courseId){
   state.enrollments.push({ courseId, phone });
   await setData('enrollments', state.enrollments, true);
   render();
+}
+
+function majorEmblem(major){
+  return major === 'طب الأسنان' ? '🦷' : '🩺';
 }
 
 function priceBadgeHtml(c, isAdmin){
@@ -993,8 +1118,11 @@ function pageCourses(){
   let courses = state.courses;
   if(state.courseFilter !== 'الكل') courses = courses.filter(c => c.university === state.courseFilter);
   if(state.majorFilter !== 'الكل') courses = courses.filter(c => (c.major || 'التمريض') === state.majorFilter);
-  const chips = filters.map(f => `<button class="chip ${state.courseFilter===f?'active':''}" data-filter="${escapeHtml(f)}">${escapeHtml(f)}</button>`).join('');
-  const majorChips = majorFilters.map(f => `<button class="chip ${state.majorFilter===f?'active':''}" data-major-filter="${escapeHtml(f)}">${escapeHtml(f)}</button>`).join('');
+  const search = (state.courseSearch || '').trim().toLowerCase();
+  if(search) courses = courses.filter(c => (c.title||'').toLowerCase().includes(search) || (c.university||'').toLowerCase().includes(search));
+
+  const uniOptions = filters.map(f => `<option value="${escapeHtml(f)}" ${state.courseFilter===f?'selected':''}>${escapeHtml(f)}</option>`).join('');
+  const majorOptions = majorFilters.map(f => `<option value="${escapeHtml(f)}" ${state.majorFilter===f?'selected':''}>${escapeHtml(f)}</option>`).join('');
 
   const cards = courses.map(c => {
     const lectureCount = state.lectures.filter(l=>l.courseId===c.id).length;
@@ -1002,18 +1130,19 @@ function pageCourses(){
     <div class="course-card">
       <div class="course-top"></div>
       <div class="course-body">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-            <div class="course-uni">${escapeHtml(c.university)}</div>
-            <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
-          </div>
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+          <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
           ${priceBadgeHtml(c, isAdmin)}
         </div>
+        <div class="course-uni">${escapeHtml(c.university)}</div>
         <h3>${escapeHtml(c.title)}</h3>
-        <p>${escapeHtml(c.description)}</p>
-        <div class="course-foot"><span>⏱ ${c.hours} ساعات معتمدة</span><span>🎬 ${lectureCount} محاضرة</span></div>
+        <p>${escapeHtml(c.description || '')}</p>
+        <div class="course-stats-row">
+          <span class="course-stat-chip">⏱ ${c.hours} ساعات</span>
+          <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
+        </div>
         <div class="course-actions">
-          <a href="#/course/${c.id}" class="btn teal small">عرض التفاصيل والمحاضرات</a>
+          <a href="#/course/${c.id}" class="btn teal small">الانتقال للدورة</a>
           ${courseSubscribeActionHtml(c, isAdmin)}
           ${isAdmin ? `<button class="btn edit small" data-edit-course="${c.id}">${ICONS.edit} تعديل</button>` : ''}
           ${isAdmin ? `<button class="btn danger small" data-del-course="${c.id}">${ICONS.trash} حذف</button>` : ''}
@@ -1025,13 +1154,28 @@ function pageCourses(){
   return `
   <section class="section">
     <div class="container">
-      <div class="toolbar">
-        <h2>الدورات</h2>
-        ${isAdmin ? `<button class="btn teal solid" id="addCourseBtn">${ICONS.plus} إضافة كورس جديد</button>` : ''}
+      <div class="courses-hero">
+        <div class="courses-hero-inner">
+          <h2>الدورات التعليمية</h2>
+          <p>تصفّح الدورات المتاحة، فلتر حسب تخصصك وجامعتك، أو ابحث مباشرة</p>
+          <div class="courses-search">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="courseSearchInput" placeholder="ابحث عن مادة أو جامعة..." value="${escapeHtml(state.courseSearch||'')}">
+          </div>
+        </div>
       </div>
-      <div class="filter-group"><span class="filter-label">التخصص:</span><div class="filter-row">${majorChips}</div></div>
-      <div class="filter-group"><span class="filter-label">الجامعة:</span><div class="filter-row">${chips}</div></div>
-      ${courses.length ? `<div class="course-grid">${cards}</div>` : `<div class="empty-state"><h3>لا توجد كورسات ضمن هذا التصنيف</h3><p>جرّب تصنيفًا آخر${isAdmin ? '، أو أضف كورسًا جديدًا.' : '.'}</p></div>`}
+      ${isAdmin ? `<div class="toolbar" style="justify-content:flex-end;"><button class="btn teal solid" id="addCourseBtn">${ICONS.plus} إضافة كورس جديد</button></div>` : ''}
+      <div class="filter-dropdown-bar">
+        <div class="filter-dropdown">
+          <label>التخصص</label>
+          <select id="majorFilterSelect">${majorOptions}</select>
+        </div>
+        <div class="filter-dropdown">
+          <label>الجامعة</label>
+          <select id="uniFilterSelect">${uniOptions}</select>
+        </div>
+      </div>
+      ${courses.length ? `<div class="course-canvas"><div class="course-grid">${cards}</div></div>` : `<div class="empty-state"><h3>لا توجد كورسات ضمن هذا التصنيف</h3><p>جرّب تصنيفًا آخر${isAdmin ? '، أو أضف كورسًا جديدًا.' : '.'}</p></div>`}
     </div>
   </section>
   `;
@@ -1052,13 +1196,17 @@ function pageMyCourses(){
     <div class="course-card">
       <div class="course-top"></div>
       <div class="course-body">
-        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-          <div class="course-uni">${escapeHtml(c.university)}</div>
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+          <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
           <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
         </div>
+        <div class="course-uni">${escapeHtml(c.university)}</div>
         <h3>${escapeHtml(c.title)}</h3>
         <p>${escapeHtml(c.description)}</p>
-        <div class="course-foot"><span>⏱ ${c.hours} ساعات معتمدة</span><span>🎬 ${lectureCount} محاضرة</span></div>
+        <div class="course-stats-row">
+          <span class="course-stat-chip">⏱ ${c.hours} ساعات</span>
+          <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
+        </div>
         <div class="course-actions">
           <a href="#/course/${c.id}" class="btn teal small">عرض المحاضرات</a>
         </div>
@@ -1070,7 +1218,7 @@ function pageMyCourses(){
   <section class="section">
     <div class="container">
       <div class="toolbar"><h2>دوراتي</h2></div>
-      ${courses.length ? `<div class="course-grid">${cards}</div>` : `<div class="empty-state"><h3>لا توجد كورسات مفعّلة بعد</h3><p>تواصل مع الإدارة لتفعيل الدورات التي تحتاجها.</p></div>`}
+      ${courses.length ? `<div class="course-canvas"><div class="course-grid">${cards}</div></div>` : `<div class="empty-state"><h3>لا توجد كورسات مفعّلة بعد</h3><p>تواصل مع الإدارة لتفعيل الدورات التي تحتاجها.</p></div>`}
     </div>
   </section>
   `;
@@ -1087,74 +1235,116 @@ function pageCourseDetail(courseId){
   }
   const lectures = state.lectures.filter(l=>l.courseId===courseId);
   const unlocked = courseUnlocked(courseId);
-  const lectureCards = lectures.map((l, i) => {
+  const lectureRows = lectures.map((l, i) => {
+    const videos = l.videos || [];
+    const files = l.files || [];
+    const videoRowsHtml = videos.map((v,idx)=>`
+      <a class="lecture-action-btn watch" href="${escapeHtml(v.url)}" target="_blank" rel="noopener">
+        <span class="action-icon">${ICONS.play}</span>
+        <span><span class="label-main">${v.label ? escapeHtml(v.label) : ('مشاهدة الفيديو' + (videos.length>1 ? ' '+(idx+1) : ''))}</span><span class="label-sub">تشغيل الفيديو</span></span>
+      </a>`).join('');
+    const fileRowsHtml = files.map((f,idx)=>`
+      <a class="lecture-action-btn download" href="${escapeHtml(f.url)}" target="_blank" rel="noopener">
+        <span class="action-icon">${ICONS.download}</span>
+        <span><span class="label-main">${f.label ? escapeHtml(f.label) : ('تحميل الملف' + (files.length>1 ? ' '+(idx+1) : ''))}</span><span class="label-sub">نسخة PDF</span></span>
+      </a>`).join('');
+    const hasMedia = videos.length || files.length;
     return `
-    <div class="lecture-card ${unlocked?'':'locked'}">
-      <div style="display:flex; align-items:center; gap:10px;">
+    <details class="lecture-row ${unlocked?'':'locked'}">
+      <summary class="lecture-row-summary">
         <div class="lecture-num">${i+1}</div>
-        <h4>${escapeHtml(l.title)}</h4>
+        <div class="lecture-row-main">
+          <h4>${escapeHtml(l.title)}</h4>
+        </div>
+        <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+      </summary>
+      <div class="lecture-row-content">
+        ${l.description ? `<p style="font-size:13.5px; color:var(--muted); margin-bottom:12px;">${escapeHtml(l.description)}</p>` : ''}
+        ${unlocked ? `
+        <div class="lecture-actions">
+          ${hasMedia ? (videoRowsHtml + fileRowsHtml) : `<div class="lecture-lock-msg">${ICONS.play} لم تتم إضافة فيديو أو ملف لهذه المحاضرة بعد</div>`}
+        </div>` : `
+        <div class="lecture-lock-msg">${ICONS.lock} ${course.isFree ? 'اشترك مجانًا لفتح هذه المحاضرة' : 'مادة مدفوعة'}</div>`}
+        ${isAdmin ? `<div class="lecture-row-admin"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
       </div>
-      <p>${escapeHtml(l.description || '')}</p>
-      ${unlocked ? `
-      <div class="lecture-actions">
-        ${l.videoUrl ? `<a class="btn teal small" href="${escapeHtml(l.videoUrl)}" target="_blank" rel="noopener">${ICONS.play} مشاهدة المحاضرة</a>`
-                     : `<button class="btn small" disabled>${ICONS.play} غير متوفرة بعد</button>`}
-        ${l.fileUrl ? `<a class="btn small" href="${escapeHtml(l.fileUrl)}" target="_blank" rel="noopener">${ICONS.download} تحميل الملف</a>`
-                    : `<button class="btn small" disabled>${ICONS.download} لا يوجد ملف</button>`}
-      </div>` : `
-      <div class="lecture-lock-msg">${ICONS.lock} ${course.isFree ? 'اشترك مجانًا لفتح هذه المحاضرة' : 'مادة مدفوعة — اشترك لفتح هذه المحاضرة'}</div>`}
-      ${isAdmin ? `<div class="lecture-admin-row"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
-    </div>
+    </details>
   `;
   }).join('');
 
-  let statusBanner = '';
+  let sideAction = '';
+  let sideStatus = '';
   if(isAdmin){
-    statusBanner = `<div style="margin-top:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      ${priceBadgeHtml(course, true)}
+    sideStatus = priceBadgeHtml(course, true);
+    sideAction = `
       <button class="btn edit small" id="editCourseBtn">${ICONS.edit} تعديل بيانات الكورس</button>
       <button class="btn teal solid small" id="enrollStudentBtn">${ICONS.plus} تفعيل للطلاب</button>
       <button class="btn danger small" id="resetDeviceBtn">${ICONS.lock} إعادة تعيين أجهزة الطالب</button>
-    </div>
+    `;
+  } else if(unlocked){
+    sideStatus = `<span class="lecture-tier-tag">✅ الكورس مفعّل لديك</span>`;
+  } else if(course.isFree){
+    sideStatus = `<span class="lecture-tier-tag">🆓 كورس مجاني</span>`;
+    sideAction = state.session && state.session.type==='student'
+        ? `<button class="btn teal solid small" data-self-enroll="${courseId}">${ICONS.plus} اشترك الآن مجانًا</button>`
+        : `<a href="#/login" class="btn teal solid small">سجّل الدخول للاشتراك</a>`;
+  } else {
+    sideStatus = `<span class="lecture-tier-tag locked">💳 كورس مدفوع</span>`;
+    sideAction = `<div class="lecture-lock-msg">${ICONS.lock} يتم التفعيل من قبل الإدارة، تواصل معنا</div>`;
+  }
+
+  const enrollAdminBox = isAdmin ? `
     <div class="enroll-box">
       <h4>الطلاب المفعّل لهم الكورس</h4>
       ${enrollmentsFor(courseId).length ? `<div class="enroll-list">${enrollmentsFor(courseId).map(e=>`<span class="enroll-chip">🎓 ${escapeHtml(e.phone)} <button data-unenroll="${escapeHtml(e.phone)}" title="إلغاء التفعيل">✕</button></span>`).join('')}</div>` : `<p style="color:var(--muted); font-size:13.5px;">لا يوجد طلاب مفعّلين لهذا الكورس بعد.</p>`}
-    </div>`;
-  } else if(unlocked){
-    statusBanner = `<div style="margin-top:14px;"><span class="lecture-tier-tag">✅ الكورس مفعّل لديك</span></div>`;
-  } else if(course.isFree){
-    statusBanner = `<div style="margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      <span class="lecture-tier-tag">🆓 كورس مجاني</span>
-      ${state.session && state.session.type==='student'
-        ? `<button class="btn teal solid small" data-self-enroll="${courseId}">${ICONS.plus} اشترك الآن مجانًا</button>`
-        : `<a href="#/login" class="btn teal solid small">سجّل الدخول للاشتراك مجانًا</a>`}
-    </div>`;
-  } else {
-    statusBanner = `<div style="margin-top:14px;"><span class="lecture-lock-msg" style="width:fit-content;">${ICONS.lock} كورس مدفوع — يتم التفعيل من قبل الإدارة، تواصل معنا لتفعيله.</span></div>`;
-  }
+    </div>` : '';
 
   return `
   <section class="section">
     <div class="container">
       <div class="breadcrumb"><a href="#/courses">الدورات</a> / ${escapeHtml(course.title)}</div>
-      <div class="course-detail-head">
-        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
-          <div class="course-uni" style="margin-bottom:0;">${escapeHtml(course.university)}</div>
-          <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(course.major || 'التمريض')}</span>
+
+      <div class="course-hero-banner">
+        <div class="course-hero-banner-inner">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <div class="course-uni">${escapeHtml(course.university)}</div>
+            <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(course.major || 'التمريض')}</span>
+          </div>
+          <h1>${escapeHtml(course.title)}</h1>
+          <p>${escapeHtml(course.description)}</p>
+          <div class="course-detail-meta">
+            <span>⏱ <b>${course.hours}</b> ساعات معتمدة</span>
+            <span>🎬 <b>${lectures.length}</b> محاضرة</span>
+          </div>
         </div>
-        <h1>${escapeHtml(course.title)}</h1>
-        <p>${escapeHtml(course.description)}</p>
-        <div class="course-detail-meta">
-          <span>⏱ <b>${course.hours}</b> ساعات معتمدة</span>
-          <span>🎬 <b>${lectures.length}</b> محاضرة</span>
+      </div>
+
+      <div class="course-detail-layout">
+        <div class="course-detail-main">
+          <div class="toolbar">
+            <h2 style="font-size:22px;">محاضرات الكورس</h2>
+            ${isAdmin ? `<button class="btn teal solid" id="addLectureBtn">${ICONS.plus} إضافة محاضرة</button>` : ''}
+          </div>
+          ${lectures.length ? `<div class="lecture-list">${lectureRows}</div>` : `<div class="empty-state"><h3>لا توجد محاضرات بعد</h3><p>${isAdmin ? 'أضف أول محاضرة لهذا الكورس.' : 'سيتم إضافة المحاضرات قريبًا.'}</p></div>`}
         </div>
-        ${statusBanner}
+
+        <div class="course-detail-side">
+          <div class="course-side-card">
+            <h4>حالة الاشتراك</h4>
+            <div style="display:flex; flex-direction:column; gap:12px; align-items:flex-start;">
+              ${sideStatus}
+              ${sideAction}
+            </div>
+            ${enrollAdminBox}
+          </div>
+          <div class="course-side-card">
+            <h4>مواصفات الدورة</h4>
+            <div class="course-spec-row"><span>⏱ الساعات المعتمدة</span><b>${course.hours}</b></div>
+            <div class="course-spec-row"><span>🎬 عدد المحاضرات</span><b>${lectures.length}</b></div>
+            <div class="course-spec-row"><span>🏫 الجامعة</span><b>${escapeHtml(course.university)}</b></div>
+            <div class="course-spec-row"><span>📚 التخصص</span><b>${escapeHtml(course.major || 'التمريض')}</b></div>
+          </div>
+        </div>
       </div>
-      <div class="toolbar">
-        <h2 style="font-size:22px;">محاضرات الكورس</h2>
-        ${isAdmin ? `<button class="btn teal solid" id="addLectureBtn">${ICONS.plus} إضافة محاضرة</button>` : ''}
-      </div>
-      ${lectures.length ? `<div class="lecture-grid">${lectureCards}</div>` : `<div class="empty-state"><h3>لا توجد محاضرات بعد</h3><p>${isAdmin ? 'أضف أول محاضرة لهذا الكورس.' : 'سيتم إضافة المحاضرات قريبًا.'}</p></div>`}
     </div>
   </section>
   `;
@@ -1537,6 +1727,132 @@ function pageContact(){
 }
 
 /* =========================================================
+   PAGE: PRIVACY POLICY
+   ========================================================= */
+function pagePrivacy(){
+  const sections = [
+    {
+      title: 'مقدمة',
+      body: `تحترم منصة MEDORA خصوصية مستخدميها من طلاب التمريض وطب الأسنان، وتلتزم بحماية بياناتهم الشخصية. توضّح هذه السياسة نوع البيانات التي نجمعها، وكيفية استخدامها وتخزينها، وحقوقك المتعلقة بها. استخدامك للمنصة يعني موافقتك على ما ورد في هذه السياسة.`
+    },
+    {
+      title: 'البيانات التي نجمعها',
+      body: `عند إنشاء حساب طالب، نجمع: الاسم الكامل، رقم الهاتف (يُستخدم كمعرّف دخول)، الجامعة والتخصص، وكلمة المرور (تُخزَّن بشكل مشفّر عبر مزوّد المصادقة Supabase ولا يطّلع عليها أي موظف في المنصة). كما نسجّل معرّفًا تقنيًا للجهاز المستخدم عند تسجيل الدخول، لغايات نظام "الجهاز الواحد" الموضّح أدناه. أما عند إرسال رسالة عبر صفحة "تواصل معنا"، فنجمع الاسم والبريد الإلكتروني ونص الرسالة فقط.`
+    },
+    {
+      title: 'كيف نستخدم بياناتك',
+      body: `تُستخدم بياناتك حصرًا من أجل: إنشاء حسابك وتسجيل دخولك، تحديد الكورسات المتاحة لجامعتك وتخصصك، تفعيل اشتراكك في الكورسات المدفوعة، الرد على استفساراتك ورسائلك، والحفاظ على أمان الحسابات عبر نظام قفل الجهاز الواحد. لا نستخدم بياناتك لأي غرض تسويقي خارج المنصة، ولا نعرضها لأي طرف ثالث.`
+    },
+    {
+      title: 'نظام "الجهاز الواحد" لكل حساب',
+      body: `لحماية اشتراكات الطلاب من المشاركة غير المصرّح بها، يُربط حساب كل طالب بجهاز واحد فقط عند أول تسجيل دخول. إذا احتجت لاستخدام حساب على جهاز جديد، يمكن للإدارة إعادة تعيين الجهاز المرتبط بحسابك بعد التواصل معها من صفحة "تواصل معنا".`
+    },
+    {
+      title: 'تخزين البيانات وحمايتها',
+      body: `تُخزَّن بيانات المنصة على خوادم Supabase، وتُطبَّق عليها سياسات وصول (RLS) تحدّ من قدرة أي مستخدم على الاطّلاع على بيانات غيره. لا تُخزَّن كلمات المرور كنص صريح في أي مكان، وتُدار عملية المصادقة بالكامل عبر مزوّد خدمة موثوق.`
+    },
+    {
+      title: 'مشاركة البيانات مع أطراف ثالثة',
+      body: `لا تبيع منصة MEDORA بيانات مستخدميها ولا تشاركها مع أي جهة تسويقية أو إعلانية. تقتصر مشاركة البيانات على مزوّد الاستضافة والمصادقة (Supabase) اللازم لتشغيل المنصة فقط.`
+    },
+    {
+      title: 'حقوقك',
+      body: `يحق لك في أي وقت طلب الاطّلاع على بياناتك المخزّنة لدينا، أو طلب تصحيحها، أو طلب حذف حسابك وبياناته نهائيًا، وذلك بالتواصل معنا عبر صفحة "تواصل معنا" أو عبر البريد الإلكتروني الظاهر أدناه.`
+    },
+    {
+      title: 'تعديلات على هذه السياسة',
+      body: `قد نقوم بتحديث سياسة الخصوصية من وقت لآخر لمواكبة أي تغييرات على المنصة أو المتطلبات القانونية. سيتم نشر أي تحديث على هذه الصفحة مع تاريخ آخر تعديل.`
+    },
+    {
+      title: 'تواصل معنا',
+      body: `لأي استفسار يتعلق بخصوصية بياناتك، يمكنك مراسلتنا عبر صفحة "تواصل معنا" أو على البريد الإلكتروني الموضّح في صفحة التواصل.`
+    },
+  ];
+  return `
+  <section class="section">
+    <div class="container" style="max-width:860px;">
+      <div class="section-head" style="margin-bottom:30px;">
+        <span class="eyebrow">حماية بياناتك</span>
+        <h2>سياسة الخصوصية</h2>
+        <p>آخر تحديث: يوليو 2026</p>
+      </div>
+      <div class="card-panel" style="padding:34px; text-align:right;">
+        ${sections.map(s => `
+          <div style="margin-bottom:26px;">
+            <h4 style="font-size:16.5px; color:var(--ink); font-weight:800; margin-bottom:8px;">${escapeHtml(s.title)}</h4>
+            <p style="color:var(--muted); font-size:14.5px; line-height:1.9;">${escapeHtml(s.body)}</p>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </section>
+  `;
+}
+
+/* =========================================================
+   PAGE: TERMS & CONDITIONS
+   ========================================================= */
+function pageTerms(){
+  const sections = [
+    {
+      title: 'قبول الشروط',
+      body: `استخدامك لمنصة MEDORA، سواء كطالب مسجَّل أو زائر، يعني موافقتك على الشروط والأحكام الواردة هنا. إن لم توافق على أي بند منها، يُرجى التوقف عن استخدام المنصة.`
+    },
+    {
+      title: 'الحساب والاستخدام المسموح',
+      body: `الحساب مخصّص للاستخدام الشخصي لصاحبه فقط، ولا يجوز مشاركة بيانات الدخول (رقم الهاتف وكلمة المرور) مع أي شخص آخر. أنت مسؤول عن الحفاظ على سرّية بياناتك وعن أي نشاط يتم من خلال حسابك.`
+    },
+    {
+      title: 'نظام "الجهاز الواحد"',
+      body: `يُقيَّد كل حساب طالب بجهاز واحد فقط عند أول تسجيل دخول، وذلك للحدّ من مشاركة الحسابات بين عدّة أشخاص. محاولة الدخول من جهاز آخر تؤدي إلى منع الدخول تلقائيًا حتى تقوم الإدارة بإعادة تعيين الجهاز بناءً على طلبك.`
+    },
+    {
+      title: 'الكورسات المدفوعة والاشتراكات',
+      body: `تُفعَّل الكورسات المدفوعة من قِبل الإدارة بعد إتمام عملية الاشتراك المتفق عليها خارج المنصة. لا تضمن المنصة استرجاع قيمة الاشتراك بعد التفعيل، إلا في حالات يُقرّرها فريق الإدارة وفق تقديره.`
+    },
+    {
+      title: 'المحتوى التعليمي وحقوق الملكية',
+      body: `جميع المحاضرات والمواد وبنك الأسئلة المتاحة على المنصة مخصّصة للاستخدام الشخصي التعليمي فقط لطلاب المنصة. يُمنع نسخ المحتوى أو إعادة نشره أو توزيعه أو بيعه لأي طرف آخر دون إذن كتابي من إدارة المنصة.`
+    },
+    {
+      title: 'سلوك المستخدم',
+      body: `يُمنع استخدام المنصة بأي شكل يضرّ بها أو بمستخدميها الآخرين، بما يشمل محاولات اختراق الحسابات، أو انتحال هوية طالب آخر، أو إرسال محتوى مسيء عبر نموذج التواصل.`
+    },
+    {
+      title: 'التعديلات على المنصة والشروط',
+      body: `تحتفظ إدارة MEDORA بحقّ تعديل هذه الشروط، أو إضافة/إزالة كورسات ومحتوى، أو تعليق أي حساب يخالف هذه الشروط، دون إشعار مسبق في الحالات الضرورية.`
+    },
+    {
+      title: 'إخلاء مسؤولية',
+      body: `المحتوى التعليمي المقدَّم على المنصة أداة مساعدة للمراجعة والدراسة، ولا يُغني عن المقررات الرسمية والمراجع المعتمدة من الجامعة. لا تتحمّل المنصة مسؤولية أي قرار أكاديمي يُبنى حصرًا على محتواها.`
+    },
+    {
+      title: 'التواصل معنا',
+      body: `لأي استفسار حول هذه الشروط، يمكنك مراسلتنا عبر صفحة "تواصل معنا".`
+    },
+  ];
+  return `
+  <section class="section">
+    <div class="container" style="max-width:860px;">
+      <div class="section-head" style="margin-bottom:30px;">
+        <span class="eyebrow">الشروط والأحكام</span>
+        <h2>شروط استخدام منصة MEDORA</h2>
+        <p>آخر تحديث: يوليو 2026</p>
+      </div>
+      <div class="card-panel" style="padding:34px; text-align:right;">
+        ${sections.map(s => `
+          <div style="margin-bottom:26px;">
+            <h4 style="font-size:16.5px; color:var(--ink); font-weight:800; margin-bottom:8px;">${escapeHtml(s.title)}</h4>
+            <p style="color:var(--muted); font-size:14.5px; line-height:1.9;">${escapeHtml(s.body)}</p>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  </section>
+  `;
+}
+
+/* =========================================================
    PAGE: STUDENT LOGIN / REGISTER
    ========================================================= */
 let authMode = 'login';
@@ -1563,6 +1879,7 @@ function pageLogin(){
           <div class="field"><label>كلمة المرور</label><input type="password" name="password" placeholder="••••••••" required></div>
           <button type="submit" class="btn solid" style="width:100%; justify-content:center;">${authMode==='login' ? 'دخول' : 'إنشاء الحساب'}</button>
         </form>
+        ${authMode==='register' ? `<p style="font-size:12px; color:var(--muted); text-align:center; margin-top:12px;">بإنشائك حسابًا فإنك توافق على <a href="#/privacy" style="color:var(--teal); font-weight:700;">سياسة الخصوصية</a> و<a href="#/terms" style="color:var(--teal); font-weight:700;">الشروط والأحكام</a> الخاصة بمنصة MEDORA.</p>` : ''}
         <div class="switch-row">${authMode==='login' ? `ليس لديك حساب؟ <button id="switchAuth">أنشئ حسابًا جديدًا</button>` : `لديك حساب بالفعل؟ <button id="switchAuth">سجّل الدخول</button>`}</div>
         <div style="text-align:center; margin-top:16px;"><a href="#/admin-login" style="font-size:12.5px; color:var(--muted);">${ICONS.shield} دخول المشرفين</a></div>
       </div>
@@ -1707,21 +2024,65 @@ function modalResetStudentDevice(){
   });
 }
 
+/* أدوات صفوف الفيديو/الملف الديناميكية داخل نموذج المحاضرة */
+function linkRowHtml(labelVal, urlVal){
+  return `<div class="link-row">
+    <input type="text" class="link-label" placeholder="اسم (اختياري)" value="${escapeHtml(labelVal||'')}">
+    <input type="url" class="link-url" placeholder="https://..." value="${escapeHtml(urlVal||'')}">
+    <button type="button" class="link-remove" title="حذف">✕</button>
+  </div>`;
+}
+function bindLinkRows(containerId, addBtnId){
+  const container = document.getElementById(containerId);
+  const addBtn = document.getElementById(addBtnId);
+  container.addEventListener('click', (e)=>{
+    const rm = e.target.closest('.link-remove');
+    if(rm) rm.closest('.link-row').remove();
+  });
+  addBtn.addEventListener('click', ()=>{
+    container.insertAdjacentHTML('beforeend', linkRowHtml());
+  });
+}
+function collectLinkRows(containerId){
+  return Array.from(document.querySelectorAll('#'+containerId+' .link-row')).map(row=>({
+    label: row.querySelector('.link-label').value.trim(),
+    url: row.querySelector('.link-url').value.trim()
+  })).filter(r=>r.url);
+}
+
 function modalAddLecture(courseId){
   openModal(`
     <h3>${ICONS.plus} إضافة محاضرة جديدة</h3>
     <form id="lectureForm">
       <div class="field"><label>عنوان المحاضرة</label><input type="text" name="title" required placeholder="مثال: مقدمة في..."></div>
       <div class="field"><label>وصف مختصر (اختياري)</label><textarea name="description" placeholder="وصف مختصر لمحتوى المحاضرة"></textarea></div>
-      <div class="field"><label>رابط مشاهدة المحاضرة (اختياري)</label><input type="url" name="videoUrl" placeholder="https://..." style="direction:ltr;"></div>
-      <div class="field"><label>رابط تحميل ملف المحاضرة (اختياري)</label><input type="url" name="fileUrl" placeholder="https://..." style="direction:ltr;"></div>
+      <div class="field">
+        <label>فيديوهات المحاضرة (اختياري — يمكن إضافة أكثر من فيديو)</label>
+        <div class="link-rows" id="videoRows"></div>
+        <button type="button" class="btn small" id="addVideoRow">${ICONS.plus} إضافة فيديو</button>
+      </div>
+      <div class="field">
+        <label>ملفات المحاضرة (اختياري — يمكن إضافة أكثر من ملف)</label>
+        <div class="link-rows" id="fileRows"></div>
+        <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
+      </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ المحاضرة</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
+  bindLinkRows('videoRows', 'addVideoRow');
+  bindLinkRows('fileRows', 'addFileRow');
+  document.getElementById('addVideoRow').click();
+  document.getElementById('addFileRow').click();
   document.getElementById('lectureForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    state.lectures.push({ id:'l'+Date.now(), courseId, title:fd.get('title').trim(), description:(fd.get('description')||'').trim(), videoUrl:(fd.get('videoUrl')||'').trim(), fileUrl:(fd.get('fileUrl')||'').trim() });
+    state.lectures.push({
+      id:'l'+Date.now(), courseId,
+      title:fd.get('title').trim(),
+      description:(fd.get('description')||'').trim(),
+      videos: collectLinkRows('videoRows'),
+      files: collectLinkRows('fileRows'),
+    });
     await setData('lectures', state.lectures, true);
     closeModal(); render();
   });
@@ -1730,21 +2091,35 @@ function modalAddLecture(courseId){
 function modalEditLecture(lectureId){
   const lecture = state.lectures.find(l=>l.id===lectureId);
   if(!lecture) return;
+  const videos = (lecture.videos && lecture.videos.length) ? lecture.videos : [{label:'',url:''}];
+  const files = (lecture.files && lecture.files.length) ? lecture.files : [{label:'',url:''}];
   openModal(`
     <h3>${ICONS.edit} تعديل المحاضرة</h3>
     <form id="lectureEditForm">
       <div class="field"><label>عنوان المحاضرة</label><input type="text" name="title" required value="${escapeHtml(lecture.title)}"></div>
       <div class="field"><label>وصف مختصر (اختياري)</label><textarea name="description">${escapeHtml(lecture.description||'')}</textarea></div>
-      <div class="field"><label>رابط مشاهدة المحاضرة (اختياري)</label><input type="url" name="videoUrl" value="${escapeHtml(lecture.videoUrl||'')}" placeholder="https://..." style="direction:ltr;"></div>
-      <div class="field"><label>رابط تحميل ملف المحاضرة (اختياري)</label><input type="url" name="fileUrl" value="${escapeHtml(lecture.fileUrl||'')}" placeholder="https://..." style="direction:ltr;"></div>
+      <div class="field">
+        <label>فيديوهات المحاضرة (اختياري — يمكن إضافة أكثر من فيديو)</label>
+        <div class="link-rows" id="videoRows">${videos.map(v=>linkRowHtml(v.label,v.url)).join('')}</div>
+        <button type="button" class="btn small" id="addVideoRow">${ICONS.plus} إضافة فيديو</button>
+      </div>
+      <div class="field">
+        <label>ملفات المحاضرة (اختياري — يمكن إضافة أكثر من ملف)</label>
+        <div class="link-rows" id="fileRows">${files.map(f=>linkRowHtml(f.label,f.url)).join('')}</div>
+        <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
+      </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
+  bindLinkRows('videoRows', 'addVideoRow');
+  bindLinkRows('fileRows', 'addFileRow');
   document.getElementById('lectureEditForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
     lecture.title = fd.get('title').trim(); lecture.description = (fd.get('description')||'').trim();
-    lecture.videoUrl = (fd.get('videoUrl')||'').trim(); lecture.fileUrl = (fd.get('fileUrl')||'').trim();
+    lecture.videos = collectLinkRows('videoRows');
+    lecture.files = collectLinkRows('fileRows');
+    delete lecture.videoUrl; delete lecture.fileUrl;
     await setData('lectures', state.lectures, true);
     closeModal(); render();
   });
@@ -1862,6 +2237,8 @@ async function render(){
       case 'bank': html = pageBank(); break;
       case 'about': html = pageAbout(); break;
       case 'contact': html = pageContact(); break;
+      case 'privacy': html = pagePrivacy(); break;
+      case 'terms': html = pageTerms(); break;
       case 'login': html = pageLogin(); break;
       case 'admin-login': html = pageAdminLogin(); break;
       default: html = pageHome();
@@ -1878,8 +2255,20 @@ function bindPageEvents(route){
     btn.addEventListener('click', ()=> selfEnroll(btn.dataset.selfEnroll));
   });
   if(route === 'courses'){
-    document.querySelectorAll('[data-filter]').forEach(chip=> chip.addEventListener('click', ()=>{ state.courseFilter = chip.dataset.filter; render(); }));
-    document.querySelectorAll('[data-major-filter]').forEach(chip=> chip.addEventListener('click', ()=>{ state.majorFilter = chip.dataset.majorFilter; render(); }));
+    const majorSel = document.getElementById('majorFilterSelect');
+    if(majorSel) majorSel.addEventListener('change', ()=>{ state.majorFilter = majorSel.value; render(); });
+    const uniSel = document.getElementById('uniFilterSelect');
+    if(uniSel) uniSel.addEventListener('change', ()=>{ state.courseFilter = uniSel.value; render(); });
+    const searchInput = document.getElementById('courseSearchInput');
+    if(searchInput){
+      searchInput.addEventListener('input', ()=>{
+        state.courseSearch = searchInput.value;
+        render().then(()=>{
+          const el = document.getElementById('courseSearchInput');
+          if(el){ el.focus(); const pos = el.value.length; el.setSelectionRange(pos,pos); }
+        });
+      });
+    }
     const addBtn = document.getElementById('addCourseBtn');
     if(addBtn) addBtn.addEventListener('click', modalAddCourse);
     document.querySelectorAll('[data-edit-course]').forEach(btn=>{
@@ -2181,6 +2570,35 @@ document.body.addEventListener('click', (e)=>{
 
 document.getElementById('downloadAppBtn').addEventListener('click', modalDownloadApp);
 
+/* Interactive glass tilt + spotlight effect for course cards */
+(function(){
+  const MAX_TILT = 10;
+  document.body.addEventListener('mousemove', (e)=>{
+    const card = e.target.closest && e.target.closest('.course-card');
+    if(!card) return;
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const px = (x / rect.width) * 100;
+    const py = (y / rect.height) * 100;
+    const rx = ((y / rect.height) - 0.5) * -MAX_TILT;
+    const ry = ((x / rect.width) - 0.5) * MAX_TILT;
+    card.style.setProperty('--mx', px + '%');
+    card.style.setProperty('--my', py + '%');
+    card.style.transform = `translateY(-6px) scale(1.02) rotateX(${rx}deg) rotateY(${ry}deg)`;
+  });
+  document.body.addEventListener('mouseleave', (e)=>{
+    document.querySelectorAll('.course-card').forEach(c=>{ c.style.transform=''; });
+  }, true);
+  document.body.addEventListener('mouseout', (e)=>{
+    const card = e.target.closest && e.target.closest('.course-card');
+    if(!card) return;
+    const related = e.relatedTarget;
+    if(related && card.contains(related)) return;
+    card.style.transform = '';
+  });
+})();
+
 function applyTheme(dark){
   document.body.classList.toggle('dark', !!dark);
   const btn = document.getElementById('themeToggleBtn');
@@ -2203,4 +2621,5 @@ document.getElementById('themeToggleBtn').addEventListener('click', async ()=>{
 </script>
 </body>
 </html>
+
 
