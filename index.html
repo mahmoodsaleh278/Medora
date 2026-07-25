@@ -300,6 +300,31 @@
   .lecture-tier-tag.locked{ background:#f3e8d8; color:#8a5a1c; }
   .lecture-lock-msg{ display:flex; align-items:center; gap:8px; background:var(--bg); border:1px dashed var(--border); border-radius:10px; padding:10px 14px; font-size:13.5px; font-weight:700; color:var(--muted); }
 
+  /* Section groups: فيرست / ميد / فاينال — كل قسم بمحاضراته وحالة اشتراكه الخاصة */
+  .section-group-list{ display:flex; flex-direction:column; gap:14px; }
+  .section-group{ background:var(--card); border:1.5px solid var(--border); border-radius:16px; overflow:hidden; }
+  .section-group[open]{ border-color:var(--teal); }
+  .section-group-summary{ display:flex; align-items:center; gap:14px; padding:16px 20px; cursor:pointer; list-style:none; }
+  .section-group-summary::-webkit-details-marker{ display:none; }
+  .section-group-summary::marker{ content:''; }
+  .section-group-summary:hover{ background:var(--teal-light); }
+  .section-num-badge{ width:42px; height:42px; border-radius:12px; background:var(--navy); color:#fff; font-family:'Cairo'; font-weight:800; font-size:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .section-group-title{ display:flex; align-items:center; gap:14px; flex:1; min-width:0; }
+  .section-group-title h3{ font-size:17px; color:var(--ink); font-weight:800; margin:0; }
+  .section-group-title p{ font-size:12.5px; color:var(--muted); margin:3px 0 0; }
+  .section-group-status{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+  .section-group[open] .lecture-toggle-icon{ background:var(--navy); color:#fff; }
+  .section-group[open] .lecture-toggle-icon svg{ transform:rotate(180deg); }
+  .section-group-content{ padding:4px 20px 20px; border-top:1px solid var(--border); }
+  .section-group-content .lecture-list{ margin-top:14px; }
+  .section-group-empty{ padding:14px 20px 20px; color:var(--muted); font-size:13.5px; }
+
+  .section-picker-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border:1.5px solid var(--border); border-radius:10px; margin-bottom:8px; }
+  .section-picker-check{ display:flex; align-items:center; gap:8px; font-weight:800; font-size:14px; flex:1; cursor:pointer; }
+  .section-picker-check input{ width:17px; height:17px; accent-color:var(--teal); }
+  .section-picker-row select{ padding:6px 10px; border-radius:8px; border:1.5px solid var(--border); font-family:inherit; font-size:13px; background:var(--card); color:var(--text); }
+  .section-picker-row select:disabled{ opacity:.4; }
+
   .enroll-box{ margin-top:18px; padding-top:16px; border-top:1px solid var(--border); }
   .enroll-box h4{ font-size:14.5px; color:var(--ink); font-weight:800; margin-bottom:10px; }
   .enroll-list{ display:flex; gap:8px; flex-wrap:wrap; }
@@ -608,6 +633,13 @@ const SEED_COURSES = [
   { id:'d5', title:'طب أسنان الأطفال', university:'عام', major:'طب الأسنان', hours:2, description:'التعامل مع أسنان الأطفال والوقاية من التسوس المبكر.', isFree:false },
 ];
 
+/* ---------------- Course sections (فيرست / ميد / فاينال) ----------------
+   كل محاضرة تنتمي لقسم واحد، وكل قسم له سعر واشتراك مستقل عن باقي الأقسام،
+   بحيث يقدر الطالب يشترك بالفيرست فقط أو بالميد فقط... إلخ. */
+const SECTIONS = ['first','mid','final'];
+const SECTION_LABELS = { first:'الفيرست', mid:'الميد', final:'الفاينال' };
+const SECTION_NUM = { first:'1', mid:'2', final:'3' };
+
 const SEED_LECTURES = [
   { id:'l1', courseId:'c1', title:'مقدمة في مفاهيم التمريض', description:'نظرة عامة على أساسيات المهنة وأخلاقياتها.', videoUrl:'', fileUrl:'' },
   { id:'l2', courseId:'c1', title:'العلامات الحيوية', description:'قياس وتفسير العلامات الحيوية الأساسية.', videoUrl:'', fileUrl:'' },
@@ -811,7 +843,32 @@ function normalizeLecture(l){
   let files = Array.isArray(l.files) ? l.files.filter(f=>f && f.url) : [];
   if(!videos.length && l.videoUrl) videos = [{ label:'', url:l.videoUrl }];
   if(!files.length && l.fileUrl) files = [{ label:'', url:l.fileUrl }];
-  return Object.assign({}, l, { videos, files });
+  const section = SECTIONS.includes(l.section) ? l.section : 'first';
+  return Object.assign({}, l, { videos, files, section });
+}
+
+/* يبني خريطة أسعار لكل قسم (فيرست/ميد/فاينال) من بيانات الكورس، وقائمة الأقسام
+   الفعلية المفعّلة لهذه المادة (بعض المواد فيها ميد وفاينال بس مثلًا بدون فيرست).
+   للكورسات القديمة التي عندها isFree فقط أو بدون sections محفوظة، تُعتبر الأقسام الثلاثة كلها مفعّلة. */
+function normalizeCourse(c){
+  const legacy = !!c.isFree;
+  const p = (c.pricing && typeof c.pricing === 'object') ? c.pricing : null;
+  const pricing = {
+    first: p ? !!p.first : legacy,
+    mid:   p ? !!p.mid   : legacy,
+    final: p ? !!p.final : legacy,
+  };
+  const sections = (Array.isArray(c.sections) && c.sections.length)
+    ? c.sections.filter(s=>SECTIONS.includes(s))
+    : SECTIONS.slice();
+  return Object.assign({}, c, { pricing, sections: sections.length ? sections : SECTIONS.slice() });
+}
+
+/* الأقسام المفعّلة لهذه المادة بالتحديد (وليس كل الأقسام الثلاثة دائمًا) */
+function courseSections(courseId){
+  const course = state.courses.find(c=>c.id===courseId);
+  if(!course) return SECTIONS;
+  return (Array.isArray(course.sections) && course.sections.length) ? course.sections : SECTIONS;
 }
 
 async function initData(){
@@ -825,13 +882,39 @@ async function initData(){
     getData('content', {}, true),
     syncSessionFromAuth(),
   ]);
-  state.courses = courses; state.lectures = lectures.map(normalizeLecture); state.questions = questions;
+  state.courses = courses.map(normalizeCourse); state.lectures = lectures.map(normalizeLecture); state.questions = questions;
   state.students = students; state.messages = messages; state.enrollments = enrollments;
   state.content = Object.assign({}, CONTENT_DEFAULTS, savedContent);
   state.loaded = true;
 }
 
-/* ---------------- Enrollment helpers ---------------- */
+/* ---------------- Enrollment helpers ----------------
+   كل تفعيل (enrollment) مرتبط بكورس + قسم (section) محدد، بحيث يقدر الطالب
+   يشترك بقسم الفيرست بس مثلًا. الاشتراكات القديمة (بدون section) تُعتبر
+   تفعيلًا للكورس بالكامل حفاظًا على وصول الطلاب المفعّلين مسبقًا. */
+function isEnrolledSection(courseId, section){
+  if(!state.session || state.session.type !== 'student') return false;
+  const phone = state.session.phone;
+  return state.enrollments.some(e=> e.courseId===courseId && e.phone===phone && (!e.section || e.section===section));
+}
+function sectionUnlocked(courseId, section){
+  const isAdmin = state.session && state.session.type === 'admin';
+  if(isAdmin) return true;
+  return isEnrolledSection(courseId, section);
+}
+function enrollmentsForSection(courseId, section){
+  return state.enrollments.filter(e=> e.courseId===courseId && (e.section===section || !e.section));
+}
+async function selfEnrollSection(courseId, section){
+  if(!state.session || state.session.type !== 'student') return;
+  const phone = state.session.phone;
+  if(isEnrolledSection(courseId, section)) return;
+  state.enrollments.push({ courseId, phone, section });
+  await setData('enrollments', state.enrollments, true);
+  render();
+}
+
+/* الكورس "مفعّل" (لغايات كرت القوائم) إذا كان للطالب أي تفعيل ضمنه، بغض النظر عن القسم */
 function isEnrolled(courseId){
   if(!state.session || state.session.type !== 'student') return false;
   return state.enrollments.some(e=> e.courseId===courseId && e.phone===state.session.phone);
@@ -841,16 +924,19 @@ function courseUnlocked(courseId){
   if(isAdmin) return true;
   return isEnrolled(courseId);
 }
+function courseFullyUnlocked(courseId){
+  const isAdmin = state.session && state.session.type === 'admin';
+  if(isAdmin) return true;
+  return courseSections(courseId).every(s=>sectionUnlocked(courseId, s));
+}
 function enrollmentsFor(courseId){
   return state.enrollments.filter(e=>e.courseId===courseId);
 }
-async function selfEnroll(courseId){
-  if(!state.session || state.session.type !== 'student') return;
-  const phone = state.session.phone;
-  if(state.enrollments.some(e=>e.courseId===courseId && e.phone===phone)) return;
-  state.enrollments.push({ courseId, phone });
-  await setData('enrollments', state.enrollments, true);
-  render();
+function courseIsAllFree(course){
+  return courseSections(course.id).every(s=>course.pricing[s]);
+}
+function courseIsAllPaid(course){
+  return courseSections(course.id).every(s=>!course.pricing[s]);
 }
 
 function majorEmblem(major){
@@ -858,20 +944,27 @@ function majorEmblem(major){
 }
 
 function priceBadgeHtml(c, isAdmin){
-  if(isAdmin) return `<span class="lecture-tier-tag ${c.isFree?'':'locked'}">${c.isFree ? '🆓 مجاني' : '💳 مدفوع'}</span>`;
-  const unlocked = courseUnlocked(c.id);
-  if(unlocked) return `<span class="lecture-tier-tag">✅ مفعّل</span>`;
-  return `<span class="lecture-tier-tag ${c.isFree?'':'locked'}">${c.isFree ? '🆓 مجاني' : '💳 مدفوع'}</span>`;
+  if(isAdmin){
+    if(courseIsAllFree(c)) return `<span class="lecture-tier-tag">🆓 مجاني</span>`;
+    if(courseIsAllPaid(c)) return `<span class="lecture-tier-tag locked">💳 مدفوع</span>`;
+    return `<span class="lecture-tier-tag locked">🆓💳 أسعار متعددة حسب القسم</span>`;
+  }
+  if(courseFullyUnlocked(c.id)) return `<span class="lecture-tier-tag">✅ مفعّل بالكامل</span>`;
+  if(courseUnlocked(c.id)) return `<span class="lecture-tier-tag">✅ مفعّل جزئيًا</span>`;
+  if(courseIsAllFree(c)) return `<span class="lecture-tier-tag">🆓 مجاني</span>`;
+  if(courseIsAllPaid(c)) return `<span class="lecture-tier-tag locked">💳 مدفوع</span>`;
+  return `<span class="lecture-tier-tag locked">🆓💳 أسعار متعددة حسب القسم</span>`;
 }
 
+/* الاشتراك صار على مستوى كل قسم (فيرست/ميد/فاينال) وليس الكورس ككل،
+   فزر الاشتراك بيوجّه الطالب لصفحة الكورس ليختار القسم المطلوب من هناك. */
 function courseSubscribeActionHtml(c, isAdmin){
   if(isAdmin) return '';
-  if(courseUnlocked(c.id)) return '';
-  if(!c.isFree) return '';
-  if(state.session && state.session.type === 'student'){
-    return `<button class="btn teal solid small" data-self-enroll="${c.id}">${ICONS.plus} اشترك الآن مجانًا</button>`;
+  if(courseFullyUnlocked(c.id)) return '';
+  if(!state.session || state.session.type !== 'student'){
+    return `<a href="#/login" class="btn small">سجّل الدخول للاشتراك</a>`;
   }
-  return `<a href="#/login" class="btn small">سجّل الدخول للاشتراك</a>`;
+  return '';
 }
 
 /* ---------------- Quiz wizard state ---------------- */
@@ -1188,10 +1281,13 @@ function pageMyCourses(){
   if(!state.session || state.session.type !== 'student'){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لعرض الدورات المفعّلة لديهم. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
-  const myCourseIds = state.enrollments.filter(e=>e.phone===state.session.phone).map(e=>e.courseId);
+  const myEnrollments = state.enrollments.filter(e=>e.phone===state.session.phone);
+  const myCourseIds = myEnrollments.map(e=>e.courseId);
   const courses = state.courses.filter(c=>myCourseIds.includes(c.id));
   const cards = courses.map(c => {
     const lectureCount = state.lectures.filter(l=>l.courseId===c.id).length;
+    const myEntries = myEnrollments.filter(e=>e.courseId===c.id);
+    const sectionsLabel = myEntries.some(e=>!e.section) ? 'الكورس بالكامل' : myEntries.map(e=>SECTION_LABELS[e.section]).join(' + ');
     return `
     <div class="course-card">
       <div class="course-top"></div>
@@ -1206,6 +1302,7 @@ function pageMyCourses(){
         <div class="course-stats-row">
           <span class="course-stat-chip">⏱ ${c.hours} ساعات</span>
           <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
+          <span class="course-stat-chip">✅ ${escapeHtml(sectionsLabel)}</span>
         </div>
         <div class="course-actions">
           <a href="#/course/${c.id}" class="btn teal small">عرض المحاضرات</a>
@@ -1234,8 +1331,12 @@ function pageCourseDetail(courseId){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>الكورس غير موجود</h3><p>ربما تم حذفه. <a href="#/courses" style="color:var(--teal); font-weight:800;">عودة إلى الدورات</a></p></div></div></section>`;
   }
   const lectures = state.lectures.filter(l=>l.courseId===courseId);
-  const unlocked = courseUnlocked(courseId);
-  const lectureRows = lectures.map((l, i) => {
+  /* الأدمن يشوف الأقسام المفعّلة لهذه المادة تحديدًا (بعض المواد فيها ميد وفاينال بس مثلًا)،
+     والطالب يشوف بس الأقسام اللي فيها محاضرات فعليًا من ضمنها */
+  const courseSecs = courseSections(courseId);
+  const sectionsToShow = isAdmin ? courseSecs : courseSecs.filter(s => lectures.some(l=>l.section===s));
+
+  function lectureRowHtml(l, i, unlocked, lockMsg){
     const videos = l.videos || [];
     const files = l.files || [];
     const videoRowsHtml = videos.map((v,idx)=>`
@@ -1264,11 +1365,53 @@ function pageCourseDetail(courseId){
         <div class="lecture-actions">
           ${hasMedia ? (videoRowsHtml + fileRowsHtml) : `<div class="lecture-lock-msg">${ICONS.play} لم تتم إضافة فيديو أو ملف لهذه المحاضرة بعد</div>`}
         </div>` : `
-        <div class="lecture-lock-msg">${ICONS.lock} ${course.isFree ? 'اشترك مجانًا لفتح هذه المحاضرة' : 'مادة مدفوعة'}</div>`}
+        <div class="lecture-lock-msg">${ICONS.lock} ${lockMsg}</div>`}
         ${isAdmin ? `<div class="lecture-row-admin"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
       </div>
     </details>
   `;
+  }
+
+  const sectionGroupsHtml = sectionsToShow.map(section=>{
+    const secLectures = lectures.filter(l=>l.section===section);
+    const unlocked = sectionUnlocked(courseId, section);
+    const isFree = !!course.pricing[section];
+
+    let statusBadge, actionHtml = '';
+    if(isAdmin){
+      statusBadge = `<span class="lecture-tier-tag ${isFree?'':'locked'}">${isFree ? '🆓 مجاني' : '💳 مدفوع'}</span>`;
+    } else if(unlocked){
+      statusBadge = `<span class="lecture-tier-tag">✅ مفعّل</span>`;
+    } else if(isFree){
+      statusBadge = `<span class="lecture-tier-tag">🆓 مجاني</span>`;
+      actionHtml = state.session && state.session.type==='student'
+        ? `<div class="lecture-lock-msg">${ICONS.lock} اشترك مجانًا لفتح محاضرات ${SECTION_LABELS[section]} <button class="btn teal solid small" data-self-enroll-section="${courseId}|${section}" style="margin-inline-start:8px;">${ICONS.plus} اشترك الآن</button></div>`
+        : `<div class="lecture-lock-msg">${ICONS.lock} سجّل الدخول للاشتراك المجاني بهذا القسم — <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></div>`;
+    } else {
+      statusBadge = `<span class="lecture-tier-tag locked">💳 مدفوع</span>`;
+      actionHtml = `<div class="lecture-lock-msg">${ICONS.lock} قسم ${SECTION_LABELS[section]} مدفوع، يتم التفعيل من قبل الإدارة</div>`;
+    }
+
+    const lockMsg = unlocked ? '' : (isFree ? `اشترك مجانًا بقسم ${SECTION_LABELS[section]} لفتح هذه المحاضرة` : 'قسم مدفوع');
+    const rowsHtml = secLectures.length
+      ? `${!isAdmin && actionHtml ? actionHtml : ''}<div class="lecture-list">${secLectures.map((l,i)=>lectureRowHtml(l,i,unlocked,lockMsg)).join('')}</div>`
+      : `<div class="section-group-empty">${isAdmin ? 'لا توجد محاضرات بهذا القسم بعد.' : 'سيتم إضافة محاضرات هذا القسم قريبًا.'}</div>`;
+
+    return `
+    <details class="section-group">
+      <summary class="section-group-summary">
+        <div class="section-num-badge">${SECTION_NUM[section]}</div>
+        <div class="section-group-title">
+          <div>
+            <h3>${SECTION_LABELS[section]}</h3>
+            <p>${secLectures.length} محاضرة</p>
+          </div>
+        </div>
+        <div class="section-group-status">${statusBadge}</div>
+        <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+      </summary>
+      <div class="section-group-content">${rowsHtml}</div>
+    </details>`;
   }).join('');
 
   let sideAction = '';
@@ -1280,22 +1423,24 @@ function pageCourseDetail(courseId){
       <button class="btn teal solid small" id="enrollStudentBtn">${ICONS.plus} تفعيل للطلاب</button>
       <button class="btn danger small" id="resetDeviceBtn">${ICONS.lock} إعادة تعيين أجهزة الطالب</button>
     `;
-  } else if(unlocked){
-    sideStatus = `<span class="lecture-tier-tag">✅ الكورس مفعّل لديك</span>`;
-  } else if(course.isFree){
-    sideStatus = `<span class="lecture-tier-tag">🆓 كورس مجاني</span>`;
-    sideAction = state.session && state.session.type==='student'
-        ? `<button class="btn teal solid small" data-self-enroll="${courseId}">${ICONS.plus} اشترك الآن مجانًا</button>`
-        : `<a href="#/login" class="btn teal solid small">سجّل الدخول للاشتراك</a>`;
+  } else if(courseFullyUnlocked(courseId)){
+    sideStatus = `<span class="lecture-tier-tag">✅ الكورس مفعّل بالكامل لديك</span>`;
+  } else if(courseUnlocked(courseId)){
+    sideStatus = `<span class="lecture-tier-tag">✅ مفعّل جزئيًا — افتح الأقسام أدناه لمعرفة التفاصيل</span>`;
   } else {
-    sideStatus = `<span class="lecture-tier-tag locked">💳 كورس مدفوع</span>`;
-    sideAction = `<div class="lecture-lock-msg">${ICONS.lock} يتم التفعيل من قبل الإدارة، تواصل معنا</div>`;
+    sideStatus = `<span class="lecture-tier-tag locked">🔒 غير مفعّل — الاشتراك يكون لكل قسم على حدة (فيرست/ميد/فاينال) من القائمة أدناه</span>`;
   }
 
   const enrollAdminBox = isAdmin ? `
     <div class="enroll-box">
-      <h4>الطلاب المفعّل لهم الكورس</h4>
-      ${enrollmentsFor(courseId).length ? `<div class="enroll-list">${enrollmentsFor(courseId).map(e=>`<span class="enroll-chip">🎓 ${escapeHtml(e.phone)} <button data-unenroll="${escapeHtml(e.phone)}" title="إلغاء التفعيل">✕</button></span>`).join('')}</div>` : `<p style="color:var(--muted); font-size:13.5px;">لا يوجد طلاب مفعّلين لهذا الكورس بعد.</p>`}
+      <h4>الطلاب المفعّلين حسب القسم</h4>
+      ${courseSecs.map(section=>{
+        const list = enrollmentsForSection(courseId, section);
+        return `
+        <p style="font-size:12.5px; font-weight:800; color:var(--navy-2); margin:10px 0 4px;">${SECTION_LABELS[section]}</p>
+        ${list.length ? `<div class="enroll-list">${list.map(e=>`<span class="enroll-chip">🎓 ${escapeHtml(e.phone)}${!e.section ? ' (تفعيل كامل قديم)' : ''} <button data-unenroll="${escapeHtml(e.phone)}" data-unenroll-section="${section}" title="إلغاء التفعيل">✕</button></span>`).join('')}</div>` : `<p style="color:var(--muted); font-size:13px;">لا يوجد طلاب مفعّلين بعد.</p>`}
+        `;
+      }).join('')}
     </div>` : '';
 
   return `
@@ -1324,7 +1469,7 @@ function pageCourseDetail(courseId){
             <h2 style="font-size:22px;">محاضرات الكورس</h2>
             ${isAdmin ? `<button class="btn teal solid" id="addLectureBtn">${ICONS.plus} إضافة محاضرة</button>` : ''}
           </div>
-          ${lectures.length ? `<div class="lecture-list">${lectureRows}</div>` : `<div class="empty-state"><h3>لا توجد محاضرات بعد</h3><p>${isAdmin ? 'أضف أول محاضرة لهذا الكورس.' : 'سيتم إضافة المحاضرات قريبًا.'}</p></div>`}
+          ${sectionsToShow.length ? `<div class="section-group-list">${sectionGroupsHtml}</div>` : `<div class="empty-state"><h3>لا توجد محاضرات بعد</h3><p>${isAdmin ? 'أضف أول محاضرة لهذا الكورس.' : 'سيتم إضافة المحاضرات قريبًا.'}</p></div>`}
         </div>
 
         <div class="course-detail-side">
@@ -1918,6 +2063,46 @@ function openModal(html){
 }
 function closeModal(){ document.getElementById('modalRoot').innerHTML = ''; }
 
+function sectionPickerFieldsHtml(enabledSections, pricing){
+  return `
+    <div class="field"><label>أقسام هذه المادة (فعّل فقط الأقسام الموجودة فعلاً — مثلاً ميد وفاينال بدون فيرست)</label></div>
+    ${SECTIONS.map(s=>{
+      const on = enabledSections.includes(s);
+      const free = pricing ? !!pricing[s] : false;
+      return `
+      <div class="section-picker-row">
+        <label class="section-picker-check">
+          <input type="checkbox" name="has_${s}" data-section-toggle="${s}" ${on?'checked':''}>
+          ${SECTION_LABELS[s]}
+        </label>
+        <select name="pricing_${s}" data-section-price="${s}" ${on?'':'disabled'}>
+          <option value="free" ${free?'selected':''}>🆓 مجاني (اشتراك ذاتي فوري)</option>
+          <option value="paid" ${!free?'selected':''}>💳 مدفوع (تفعيل من الإدارة)</option>
+        </select>
+      </div>`;
+    }).join('')}
+    <p class="hint" style="margin:-4px 0 12px; font-size:12.5px; color:var(--muted);">إذا ألغيت تفعيل قسم فيه محاضرات مضافة مسبقًا، هذه المحاضرات بتختفي عن الطلاب لين تعيد تفعيل القسم.</p>
+  `;
+}
+function bindSectionPicker(){
+  document.querySelectorAll('[data-section-toggle]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const sel = document.querySelector(`[data-section-price="${cb.dataset.sectionToggle}"]`);
+      if(sel) sel.disabled = !cb.checked;
+    });
+  });
+}
+function collectSectionPicker(fd, msgBox){
+  const sections = SECTIONS.filter(s=>fd.get('has_'+s));
+  if(!sections.length){
+    if(msgBox) msgBox.innerHTML = `<div class="form-msg error">فعّل قسمًا واحدًا على الأقل لهذه المادة.</div>`;
+    return null;
+  }
+  const pricing = {};
+  SECTIONS.forEach(s=>{ pricing[s] = sections.includes(s) ? (fd.get('pricing_'+s)==='free') : false; });
+  return { sections, pricing };
+}
+
 function modalAddCourse(){
   const uniOptions = ['عام', ...UNIVERSITIES.map(u=>u.name)].map(u=>`<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
   const majorOptions = MAJORS.map(m=>`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
@@ -1929,17 +2114,18 @@ function modalAddCourse(){
       <div class="field"><label>الجامعة</label><select name="university">${uniOptions}</select></div>
       <div class="field"><label>عدد الساعات المعتمدة</label><input type="number" name="hours" min="1" max="10" value="3" required></div>
       <div class="field"><label>وصف مختصر</label><textarea name="description" required placeholder="اكتب وصفًا مختصرًا عن محتوى الكورس"></textarea></div>
-      <div class="field"><label>نوع الكورس</label><select name="pricing">
-        <option value="free">🆓 مجاني (اشتراك ذاتي فوري للطالب)</option>
-        <option value="paid" selected>💳 مدفوع (يتطلب تفعيل من الإدارة)</option>
-      </select></div>
+      ${sectionPickerFieldsHtml(SECTIONS, null)}
+      <div id="courseMsg"></div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ الكورس</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
+  bindSectionPicker();
   document.getElementById('courseForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    state.courses.push({ id:'c'+Date.now(), title:fd.get('title').trim(), university:fd.get('university'), major:fd.get('major'), hours:Number(fd.get('hours')), description:fd.get('description').trim(), isFree: fd.get('pricing')==='free' });
+    const picked = collectSectionPicker(fd, document.getElementById('courseMsg'));
+    if(!picked) return;
+    state.courses.push({ id:'c'+Date.now(), title:fd.get('title').trim(), university:fd.get('university'), major:fd.get('major'), hours:Number(fd.get('hours')), description:fd.get('description').trim(), sections:picked.sections, pricing:picked.pricing });
     await setData('courses', state.courses, true);
     closeModal(); render();
   });
@@ -1958,19 +2144,21 @@ function modalEditCourse(courseId){
       <div class="field"><label>الجامعة</label><select name="university">${uniOptions}</select></div>
       <div class="field"><label>عدد الساعات المعتمدة</label><input type="number" name="hours" min="1" max="10" value="${course.hours}" required></div>
       <div class="field"><label>وصف مختصر</label><textarea name="description" required>${escapeHtml(course.description)}</textarea></div>
-      <div class="field"><label>نوع الكورس</label><select name="pricing">
-        <option value="free" ${course.isFree?'selected':''}>🆓 مجاني (اشتراك ذاتي فوري للطالب)</option>
-        <option value="paid" ${!course.isFree?'selected':''}>💳 مدفوع (يتطلب تفعيل من الإدارة)</option>
-      </select></div>
+      ${sectionPickerFieldsHtml(courseSections(courseId), course.pricing)}
+      <div id="courseMsg"></div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
+  bindSectionPicker();
   document.getElementById('courseEditForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
+    const picked = collectSectionPicker(fd, document.getElementById('courseMsg'));
+    if(!picked) return;
     course.title = fd.get('title').trim(); course.university = fd.get('university'); course.major = fd.get('major');
     course.hours = Number(fd.get('hours')); course.description = fd.get('description').trim();
-    course.isFree = fd.get('pricing')==='free';
+    course.sections = picked.sections; course.pricing = picked.pricing;
+    delete course.isFree;
     await setData('courses', state.courses, true);
     closeModal(); render();
   });
@@ -1978,12 +2166,19 @@ function modalEditCourse(courseId){
 
 function modalEnrollStudent(courseId){
   const course = state.courses.find(c=>c.id===courseId);
+  const secs = courseSections(courseId);
   openModal(`
     <h3>${ICONS.plus} تفعيل الكورس لطالب</h3>
     <form id="enrollForm">
       <div class="field"><label>رقم هاتف الطالب</label><input type="tel" name="phone" required placeholder="اكتب رقم الهاتف كما سجّل به" style="direction:ltr;"></div>
+      <div class="field">
+        <label>الأقسام المطلوب تفعيلها</label>
+        <div class="lecture-select-list">
+          ${secs.map(s=>`<label class="lecture-select-row"><span>${SECTION_LABELS[s]}</span><input type="checkbox" name="section_${s}" checked></label>`).join('')}
+        </div>
+      </div>
       <div id="enrollMsg"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">تفعيل الكورس</button></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">تفعيل الأقسام المحددة</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   document.getElementById('enrollForm').addEventListener('submit', async (e)=>{
@@ -1993,8 +2188,15 @@ function modalEnrollStudent(courseId){
     const msgBox = document.getElementById('enrollMsg');
     const student = state.students.find(s=>s.phone===phone);
     if(!student){ msgBox.innerHTML = `<div class="form-msg error">لا يوجد طالب مسجّل بهذا الرقم. تأكد من رقم الهاتف.</div>`; return; }
-    if(state.enrollments.some(en=>en.courseId===courseId && en.phone===phone)){ msgBox.innerHTML = `<div class="form-msg error">هذا الطالب مفعّل بالفعل لهذا الكورس.</div>`; return; }
-    state.enrollments.push({ courseId, phone });
+    const sections = secs.filter(s=>fd.get('section_'+s));
+    if(!sections.length){ msgBox.innerHTML = `<div class="form-msg error">اختر قسمًا واحدًا على الأقل.</div>`; return; }
+    let addedAny = false;
+    sections.forEach(section=>{
+      if(state.enrollments.some(en=>en.courseId===courseId && en.phone===phone && (en.section===section || !en.section))) return;
+      state.enrollments.push({ courseId, phone, section });
+      addedAny = true;
+    });
+    if(!addedAny){ msgBox.innerHTML = `<div class="form-msg error">هذا الطالب مفعّل بالفعل لكل الأقسام المحددة.</div>`; return; }
     await setData('enrollments', state.enrollments, true);
     closeModal(); render();
   });
@@ -2050,11 +2252,20 @@ function collectLinkRows(containerId){
   })).filter(r=>r.url);
 }
 
+function sectionOptionsHtml(selected, allowed){
+  const list = (allowed && allowed.length) ? allowed : SECTIONS;
+  const opts = list.map(s=>`<option value="${s}" ${selected===s?'selected':''}>${SECTION_LABELS[s]}</option>`);
+  /* لو المحاضرة محفوظة على قسم استُبعد لاحقًا من المادة، نبقيه بالقائمة حتى لا يضيع تصنيفها */
+  if(selected && !list.includes(selected)) opts.push(`<option value="${selected}" selected>${SECTION_LABELS[selected]} (غير مفعّل حاليًا لهذه المادة)</option>`);
+  return opts.join('');
+}
+
 function modalAddLecture(courseId){
   openModal(`
     <h3>${ICONS.plus} إضافة محاضرة جديدة</h3>
     <form id="lectureForm">
       <div class="field"><label>عنوان المحاضرة</label><input type="text" name="title" required placeholder="مثال: مقدمة في..."></div>
+      <div class="field"><label>القسم</label><select name="section">${sectionOptionsHtml(courseSections(courseId)[0], courseSections(courseId))}</select></div>
       <div class="field"><label>وصف مختصر (اختياري)</label><textarea name="description" placeholder="وصف مختصر لمحتوى المحاضرة"></textarea></div>
       <div class="field">
         <label>فيديوهات المحاضرة (اختياري — يمكن إضافة أكثر من فيديو)</label>
@@ -2079,6 +2290,7 @@ function modalAddLecture(courseId){
     state.lectures.push({
       id:'l'+Date.now(), courseId,
       title:fd.get('title').trim(),
+      section: SECTIONS.includes(fd.get('section')) ? fd.get('section') : 'first',
       description:(fd.get('description')||'').trim(),
       videos: collectLinkRows('videoRows'),
       files: collectLinkRows('fileRows'),
@@ -2097,6 +2309,7 @@ function modalEditLecture(lectureId){
     <h3>${ICONS.edit} تعديل المحاضرة</h3>
     <form id="lectureEditForm">
       <div class="field"><label>عنوان المحاضرة</label><input type="text" name="title" required value="${escapeHtml(lecture.title)}"></div>
+      <div class="field"><label>القسم</label><select name="section">${sectionOptionsHtml(lecture.section, courseSections(lecture.courseId))}</select></div>
       <div class="field"><label>وصف مختصر (اختياري)</label><textarea name="description">${escapeHtml(lecture.description||'')}</textarea></div>
       <div class="field">
         <label>فيديوهات المحاضرة (اختياري — يمكن إضافة أكثر من فيديو)</label>
@@ -2117,6 +2330,7 @@ function modalEditLecture(lectureId){
     e.preventDefault();
     const fd = new FormData(e.target);
     lecture.title = fd.get('title').trim(); lecture.description = (fd.get('description')||'').trim();
+    lecture.section = SECTIONS.includes(fd.get('section')) ? fd.get('section') : 'first';
     lecture.videos = collectLinkRows('videoRows');
     lecture.files = collectLinkRows('fileRows');
     delete lecture.videoUrl; delete lecture.fileUrl;
@@ -2254,6 +2468,13 @@ function bindPageEvents(route){
   document.querySelectorAll('[data-self-enroll]').forEach(btn=>{
     btn.addEventListener('click', ()=> selfEnroll(btn.dataset.selfEnroll));
   });
+  document.querySelectorAll('[data-self-enroll-section]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      const [cId, section] = btn.dataset.selfEnrollSection.split('|');
+      selfEnrollSection(cId, section);
+    });
+  });
   if(route === 'courses'){
     const majorSel = document.getElementById('majorFilterSelect');
     if(majorSel) majorSel.addEventListener('change', ()=>{ state.majorFilter = majorSel.value; render(); });
@@ -2302,7 +2523,8 @@ function bindPageEvents(route){
     document.querySelectorAll('[data-unenroll]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const phone = btn.dataset.unenroll;
-        state.enrollments = state.enrollments.filter(e=> !(e.courseId===courseId && e.phone===phone));
+        const section = btn.dataset.unenrollSection;
+        state.enrollments = state.enrollments.filter(e=> !(e.courseId===courseId && e.phone===phone && (e.section===section || !e.section)));
         await setData('enrollments', state.enrollments, true);
         render();
       });
@@ -2621,5 +2843,3 @@ document.getElementById('themeToggleBtn').addEventListener('click', async ()=>{
 </script>
 </body>
 </html>
-
-
