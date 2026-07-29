@@ -364,6 +364,8 @@
   .field input, .field select, .field textarea{ width:100%; padding:11px 14px; border:1.5px solid var(--border); border-radius:10px; font-family:inherit; font-size:14.5px; color:var(--text); background:#fbfdfe; }
   .field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--teal); background:#fff; }
   .field textarea{ resize:vertical; min-height:80px; }
+  .settings-section-title{ font-size:14.5px; font-weight:800; color:var(--ink); margin-bottom:14px; }
+  .settings-divider{ border:none; border-top:1px solid var(--border); margin:24px 0 20px; }
   .link-rows{ display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
   .link-row{ display:flex; gap:8px; align-items:center; }
   .link-row input{ padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:13.5px; color:var(--text); background:#fbfdfe; }
@@ -1360,13 +1362,17 @@ function pageStudentSettings(){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>الإعدادات متاحة فقط للطلاب المسجّلين. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
   const avatar = state.session.avatar || '';
+  const uni = state.session.university || '—';
+  const major = state.session.major || '—';
   return `
   <section class="section">
     <div class="auth-wrap">
       <div class="card-panel">
         <h2>${ICONS.gear} إعدادات الحساب</h2>
-        <p class="sub">عدّل صورتك الشخصية الظاهرة في المنصة</p>
+        <p class="sub">تحكّم بصورتك وبياناتك وطريقة عرض المنصة</p>
         <div id="settingsMsg"></div>
+
+        <h3 class="settings-section-title">الصورة الشخصية</h3>
         <div class="avatar-upload-wrap">
           <div class="avatar-preview" id="avatarPreview">${avatar ? `<img src="${avatar}" alt="الصورة الشخصية" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">` : majorEmblem(state.session.major)}</div>
           <div class="avatar-actions">
@@ -1376,8 +1382,38 @@ function pageStudentSettings(){
             <p class="hint">يفضّل صورة مربعة، الحجم الأقصى 2MB (JPG أو PNG)</p>
           </div>
         </div>
+
+        <hr class="settings-divider">
+        <h3 class="settings-section-title">بيانات الطالب</h3>
         <div class="field"><label>الاسم الكامل</label><input type="text" value="${escapeHtml(state.session.name)}" disabled></div>
-        <div class="field"><label>رقم الهاتف</label><input type="text" value="${escapeHtml(state.session.phone)}" disabled style="direction:ltr; text-align:right;"></div>
+        <div class="field"><label>الجامعة</label><input type="text" value="${escapeHtml(uni)}" disabled></div>
+        <div class="field"><label>التخصص</label><input type="text" value="${escapeHtml(major)}" disabled></div>
+
+        <hr class="settings-divider">
+        <h3 class="settings-section-title">إعدادات العرض</h3>
+        <div class="field">
+          <label>اللغة</label>
+          <select id="languageSelect">
+            <option value="ar">العربية</option>
+            <option value="en">English (قريبًا)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>حجم الخط</label>
+          <select id="fontSizeSelect">
+            <option value="small">صغير</option>
+            <option value="medium">متوسط</option>
+            <option value="large">كبير</option>
+          </select>
+        </div>
+
+        <hr class="settings-divider">
+        <h3 class="settings-section-title">بيانات الحساب</h3>
+        <div class="field">
+          <label>رقم الهاتف</label>
+          <input type="text" value="${escapeHtml(state.session.phone)}" disabled style="direction:ltr; text-align:right;">
+          <p class="hint">رقم الهاتف هو معرّف الدخول لحسابك ولا يمكن تعديله من هنا. للتغيير تواصل مع الدعم.</p>
+        </div>
       </div>
     </div>
   </section>`;
@@ -2840,6 +2876,28 @@ function bindPageEvents(route){
       }
     });
     if(removeBtn) removeBtn.addEventListener('click', ()=> saveAvatar(null));
+
+    const fontSel = document.getElementById('fontSizeSelect');
+    if(fontSel){
+      getData('fontScale', 'medium', false).then(v => fontSel.value = v || 'medium');
+      fontSel.addEventListener('change', async ()=>{
+        applyFontScale(fontSel.value);
+        await setData('fontScale', fontSel.value, false);
+      });
+    }
+    const langSel = document.getElementById('languageSelect');
+    if(langSel){
+      getData('language', 'ar', false).then(v => langSel.value = v || 'ar');
+      langSel.addEventListener('change', async ()=>{
+        const msgBox = document.getElementById('settingsMsg');
+        if(langSel.value === 'en'){
+          langSel.value = 'ar';
+          if(msgBox) msgBox.innerHTML = `<div class="form-msg error">اللغة الإنجليزية غير متاحة بعد، سيتم تفعيلها قريبًا.</div>`;
+          return;
+        }
+        await setData('language', langSel.value, false);
+      });
+    }
   }
   if(route === 'login'){
     const switchBtn = document.getElementById('switchAuth');
@@ -2999,12 +3057,19 @@ document.getElementById('themeToggleBtn').addEventListener('click', async ()=>{
   await setData('darkMode', dark, false);
 });
 
+const FONT_SCALE_MAP = { small:0.92, medium:1, large:1.14 };
+function applyFontScale(size){
+  document.body.style.zoom = FONT_SCALE_MAP[size] || 1;
+}
+
 (async function boot(){
   if(!location.hash) location.hash = '#/home';
   render(); // إظهار شاشة التحميل فورًا بدل ترك المحتوى فارغًا أثناء جلب البيانات
   await initData();
   const savedTheme = await getData('darkMode', false, false);
   applyTheme(savedTheme);
+  const savedFontScale = await getData('fontScale', 'medium', false);
+  applyFontScale(savedFontScale);
   await render();
 })();
 </script>
