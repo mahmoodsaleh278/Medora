@@ -241,6 +241,9 @@
   .course-hero-banner .course-detail-meta{ color:#d7e6ee; }
   .course-hero-banner .course-detail-meta b{ color:#fff; }
   .course-hero-banner .chip{ background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.35); color:#fff; }
+  .hero-settings-btn{ position:absolute; top:18px; left:18px; z-index:3; display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:999px; background:rgba(255,255,255,0.16); border:1.5px solid rgba(255,255,255,0.45); color:#fff; font-weight:700; font-size:13.5px; backdrop-filter:blur(6px); transition:.2s; text-decoration:none; }
+  .hero-settings-btn:hover{ background:#fff; color:var(--navy); border-color:#fff; }
+  @media (max-width:520px){ .hero-settings-btn{ position:static; margin-top:14px; } }
 
   .course-detail-layout{ display:grid; grid-template-columns:1fr 300px; gap:28px; align-items:start; }
   .course-detail-main{ min-width:0; }
@@ -438,6 +441,12 @@
   .bank-select{ width:100%; padding:14px 16px; border-radius:12px; border:2px solid var(--border); font-family:inherit; font-size:15px; font-weight:700; color:var(--ink); background:#fff; }
   .bank-select:focus{ border-color:var(--teal); outline:none; }
   .option-cards.small .option-card{ padding:14px; }
+
+  .user-pill-avatar{ width:24px; height:24px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+  .avatar-upload-wrap{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:22px; }
+  .avatar-preview{ width:96px; height:96px; border-radius:50%; object-fit:cover; border:2px solid var(--border); background:var(--teal-light); display:flex; align-items:center; justify-content:center; font-size:36px; flex-shrink:0; }
+  .avatar-actions{ display:flex; flex-direction:column; gap:8px; }
+  .avatar-actions .hint{ font-size:12px; color:var(--muted); margin:0; }
   .lecture-select-list{ display:flex; flex-direction:column; gap:10px; }
   .lecture-select-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; border:1.5px solid var(--border); border-radius:10px; font-size:14px; font-weight:600; color:var(--text); cursor:pointer; transition:.15s; }
   .lecture-select-row:hover{ border-color:var(--teal); }
@@ -540,10 +549,11 @@
     <nav class="links" id="navLinks">
       <a href="#/home" data-route="home">الصفحة الرئيسية</a>
       <a href="#/courses" data-route="courses">الدورات</a>
-      <a href="#/bank" data-route="bank">بنك الأسئلة</a>
+      <a href="#/bank" data-route="bank" id="navBankLink">بنك الأسئلة</a>
       <a href="#/about" data-route="about">من نحن</a>
       <a href="#/contact" data-route="contact">تواصل معنا</a>
       <a href="#/my-courses" data-route="my-courses" id="navMyCoursesLink" class="hidden">دوراتي</a>
+      <a href="#/student-space" data-route="student-space" id="navStudentSpaceLink" class="hidden">مساحة الطالب</a>
       <a href="#/login" data-route="login" id="navLoginLink">تسجيل الدخول</a>
     </nav>
     <div class="nav-actions">
@@ -828,6 +838,7 @@ async function syncSessionFromAuth(){
         name: meta.fullName || 'مستخدم',
         university: meta.university || null,
         major: meta.major || null,
+        avatar: meta.avatar || null,
       };
       if(state.session.university) state.courseFilter = state.session.university;
       if(state.session.major) state.majorFilter = state.session.major;
@@ -987,16 +998,28 @@ function renderNavState(){
   const userArea = document.getElementById('navUserArea');
   const loginLink = document.getElementById('navLoginLink');
   const myCoursesLink = document.getElementById('navMyCoursesLink');
+  const bankLink = document.getElementById('navBankLink');
+  const studentSpaceLink = document.getElementById('navStudentSpaceLink');
 
   if(state.session && state.session.type === 'student'){
-    loginLink.classList.add('hidden'); myCoursesLink.classList.remove('hidden');
+    loginLink.classList.add('hidden');
+    myCoursesLink.classList.add('hidden');
+    bankLink.classList.add('hidden');
+    studentSpaceLink.classList.remove('hidden');
     const uniSuffix = state.session.university ? ` — ${state.session.university}` : '';
-    userArea.innerHTML = `<span class="user-pill"><span>👋 ${escapeHtml(state.session.name + uniSuffix)}</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
+    const avatarImg = state.session.avatar ? `<img src="${state.session.avatar}" class="user-pill-avatar" alt="">` : '👋';
+    userArea.innerHTML = `<span class="user-pill">${avatarImg} <span>${escapeHtml(state.session.name + uniSuffix)}</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
   } else if(state.session && state.session.type === 'admin'){
-    loginLink.classList.add('hidden'); myCoursesLink.classList.add('hidden');
+    loginLink.classList.add('hidden');
+    myCoursesLink.classList.add('hidden');
+    bankLink.classList.remove('hidden');
+    studentSpaceLink.classList.add('hidden');
     userArea.innerHTML = `<span class="user-pill"><span>🛡️ ${escapeHtml(state.session.name)}</span> <span class="admin-tag">مشرف</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
   } else {
-    loginLink.classList.remove('hidden'); myCoursesLink.classList.add('hidden');
+    loginLink.classList.remove('hidden');
+    myCoursesLink.classList.add('hidden');
+    bankLink.classList.remove('hidden');
+    studentSpaceLink.classList.add('hidden');
     userArea.innerHTML = '';
   }
   const lb = document.getElementById('logoutBtn');
@@ -1030,7 +1053,7 @@ const ICONS = { book:'📘', quiz:'📝', users:'🎓', trash:'🗑️', plus:'�
   whatsapp:'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.9c0 1.77.46 3.5 1.34 5.02L2.05 22l5.2-1.36a9.94 9.94 0 0 0 4.78 1.22h.01c5.46 0 9.9-4.45 9.9-9.9 0-2.65-1.03-5.13-2.9-7C17.16 3.03 14.68 2 12.04 2m0 1.67c2.2 0 4.26.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.81c0 4.53-3.7 8.23-8.24 8.23a8.2 8.2 0 0 1-4.18-1.15l-.3-.17-3.09.81.82-3-.2-.32a8.15 8.15 0 0 1-1.25-4.4c0-4.53 3.7-8.23 8.21-8.23m-4.5 4.73c-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02s.87 2.34 1 2.5c.12.17 1.7 2.69 4.19 3.7 2.32.9 2.32.6 2.74.56.42-.04 1.36-.55 1.55-1.09.19-.54.19-1 .13-1.09-.06-.1-.22-.15-.46-.27-.24-.12-1.4-.7-1.62-.77-.22-.08-.37-.12-.53.12s-.62.77-.75.93c-.14.15-.28.17-.52.05-.24-.12-1.01-.37-1.92-1.19-.71-.63-1.19-1.42-1.33-1.66-.14-.24-.02-.36.1-.48.11-.11.24-.28.37-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.53-1.3-.73-1.78-.19-.46-.39-.4-.53-.41z"/></svg>',
   facebook:'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.44 2.91h-2.34V22c4.78-.76 8.44-4.92 8.44-9.94z"/></svg>',
   youtube:'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M23.5 6.2s-.23-1.64-.94-2.36c-.9-.94-1.9-.95-2.36-1C16.9 2.5 12 2.5 12 2.5h-.01s-4.9 0-8.19.34c-.46.05-1.46.06-2.36 1C.73 4.56.5 6.2.5 6.2S.25 8.14.25 10.07v1.75c0 1.93.25 3.87.25 3.87s.23 1.64.94 2.36c.9.94 2.08.91 2.6 1.01 1.89.18 8.06.35 8.06.35s4.9-.01 8.19-.35c.46-.05 1.46-.07 2.36-1 .71-.72.94-2.36.94-2.36s.25-1.93.25-3.87v-1.75c0-1.93-.25-3.87-.25-3.87zM9.75 14.9V7.98l6.5 3.46-6.5 3.46z"/></svg>',
-  lock:'🔒' };
+  lock:'🔒', gear:'⚙️', camera:'📷' };
 
 const SOCIAL_LINKS = [
   { key:'whatsapp', label:'واتساب', href:'https://wa.me/962790000000' },
@@ -1277,6 +1300,89 @@ function pageCourses(){
 /* =========================================================
    PAGE: MY COURSES (enrolled courses for the logged-in student)
    ========================================================= */
+/* =========================================================
+   PAGE: STUDENT SPACE (hub shown after student login)
+   ========================================================= */
+function pageStudentSpace(){
+  if(!state.session || state.session.type !== 'student'){
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>مساحة الطالب متاحة فقط للطلاب المسجّلين. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+  }
+  const uni = state.session.university || '—';
+  const major = state.session.major || '—';
+  const myEnrollments = state.enrollments.filter(e=>e.phone===state.session.phone);
+  const myCourseCount = new Set(myEnrollments.map(e=>e.courseId)).size;
+
+  return `
+  <section class="section">
+    <div class="container">
+      <div class="course-hero-banner">
+        <a href="#/student-settings" class="hero-settings-btn">${ICONS.gear} الإعدادات</a>
+        <div class="course-hero-banner-inner">
+          <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            ${state.session.avatar
+              ? `<img src="${state.session.avatar}" alt="الصورة الشخصية" style="width:64px; height:64px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,0.4); flex-shrink:0;">`
+              : `<div class="course-emblem" style="background:rgba(255,255,255,0.15); width:64px; height:64px; font-size:30px;">${majorEmblem(major)}</div>`}
+            <div>
+              <h1 style="margin-bottom:4px;">👋 ${escapeHtml(state.session.name)}</h1>
+              <p style="margin-bottom:0;">${escapeHtml(uni)} — ${escapeHtml(major)}</p>
+            </div>
+          </div>
+          <div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap;">
+            <span class="chip" style="cursor:default;">🎓 ${escapeHtml(uni)}</span>
+            <span class="chip" style="cursor:default;">📚 ${escapeHtml(major)}</span>
+            <span class="chip" style="cursor:default;">✅ ${myCourseCount} دورة مفعّلة</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="option-cards" style="margin-top:6px;">
+        <a href="#/my-courses" class="option-card" style="text-decoration:none; display:block;">
+          <div style="font-size:30px; margin-bottom:10px;">📘</div>
+          <b>دوراتي</b>
+          <span>تصفّح الدورات والمحاضرات المفعّلة لديك</span>
+        </a>
+        <a href="#/bank" class="option-card" style="text-decoration:none; display:block;">
+          <div style="font-size:30px; margin-bottom:10px;">❓</div>
+          <b>بنك الأسئلة</b>
+          <span>ابدأ اختبارًا من بنك الأسئلة حسب دوراتك</span>
+        </a>
+      </div>
+    </div>
+  </section>
+  `;
+}
+
+/* =========================================================
+   PAGE: STUDENT SETTINGS (edit profile photo)
+   ========================================================= */
+function pageStudentSettings(){
+  if(!state.session || state.session.type !== 'student'){
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>الإعدادات متاحة فقط للطلاب المسجّلين. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+  }
+  const avatar = state.session.avatar || '';
+  return `
+  <section class="section">
+    <div class="auth-wrap">
+      <div class="card-panel">
+        <h2>${ICONS.gear} إعدادات الحساب</h2>
+        <p class="sub">عدّل صورتك الشخصية الظاهرة في المنصة</p>
+        <div id="settingsMsg"></div>
+        <div class="avatar-upload-wrap">
+          <div class="avatar-preview" id="avatarPreview">${avatar ? `<img src="${avatar}" alt="الصورة الشخصية" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">` : majorEmblem(state.session.major)}</div>
+          <div class="avatar-actions">
+            <input type="file" id="avatarInput" accept="image/*" style="display:none;">
+            <button type="button" class="btn teal small" id="chooseAvatarBtn">${ICONS.camera} ${avatar ? 'تغيير الصورة' : 'إضافة صورة شخصية'}</button>
+            ${avatar ? `<button type="button" class="btn danger small" id="removeAvatarBtn">${ICONS.trash} إزالة الصورة</button>` : ''}
+            <p class="hint">يفضّل صورة مربعة، الحجم الأقصى 2MB (JPG أو PNG)</p>
+          </div>
+        </div>
+        <div class="field"><label>الاسم الكامل</label><input type="text" value="${escapeHtml(state.session.name)}" disabled></div>
+        <div class="field"><label>رقم الهاتف</label><input type="text" value="${escapeHtml(state.session.phone)}" disabled style="direction:ltr; text-align:right;"></div>
+      </div>
+    </div>
+  </section>`;
+}
+
 function pageMyCourses(){
   if(!state.session || state.session.type !== 'student'){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لعرض الدورات المفعّلة لديهم. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
@@ -2434,6 +2540,43 @@ function confirmDelete(message, onConfirm){
 /* =========================================================
    Main render + event binding
    ========================================================= */
+/* يصغّر صورة الملف المرفوع إلى صورة مربعة تقريبًا (JPEG) قبل تخزينها كنص base64،
+   حتى لا يكون حجم بيانات الطالب كبيرًا جدًا في قاعدة البيانات. */
+function resizeImageFile(file, maxSize=400){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onerror = ()=> reject(new Error('read failed'));
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onerror = ()=> reject(new Error('image load failed'));
+      img.onload = ()=>{
+        let { width, height } = img;
+        if(width > height){ if(width > maxSize){ height = Math.round(height * maxSize/width); width = maxSize; } }
+        else { if(height > maxSize){ width = Math.round(width * maxSize/height); height = maxSize; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* يحفظ الصورة الشخصية (أو يزيلها إن كانت dataUrl تساوي null) في بيانات حساب
+   الطالب على Supabase Auth (metadata) وفي سجله ضمن جدول الطلاب المحلي. */
+async function saveAvatar(dataUrl){
+  const msgBox = document.getElementById('settingsMsg');
+  if(!supabaseClient){ if(msgBox) msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
+  const { error } = await supabaseClient.auth.updateUser({ data: { avatar: dataUrl } });
+  if(error){ if(msgBox) msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ الصورة، حاول بصورة أصغر.</div>`; return; }
+  state.session.avatar = dataUrl || null;
+  const student = state.students.find(s=>s.phone===state.session.phone);
+  if(student){ student.avatar = dataUrl || null; await setData('students', state.students, true); }
+  render();
+}
+
 async function render(){
   if(!state.loaded){
     document.getElementById('app').innerHTML = `<div style="min-height:80vh; display:flex; align-items:center; justify-content:center; text-align:center; padding:20px;"><span class="loading-dot"></span> جارِ التحميل...</div>`;
@@ -2448,6 +2591,8 @@ async function render(){
       case 'home': html = pageHome(); break;
       case 'courses': html = pageCourses(); break;
       case 'my-courses': html = pageMyCourses(); break;
+      case 'student-space': html = pageStudentSpace(); break;
+      case 'student-settings': html = pageStudentSettings(); break;
       case 'bank': html = pageBank(); break;
       case 'about': html = pageAbout(); break;
       case 'contact': html = pageContact(); break;
@@ -2674,6 +2819,28 @@ function bindPageEvents(route){
     });
   }
 
+  if(route === 'student-settings'){
+    const fileInput = document.getElementById('avatarInput');
+    const chooseBtn = document.getElementById('chooseAvatarBtn');
+    const removeBtn = document.getElementById('removeAvatarBtn');
+    if(chooseBtn && fileInput) chooseBtn.addEventListener('click', ()=> fileInput.click());
+    if(fileInput) fileInput.addEventListener('change', async ()=>{
+      const file = fileInput.files[0];
+      if(!file) return;
+      const msgBox = document.getElementById('settingsMsg');
+      if(file.size > 2*1024*1024){
+        if(msgBox) msgBox.innerHTML = `<div class="form-msg error">حجم الصورة كبير جدًا، اختر صورة أقل من 2MB.</div>`;
+        return;
+      }
+      try{
+        const dataUrl = await resizeImageFile(file);
+        await saveAvatar(dataUrl);
+      }catch(e){
+        if(msgBox) msgBox.innerHTML = `<div class="form-msg error">تعذّرت معالجة الصورة، جرّب صورة أخرى.</div>`;
+      }
+    });
+    if(removeBtn) removeBtn.addEventListener('click', ()=> saveAvatar(null));
+  }
   if(route === 'login'){
     const switchBtn = document.getElementById('switchAuth');
     if(switchBtn) switchBtn.addEventListener('click', ()=>{ authMode = authMode==='login' ? 'register' : 'login'; render(); });
@@ -2740,7 +2907,7 @@ async function handleAuthSubmit(e){
     await enforceDeviceLock(phone, data.user.id); // أول تسجيل للحساب، يربط هذا الجهاز به تلقائيًا
     state.students.push({ phone, fullName, university, major });
     await setData('students', state.students, true);
-    state.session = { type:'student', phone, name: fullName, university, major };
+    state.session = { type:'student', phone, name: fullName, university, major, avatar: null };
     state.courseFilter = university;
     state.majorFilter = major;
     watchDeviceLock(phone);
@@ -2755,7 +2922,7 @@ async function handleAuthSubmit(e){
       msgBox.innerHTML = `<div class="form-msg error">${ICONS.lock} هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`;
       return;
     }
-    state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null, major: meta.major||null };
+    state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null, major: meta.major||null, avatar: meta.avatar||null };
     if(state.session.university) state.courseFilter = state.session.university;
     if(state.session.major) state.majorFilter = state.session.major;
     watchDeviceLock(finalPhone);
