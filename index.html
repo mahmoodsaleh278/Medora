@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MEDORA | منصة طلاب التمريض وطب الأسنان</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f2745">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MEDORA">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -345,7 +353,7 @@
   .q-tag.past{ background:#fdf0e4; color:#a05a1c; }
   .q-tag.ref{ background:var(--teal-light); color:var(--teal); }
   .q-options{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
-  .q-opt{ border:1.5px solid var(--border); border-radius:10px; padding:10px 14px; font-size:14px; color:var(--muted); display:flex; align-items:center; gap:8px; text-align:right; background:#fff; width:100%; }
+  .q-opt{ border:1.5px solid var(--border); border-radius:10px; padding:10px 14px; font-size:14px; color:var(--muted); display:flex; align-items:center; gap:8px; text-align:start; background:#fff; width:100%; }
   .q-opt.correct{ border-color:var(--good); background:var(--good-light); color:var(--ink); font-weight:700; }
   .q-opt.wrong{ border-color:var(--danger); background:#fdeceb; color:var(--danger-dark); font-weight:700; }
   .q-opt b{ color:var(--ink); }
@@ -376,7 +384,9 @@
   .link-row .link-remove:hover{ background:var(--danger); color:#fff; }
   .form-msg{ font-size:13.5px; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
   .form-msg.error{ background:#fdeceb; color:var(--danger-dark); }
+  .form-msg.success{ background:var(--good-light); color:var(--good); }
   .form-msg.ok{ background:var(--good-light); color:var(--good); }
+  .form-msg.info{ background:var(--teal-light); color:var(--teal); }
   .switch-row{ text-align:center; margin-top:18px; font-size:13.5px; color:var(--muted); }
   .switch-row button{ background:none; border:none; color:var(--teal); font-weight:800; }
 
@@ -510,7 +520,7 @@
     nav.links{ display:none; position:absolute; top:100%; right:0; left:0; background:#fff; flex-direction:column;
       align-items:stretch; padding:14px; border-bottom:1px solid var(--border); box-shadow:0 12px 20px rgba(0,0,0,0.06); max-height:70vh; overflow-y:auto; }
     nav.links.open{ display:flex; }
-    nav.links a, nav.links button.navlink{ text-align:right; width:100%; }
+    nav.links a, nav.links button.navlink{ text-align:start; width:100%; }
     .mobile-toggle{ display:block; }
   }
   body.dark nav.links{ background:var(--card); }
@@ -816,6 +826,169 @@ let state = {
   courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', bankAdminView: false, content: {},
 };
+
+/* =========================================================
+   i18n — تبديل اللغة (عربي / إنجليزي) + انعكاس الاتجاه RTL/LTR
+   يعمل عبر قاموس عبارات: نستبدل كل عبارة عربية موجودة بمقابلها
+   الإنجليزي داخل عقد النص المعروضة فعليًا (وليس مصدر الكود)،
+   لذلك يعمل تلقائيًا مع كل الصفحات دون الحاجة لتعديل كل دالة عرض. */
+let LANG = 'ar';
+const I18N_PAIRS = [
+  ['الصفحة الرئيسية','Home'], ['بنك الأسئلة متاح فقط للطلاب المسجّلين.','The question bank is only available to registered students.'],
+  ['بنك الأسئلة','Question Bank'], ['من نحن','About Us'], ['تواصل معنا','Contact Us'],
+  ['دوراتي','My Courses'], ['مساحة الطالب متاحة فقط للطلاب المسجّلين.','Student space is only available to registered students.'],
+  ['مساحة الطالب','Student Space'], ['تسجيل الدخول','Login'], ['خروج','Logout'],
+  ['تحميل التطبيق','Download App'], ['الوضع الليلي','Dark Mode'], ['فتح القائمة','Open Menu'],
+  ['🛡️ أنت الآن في وضع المشرف — يمكنك إضافة أو حذف الدورات والمحاضرات والأسئلة مباشرة من الصفحات.','You are now in admin mode — you can add or delete courses, lectures, and questions directly from the pages.'],
+  ['مشرف','Admin'], ['تسجيل الخروج','Sign Out'],
+  ['روابط سريعة','Quick Links'], ['الجامعات المستهدفة','Target Universities'], ['التخصصات','Majors'],
+  ['سياسة الخصوصية','Privacy Policy'], ['الشروط والأحكام','Terms & Conditions'],
+  ['جامعة العلوم التطبيقية الخاصة','Applied Science Private University'],
+  ['جامعة العلوم والتكنولوجيا الأردنية','Jordan University of Science & Technology'],
+  ['جامعة مؤتة','Mutah University'], ['التمريض','Nursing'], ['طب الأسنان','Dentistry'],
+  ['الكرك','Karak'], ['عمّان','Amman'], ['إربد','Irbid'],
+  ['الفيرست','First'], ['الميد','Mid'], ['الفاينال','Final'],
+  ['تصفّح الدورات المتاحة، فلتر حسب تخصصك وجامعتك، أو ابحث مباشرة','Browse available courses, filter by your major and university, or search directly'],
+  ['تصفّح الدورات والمحاضرات المفعّلة لديك','Browse your active courses and lectures'],
+  ['تصفّح الدورات','Browse Courses'],
+  ['إنشاء حساب / تسجيل الدخول','Create Account / Login'],
+  ['كورس متاح','courses available'], ['سؤال في البنك','questions in the bank'],
+  ['الدورات التعليمية','Educational Courses'],
+  ['ابحث عن مادة أو جامعة...','Search for a course or university...'],
+  ['إضافة كورس جديد','Add New Course'],
+  ['لا توجد كورسات ضمن هذا التصنيف','No courses in this category'],
+  ['جرّب تصنيفًا آخر، أو أضف كورسًا جديدًا.','Try another category, or add a new course.'],
+  ['جرّب تصنيفًا آخر.','Try another category.'],
+  ['الانتقال للدورة','Go to Course'], ['الدورات','Courses'],
+  ['لا توجد كورسات مفعّلة بعد','No active courses yet'],
+  ['تواصل مع الإدارة لتفعيل الدورات التي تحتاجها.','Contact administration to activate the courses you need.'],
+  ['عرض المحاضرات','View Lectures'], ['الكورس بالكامل','Full Course'],
+  ['سجّل الدخول أولًا','Please log in first'],
+  ['ابدأ اختبارًا من بنك الأسئلة حسب دوراتك','Start a quiz from the question bank based on your courses'],
+  ['إعدادات الحساب','Account Settings'],
+  ['تحكّم بصورتك وبياناتك وطريقة عرض المنصة','Manage your photo, data, and how the platform is displayed'],
+  ['الصورة الشخصية','Profile Photo'], ['تغيير الصورة','Change Photo'],
+  ['إضافة صورة شخصية','Add Profile Photo'], ['إزالة الصورة','Remove Photo'],
+  ['يفضّل صورة مربعة، الحجم الأقصى 2MB (JPG أو PNG)','A square photo is preferred, max size 2MB (JPG or PNG)'],
+  ['بيانات الطالب','Student Information'], ['الاسم الكامل','Full Name'],
+  ['إعدادات العرض','Display Settings'], ['اللغة','Language'], ['العربية','Arabic'],
+  ['حجم الخط','Font Size'], ['صغير','Small'], ['متوسط','Medium'], ['كبير','Large'],
+  ['بيانات الحساب','Account Data'], ['رقم الهاتف هو معرّف الدخول لحسابك ولا يمكن تعديله من هنا. للتغيير تواصل مع الدعم.','Your phone number is your login ID and cannot be changed here. Contact support to change it.'],
+  ['رقم الهاتف','Phone Number'],
+  ['الإعدادات متاحة فقط للطلاب المسجّلين.','Settings are only available to registered students.'],
+  ['الإعدادات','Settings'], ['دورة مفعّلة','active course(s)'],
+  ['إنشاء حساب جديد','Create New Account'],
+  ['أدخل بياناتك للوصول إلى حسابك','Enter your details to access your account'],
+  ['انضم إلى منصة MEDORA الآن','Join the MEDORA platform now'],
+  ['— اختر تخصصك —','— Choose your major —'], ['— اختر جامعتك —','— Choose your university —'],
+  ['كلمة المرور','Password'], ['إنشاء الحساب','Create Account'],
+  ['ليس لديك حساب؟',"Don't have an account?"], ['أنشئ حسابًا جديدًا','Create a new account'],
+  ['لديك حساب بالفعل؟','Already have an account?'], ['سجّل الدخول','Log in'],
+  ['دخول المشرفين','Admin Login'], ['أنت مسجّل الدخول بالفعل','You are already logged in'],
+  ['يمكنك تصفّح الدورات وبنك الأسئلة مباشرة.','You can browse courses and the question bank directly.'],
+  ['أنت مسجّل الدخول كمشرف','You are logged in as admin'],
+  ['يمكنك إدارة الدورات والمحاضرات وبنك الأسئلة من صفحاتها مباشرة.','You can manage courses, lectures, and the question bank directly from their pages.'],
+  ['هذه الصفحة مخصّصة لفريق إدارة منصة MEDORA فقط','This page is for the MEDORA admin team only'],
+  ['اسم المستخدم','Username'], ['دخول لوحة التحكم','Login to Dashboard'],
+  ['الجامعات المشمولة حاليًا','Currently Covered Universities'],
+  ['معلومات التواصل','Contact Information'], ['البريد الإلكتروني','Email'],
+  ['الهاتف','Phone'], ['الموقع','Location'], ['لا توجد رسائل بعد.','No messages yet.'],
+  ['أرسل رسالة','Send a Message'],
+  ['سنقوم بالرد عليك عبر البريد الإلكتروني المُدخل','We will reply to you via the email you enter'],
+  ['اسمك الكامل','Your full name'], ['اكتب رسالتك هنا...','Write your message here...'],
+  ['إرسال الرسالة','Send Message'], ['الرسالة','Message'], ['الاسم','Name'],
+  ['الكورس غير موجود','Course Not Found'], ['ربما تم حذفه.','It may have been deleted.'],
+  ['عودة إلى الدورات','Back to Courses'],
+  ['مشاهدة الفيديو','Watch Video'], ['تشغيل الفيديو','Play Video'],
+  ['تحميل الملف','Download File'], ['نسخة PDF','PDF Copy'],
+  ['لم تتم إضافة فيديو أو ملف لهذه المحاضرة بعد','No video or file has been added to this lecture yet'],
+  ['حذف المحاضرة','Delete Lecture'], ['تعديل المحاضرة','Edit Lecture'],
+  ['حذف السؤال','Delete Question'], ['تعديل السؤال','Edit Question'],
+  ['تعديل بيانات الكورس','Edit Course Info'],
+  ['إضافة سؤال جديد','Add New Question'], ['إضافة فيديو','Add Video'],
+  ['إضافة محاضرة جديدة','Add New Lecture'], ['إضافة محاضرة','Add Lecture'], ['إضافة ملف','Add File'],
+  ['تفعيل الكورس لطالب','Activate Course for a Student'], ['تفعيل للطلاب','Activate for Students'],
+  ['اشترك مجانًا لفتح محاضرات','Subscribe for free to unlock lectures in'],
+  ['اشترك مجانًا بقسم','Subscribe for free to'],
+  ['سجّل الدخول للاشتراك المجاني بهذا القسم —','Log in to subscribe for free to this section —'],
+  ['سجّل الدخول للاشتراك','Log in to subscribe'],
+  ['مدفوع، يتم التفعيل من قبل الإدارة','paid, activated by administration'],
+  ['قسم مدفوع','Paid section'],
+  ['اشترك الآن','Subscribe Now'], ['مجاني','Free'], ['مدفوع','Paid'], ['مفعّل','Active'],
+  ['هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.','This account is already logged in on another device, and only one device can be used per account. To log in from this device, contact administration to reset your account device.'],
+  ['إدارة بنك الأسئلة (إضافة / تعديل / حذف)','Manage Question Bank (Add / Edit / Delete)'],
+  ['ابدأ اختبارًا من بنك الأسئلة','Start a Quiz from the Question Bank'],
+  ['تخصصك','your major'], ['جامعتك','your university'],
+  ['— اختر التخصص —','— Choose Major —'], ['— اختر الجامعة —','— Choose University —'],
+  ['— اختر المادة —','— Choose Course —'], ['المادة','Course'],
+  ['طبيعة الأسئلة','Question Type'], ["أسئلة سنوات سابقة","Past Years' Questions"],
+  ['أسئلة مراجع','Reference Questions'], ['كلاهما معًا','Both'],
+  ['المحاضرات','Lectures'], ['تحديد / إلغاء الكل','Select / Deselect All'],
+  ['لا توجد محاضرات مضافة لهذا الكورس بعد.','No lectures have been added to this course yet.'],
+  ['سؤال عام غير مرتبط بمحاضرة محددة (يُضاف تلقائيًا)','general question not tied to a specific lecture (added automatically)'],
+  ['عدد الأسئلة','Number of Questions'], ['المتاح:','Available:'],
+  ['كل الأسئلة','All Questions'],
+  ['يمكنك كتابة عدد مخصص للأسئلة (الحد الأقصى 50 سؤالًا)','You can enter a custom number of questions (max 50)'],
+  ['طبيعة الاختبار','Quiz Mode'], ['نظام دراسي','Study Mode'],
+  ['شاهد الإجابة الصحيحة والتفسير مباشرة بعد كل سؤال','See the correct answer and explanation right after each question'],
+  ['نظام اختبار','Exam Mode'],
+  ['أجب عن جميع الأسئلة، ثم شاهد نتيجتك النهائية','Answer all questions, then see your final score'],
+  ['ابدأ الاختبار','Start Quiz'],
+  ['لا توجد أسئلة مطابقة لهذا الاختيار حاليًا.','No questions currently match this selection.'],
+  ['لا توجد لديك مواد مشترك بها ضمن هذا التخصص والجامعة. اشترك بكورس من صفحة الدورات أولًا.','You have no subscribed courses in this major and university. Subscribe to a course from the Courses page first.'],
+  ['التفسير:','Explanation:'], ['إنهاء والخروج','Finish & Exit'],
+  ['إنهاء وعرض النتيجة','Finish & Show Result'], ['السؤال التالي','Next Question'],
+  ['نتيجة الاختبار','Quiz Result'],
+  ['أداء ممتاز! استمر بالمراجعة 👏','Excellent performance! Keep reviewing 👏'],
+  ['لا بأس، راجع الأسئلة أدناه وحاول مجددًا 💪','No worries, review the questions below and try again 💪'],
+  ['بدء اختبار جديد','Start New Quiz'], ['صحيح','Correct'], ['خاطئ','Incorrect'],
+  ['إجابتك:','Your answer:'], ['لم تُجب','Not answered'], ['الصحيحة:','Correct answer:'],
+  ['حفظ','Save'], ['إلغاء','Cancel'], ['تأكيد الحذف','Confirm Delete'],
+  ['التخصص','Major'], ['الجامعة','University'], ['ساعات','hours'], ['محاضرة','lecture'],
+  ['تعديل','Edit'], ['حذف','Delete'], ['إضافة','Add'], ['عام','General'],
+];
+const AR2EN_SORTED = I18N_PAIRS.slice().sort((a,b)=>b[0].length-a[0].length);
+const EN2AR_SORTED = I18N_PAIRS.map(([ar,en])=>[en,ar]).sort((a,b)=>b[0].length-a[0].length);
+function localize(str){
+  if(!str) return str;
+  const pairs = LANG === 'en' ? AR2EN_SORTED : EN2AR_SORTED;
+  let out = str;
+  for(const [from,to] of pairs){
+    if(from && out.indexOf(from) !== -1) out = out.split(from).join(to);
+  }
+  return out;
+}
+function applyLangAttrs(){
+  document.documentElement.setAttribute('lang', LANG === 'en' ? 'en' : 'ar');
+  document.documentElement.setAttribute('dir', LANG === 'en' ? 'ltr' : 'rtl');
+}
+function translateSubtree(root){
+  if(!root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  let n;
+  while((n = walker.nextNode())) nodes.push(n);
+  nodes.forEach(node=>{
+    const tag = node.parentElement ? node.parentElement.tagName : '';
+    if(tag === 'SCRIPT' || tag === 'STYLE') return;
+    if(!node.nodeValue || !node.nodeValue.trim()) return;
+    const localized = localize(node.nodeValue);
+    if(localized !== node.nodeValue) node.nodeValue = localized;
+  });
+  root.querySelectorAll('[placeholder],[aria-label],[title]').forEach(el=>{
+    ['placeholder','aria-label','title'].forEach(attr=>{
+      const v = el.getAttribute(attr);
+      if(v){ const lv = localize(v); if(lv !== v) el.setAttribute(attr, lv); }
+    });
+  });
+}
+async function setLanguage(lang){
+  LANG = (lang === 'en') ? 'en' : 'ar';
+  applyLangAttrs();
+  await setData('language', LANG, false);
+  await render();
+  translateSubtree(document.body);
+}
 
 async function syncSessionFromAuth(){
   if(!supabaseClient){ state.session = null; return; }
@@ -1285,12 +1458,12 @@ function pageCourses(){
       ${isAdmin ? `<div class="toolbar" style="justify-content:flex-end;"><button class="btn teal solid" id="addCourseBtn">${ICONS.plus} إضافة كورس جديد</button></div>` : ''}
       <div class="filter-dropdown-bar">
         <div class="filter-dropdown">
-          <label>التخصص</label>
-          <select id="majorFilterSelect">${majorOptions}</select>
-        </div>
-        <div class="filter-dropdown">
           <label>الجامعة</label>
           <select id="uniFilterSelect">${uniOptions}</select>
+        </div>
+        <div class="filter-dropdown">
+          <label>التخصص</label>
+          <select id="majorFilterSelect">${majorOptions}</select>
         </div>
       </div>
       ${courses.length ? `<div class="course-canvas"><div class="course-grid">${cards}</div></div>` : `<div class="empty-state"><h3>لا توجد كورسات ضمن هذا التصنيف</h3><p>جرّب تصنيفًا آخر${isAdmin ? '، أو أضف كورسًا جديدًا.' : '.'}</p></div>`}
@@ -1364,6 +1537,12 @@ function pageStudentSettings(){
   const avatar = state.session.avatar || '';
   const uni = state.session.university || '—';
   const major = state.session.major || '—';
+  const myEnrollments = state.enrollments.filter(e=>e.phone===state.session.phone);
+  const myCourseTitles = [...new Set(myEnrollments.map(e=>e.courseId))]
+    .map(id => state.courses.find(c=>c.id===id)?.title).filter(Boolean);
+  const statusText = myCourseTitles.length
+    ? `مفعّل — مشترك بمادة ${myCourseTitles.join('، ')}`
+    : 'مفعّل — غير مشترك بأي مادة بعد';
   return `
   <section class="section">
     <div class="auth-wrap">
@@ -1395,7 +1574,7 @@ function pageStudentSettings(){
           <label>اللغة</label>
           <select id="languageSelect">
             <option value="ar">العربية</option>
-            <option value="en">English (قريبًا)</option>
+            <option value="en">English</option>
           </select>
         </div>
         <div class="field">
@@ -1410,10 +1589,16 @@ function pageStudentSettings(){
         <hr class="settings-divider">
         <h3 class="settings-section-title">بيانات الحساب</h3>
         <div class="field">
-          <label>رقم الهاتف</label>
-          <input type="text" value="${escapeHtml(state.session.phone)}" disabled style="direction:ltr; text-align:right;">
-          <p class="hint">رقم الهاتف هو معرّف الدخول لحسابك ولا يمكن تعديله من هنا. للتغيير تواصل مع الدعم.</p>
+          <label>حالة الحساب</label>
+          <input type="text" value="${escapeHtml(statusText)}" disabled>
         </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;">
+          <button type="button" class="btn teal small" id="resetPasswordBtn">${ICONS.lock} إعادة تعيين كلمة المرور</button>
+          <button type="button" class="btn danger small" id="deleteAccountBtn">${ICONS.trash} حذف الحساب</button>
+        </div>
+
+        <hr class="settings-divider">
+        <button type="button" class="btn teal solid" id="saveSettingsBtn" style="width:100%; justify-content:center;">حفظ التعديلات</button>
       </div>
     </div>
   </section>`;
@@ -1697,32 +1882,12 @@ function pageBankSetup(){
   let majorBlock = '';
   let eligibleCourses = state.courses;
   if(!isAdmin){
-    const studentMajor = (state.session && state.session.type === 'student') ? state.session.major : null;
-    if(studentMajor){
-      quiz.major = studentMajor;
-      majorBlock = `
-      <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[1]} التخصص</div>
-        <div class="bank-select" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:default;">
-          <span>🦷 ${escapeHtml(studentMajor)}</span>
-          <span class="lecture-tier-tag">تخصصك</span>
-        </div>
-      </div>`;
-    } else {
-      const majorOptions = `<option value="">— اختر التخصص —</option>` + MAJORS.map(m=>`<option value="${escapeHtml(m.name)}" ${quiz.major===m.name?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
-      majorBlock = `
-      <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[1]} التخصص</div>
-        <select id="bankMajorSelect" class="bank-select">${majorOptions}</select>
-      </div>`;
-    }
-
     const studentUni = (state.session && state.session.type === 'student') ? state.session.university : null;
     if(studentUni){
       quiz.university = studentUni;
       universityBlock = `
       <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[2]} الجامعة</div>
+        <div class="bank-block-label">${NUM_EMOJI[1]} الجامعة</div>
         <div class="bank-select" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:default;">
           <span>🎓 ${escapeHtml(studentUni)}</span>
           <span class="lecture-tier-tag">جامعتك</span>
@@ -1732,8 +1897,28 @@ function pageBankSetup(){
       const uniOptions = `<option value="">— اختر الجامعة —</option>` + UNIVERSITIES.map(u=>`<option value="${escapeHtml(u.name)}" ${quiz.university===u.name?'selected':''}>${escapeHtml(u.name)}</option>`).join('');
       universityBlock = `
       <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[2]} الجامعة</div>
+        <div class="bank-block-label">${NUM_EMOJI[1]} الجامعة</div>
         <select id="bankUniversitySelect" class="bank-select">${uniOptions}</select>
+      </div>`;
+    }
+
+    const studentMajor = (state.session && state.session.type === 'student') ? state.session.major : null;
+    if(studentMajor){
+      quiz.major = studentMajor;
+      majorBlock = `
+      <div class="bank-block">
+        <div class="bank-block-label">${NUM_EMOJI[2]} التخصص</div>
+        <div class="bank-select" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:default;">
+          <span>🦷 ${escapeHtml(studentMajor)}</span>
+          <span class="lecture-tier-tag">تخصصك</span>
+        </div>
+      </div>`;
+    } else {
+      const majorOptions = `<option value="">— اختر التخصص —</option>` + MAJORS.map(m=>`<option value="${escapeHtml(m.name)}" ${quiz.major===m.name?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
+      majorBlock = `
+      <div class="bank-block">
+        <div class="bank-block-label">${NUM_EMOJI[2]} التخصص</div>
+        <select id="bankMajorSelect" class="bank-select">${majorOptions}</select>
       </div>`;
     }
     eligibleCourses = (quiz.university && quiz.major)
@@ -1779,7 +1964,7 @@ function pageBankSetup(){
     <div class="bank-block">
       <div class="bank-block-label">${NUM_EMOJI[3+stepOffset]} المحاضرات <button type="button" class="link-btn" id="toggleAllLectures">تحديد / إلغاء الكل</button></div>
       ${lectures.length ? `<div class="lecture-select-list">${lectureRows}</div>` : `<p class="hint" style="margin:0;">لا توجد محاضرات مضافة لهذا الكورس بعد.</p>`}
-      ${generalCount ? `<p class="hint" style="margin:12px 0 0; text-align:right;">+ ${generalCount} سؤال عام غير مرتبط بمحاضرة محددة (يُضاف تلقائيًا)</p>` : ''}
+      ${generalCount ? `<p class="hint" style="margin:12px 0 0; text-align:start;">+ ${generalCount} سؤال عام غير مرتبط بمحاضرة محددة (يُضاف تلقائيًا)</p>` : ''}
     </div>`;
 
     const available = state.questions.filter(q=>q.courseId===quiz.courseId)
@@ -1819,9 +2004,9 @@ function pageBankSetup(){
     <div class="wizard-wrap">
       <div class="wizard-card">
         <h3>ابدأ اختبارًا من بنك الأسئلة</h3>
-        <p class="hint">حدد ${(isAdmin || (state.session && state.session.type==='student' && state.session.university && state.session.major)) ? '' : 'التخصص والجامعة ثم '}المادة، ثم طبيعة الأسئلة والمحاضرات، ونمط الاختبار، ثم ابدأ — كل ذلك في هذه الصفحة</p>
-        ${majorBlock}
+        <p class="hint">حدد ${(isAdmin || (state.session && state.session.type==='student' && state.session.university && state.session.major)) ? '' : 'الجامعة والتخصص ثم '}المادة، ثم طبيعة الأسئلة والمحاضرات، ونمط الاختبار، ثم ابدأ — كل ذلك في هذه الصفحة</p>
         ${universityBlock}
+        ${majorBlock}
         <div class="bank-block">
           <div class="bank-block-label">${NUM_EMOJI[1+stepOffset]} المادة</div>
           <select id="bankCourseSelect" class="bank-select" ${courseSelectDisabled}>${courseOptions}</select>
@@ -1917,7 +2102,7 @@ function pageBankResults(){
         <p style="color:var(--muted); font-size:14.5px; margin-bottom:24px;">${pctScore>=70 ? 'أداء ممتاز! استمر بالمراجعة 👏' : 'لا بأس، راجع الأسئلة أدناه وحاول مجددًا 💪'}</p>
         <button class="btn teal solid small" id="newQuizBtn">بدء اختبار جديد</button>
       </div>
-      <div style="margin-top:26px; text-align:right;">${review}</div>
+      <div style="margin-top:26px; text-align:start;">${review}</div>
     </div>
   </section>
   `;
@@ -1997,12 +2182,12 @@ function pageContact(){
           ${messagesHtml}
         </div>
         <div class="card-panel" style="padding:30px;">
-          <h2 style="text-align:right; font-size:20px;">أرسل رسالة</h2>
-          <p class="sub" style="text-align:right; margin-bottom:20px;">سنقوم بالرد عليك عبر البريد الإلكتروني المُدخل</p>
+          <h2 style="text-align:start; font-size:20px;">أرسل رسالة</h2>
+          <p class="sub" style="text-align:start; margin-bottom:20px;">سنقوم بالرد عليك عبر البريد الإلكتروني المُدخل</p>
           <div id="contactMsg"></div>
           <form id="contactForm">
             <div class="field"><label>الاسم</label><input type="text" name="name" required placeholder="اسمك الكامل"></div>
-            <div class="field"><label>البريد الإلكتروني</label><input type="email" name="email" required placeholder="example@email.com" style="direction:ltr; text-align:right;"></div>
+            <div class="field"><label>البريد الإلكتروني</label><input type="email" name="email" required placeholder="example@email.com" style="direction:ltr; text-align:start;"></div>
             <div class="field"><label>الرسالة</label><textarea name="message" required placeholder="اكتب رسالتك هنا..."></textarea></div>
             <button type="submit" class="btn teal solid" style="width:100%; justify-content:center;">إرسال الرسالة</button>
           </form>
@@ -2063,7 +2248,7 @@ function pagePrivacy(){
         <h2>سياسة الخصوصية</h2>
         <p>آخر تحديث: يوليو 2026</p>
       </div>
-      <div class="card-panel" style="padding:34px; text-align:right;">
+      <div class="card-panel" style="padding:34px; text-align:start;">
         ${sections.map(s => `
           <div style="margin-bottom:26px;">
             <h4 style="font-size:16.5px; color:var(--ink); font-weight:800; margin-bottom:8px;">${escapeHtml(s.title)}</h4>
@@ -2126,7 +2311,7 @@ function pageTerms(){
         <h2>شروط استخدام منصة MEDORA</h2>
         <p>آخر تحديث: يوليو 2026</p>
       </div>
-      <div class="card-panel" style="padding:34px; text-align:right;">
+      <div class="card-panel" style="padding:34px; text-align:start;">
         ${sections.map(s => `
           <div style="margin-bottom:26px;">
             <h4 style="font-size:16.5px; color:var(--ink); font-weight:800; margin-bottom:8px;">${escapeHtml(s.title)}</h4>
@@ -2154,15 +2339,15 @@ function pageLogin(){
         <div id="authMsg"></div>
         <form id="authForm">
           ${authMode==='register' ? `<div class="field"><label>الاسم الكامل</label><input type="text" name="fullName" placeholder="مثال: سارة أحمد" required></div>` : ''}
-          ${authMode==='register' ? `<div class="field"><label>التخصص</label><select name="major" required>
-            <option value="" disabled selected>— اختر تخصصك —</option>
-            ${MAJORS.map(m=>`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('')}
-          </select></div>` : ''}
           ${authMode==='register' ? `<div class="field"><label>الجامعة</label><select name="university" required>
             <option value="" disabled selected>— اختر جامعتك —</option>
             ${UNIVERSITIES.map(u=>`<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)}</option>`).join('')}
           </select></div>` : ''}
-          <div class="field"><label>رقم الهاتف</label><input type="tel" name="phone" placeholder="مثال: 0791234567" style="direction:ltr; text-align:right;" required></div>
+          ${authMode==='register' ? `<div class="field"><label>التخصص</label><select name="major" required>
+            <option value="" disabled selected>— اختر تخصصك —</option>
+            ${MAJORS.map(m=>`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('')}
+          </select></div>` : ''}
+          <div class="field"><label>رقم الهاتف</label><input type="tel" name="phone" placeholder="مثال: 0791234567" style="direction:ltr; text-align:start;" required></div>
           <div class="field"><label>كلمة المرور</label><input type="password" name="password" placeholder="••••••••" required></div>
           <button type="submit" class="btn solid" style="width:100%; justify-content:center;">${authMode==='login' ? 'دخول' : 'إنشاء الحساب'}</button>
         </form>
@@ -2202,6 +2387,7 @@ function pageAdminLogin(){
 function openModal(html){
   document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" id="modalOverlay"><div class="modal-box">${html}</div></div>`;
   document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id === 'modalOverlay') closeModal(); });
+  translateSubtree(document.getElementById('modalRoot'));
 }
 function closeModal(){ document.getElementById('modalRoot').innerHTML = ''; }
 
@@ -2252,8 +2438,8 @@ function modalAddCourse(){
     <h3>${ICONS.plus} إضافة كورس جديد</h3>
     <form id="courseForm">
       <div class="field"><label>اسم الكورس</label><input type="text" name="title" required placeholder="مثال: تمريض الطوارئ أو جراحة الفم والفكين"></div>
-      <div class="field"><label>التخصص</label><select name="major">${majorOptions}</select></div>
       <div class="field"><label>الجامعة</label><select name="university">${uniOptions}</select></div>
+      <div class="field"><label>التخصص</label><select name="major">${majorOptions}</select></div>
       <div class="field"><label>عدد الساعات المعتمدة</label><input type="number" name="hours" min="1" max="10" value="3" required></div>
       <div class="field"><label>وصف مختصر</label><textarea name="description" required placeholder="اكتب وصفًا مختصرًا عن محتوى الكورس"></textarea></div>
       ${sectionPickerFieldsHtml(SECTIONS, null)}
@@ -2282,8 +2468,8 @@ function modalEditCourse(courseId){
     <h3>${ICONS.edit} تعديل بيانات الكورس</h3>
     <form id="courseEditForm">
       <div class="field"><label>اسم الكورس</label><input type="text" name="title" required value="${escapeHtml(course.title)}"></div>
-      <div class="field"><label>التخصص</label><select name="major">${majorOptions}</select></div>
       <div class="field"><label>الجامعة</label><select name="university">${uniOptions}</select></div>
+      <div class="field"><label>التخصص</label><select name="major">${majorOptions}</select></div>
       <div class="field"><label>عدد الساعات المعتمدة</label><input type="number" name="hours" min="1" max="10" value="${course.hours}" required></div>
       <div class="field"><label>وصف مختصر</label><textarea name="description" required>${escapeHtml(course.description)}</textarea></div>
       ${sectionPickerFieldsHtml(courseSections(courseId), course.pricing)}
@@ -2613,6 +2799,50 @@ async function saveAvatar(dataUrl){
   render();
 }
 
+/* يفتح نافذة إعادة تعيين كلمة مرور الطالب الحالي عبر Supabase Auth */
+function modalResetPassword(){
+  openModal(`
+    <h3>${ICONS.lock} إعادة تعيين كلمة المرور</h3>
+    <p style="color:var(--muted); font-size:14.5px;">أدخل كلمة المرور الجديدة لحسابك.</p>
+    <form id="resetPasswordForm">
+      <div class="field"><label>كلمة المرور الجديدة</label><input type="password" name="newPassword" placeholder="••••••••" required></div>
+      <div class="field"><label>تأكيد كلمة المرور</label><input type="password" name="confirmPassword" placeholder="••••••••" required></div>
+      <div id="resetPasswordMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ كلمة المرور</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('resetPasswordForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const msgBox = document.getElementById('resetPasswordMsg');
+    const newPassword = fd.get('newPassword');
+    const confirmPassword = fd.get('confirmPassword');
+    if(newPassword.length < 6){ msgBox.innerHTML = `<div class="form-msg error">كلمة المرور يجب أن تكون 6 أحرف على الأقل.</div>`; return; }
+    if(newPassword !== confirmPassword){ msgBox.innerHTML = `<div class="form-msg error">كلمتا المرور غير متطابقتين.</div>`; return; }
+    if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
+    const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+    if(error){ msgBox.innerHTML = `<div class="form-msg error">تعذّر تحديث كلمة المرور، حاول مرة أخرى.</div>`; return; }
+    closeModal();
+    const settingsMsg = document.getElementById('settingsMsg');
+    if(settingsMsg) settingsMsg.innerHTML = `<div class="form-msg success">تم تحديث كلمة المرور بنجاح.</div>`;
+  });
+}
+
+/* يحذف حساب الطالب: يوسم الحساب كمحذوف في Supabase Auth (metadata) لمنع الدخول لاحقًا،
+   يزيله من سجل الطلاب المحلي، ثم يسجّل خروجه ويعيده للصفحة الرئيسية. */
+function confirmDeleteAccount(){
+  confirmDelete('سيتم حذف حسابك نهائيًا ولن تتمكن من الدخول به مرة أخرى. هل أنت متأكد؟', async ()=>{
+    if(supabaseClient){
+      await supabaseClient.auth.updateUser({ data: { accountDeleted: true } });
+      await supabaseClient.auth.signOut();
+    }
+    state.students = state.students.filter(s=>s.phone !== state.session.phone);
+    await setData('students', state.students, true);
+    state.session = null;
+    navigate('home');
+  });
+}
+
 async function render(){
   if(!state.loaded){
     document.getElementById('app').innerHTML = `<div style="min-height:80vh; display:flex; align-items:center; justify-content:center; text-align:center; padding:20px;"><span class="loading-dot"></span> جارِ التحميل...</div>`;
@@ -2642,6 +2872,7 @@ async function render(){
   document.getElementById('app').innerHTML = html;
   renderNavState();
   bindPageEvents(route);
+  translateSubtree(document.body);
   window.scrollTo({top:0, behavior:'instant'});
 }
 
@@ -2859,45 +3090,51 @@ function bindPageEvents(route){
     const fileInput = document.getElementById('avatarInput');
     const chooseBtn = document.getElementById('chooseAvatarBtn');
     const removeBtn = document.getElementById('removeAvatarBtn');
+    const avatarPreviewEl = document.getElementById('avatarPreview');
+    const msgBox = document.getElementById('settingsMsg');
+    let pendingAvatar; // undefined = no change، null = إزالة، نص = صورة جديدة (لم تُحفظ بعد)
+
     if(chooseBtn && fileInput) chooseBtn.addEventListener('click', ()=> fileInput.click());
     if(fileInput) fileInput.addEventListener('change', async ()=>{
       const file = fileInput.files[0];
       if(!file) return;
-      const msgBox = document.getElementById('settingsMsg');
       if(file.size > 2*1024*1024){
         if(msgBox) msgBox.innerHTML = `<div class="form-msg error">حجم الصورة كبير جدًا، اختر صورة أقل من 2MB.</div>`;
         return;
       }
       try{
         const dataUrl = await resizeImageFile(file);
-        await saveAvatar(dataUrl);
+        pendingAvatar = dataUrl;
+        if(avatarPreviewEl) avatarPreviewEl.innerHTML = `<img src="${dataUrl}" alt="الصورة الشخصية" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
+        if(msgBox) msgBox.innerHTML = `<div class="form-msg info">تم اختيار الصورة، اضغط "حفظ التعديلات" لتثبيتها.</div>`;
       }catch(e){
         if(msgBox) msgBox.innerHTML = `<div class="form-msg error">تعذّرت معالجة الصورة، جرّب صورة أخرى.</div>`;
       }
     });
-    if(removeBtn) removeBtn.addEventListener('click', ()=> saveAvatar(null));
+    if(removeBtn) removeBtn.addEventListener('click', ()=>{
+      pendingAvatar = null;
+      if(avatarPreviewEl) avatarPreviewEl.innerHTML = majorEmblem(state.session.major);
+      if(msgBox) msgBox.innerHTML = `<div class="form-msg info">تم اختيار إزالة الصورة، اضغط "حفظ التعديلات" لتثبيت ذلك.</div>`;
+    });
 
     const fontSel = document.getElementById('fontSizeSelect');
-    if(fontSel){
-      getData('fontScale', 'medium', false).then(v => fontSel.value = v || 'medium');
-      fontSel.addEventListener('change', async ()=>{
-        applyFontScale(fontSel.value);
-        await setData('fontScale', fontSel.value, false);
-      });
-    }
+    if(fontSel) getData('fontScale', 'medium', false).then(v => fontSel.value = v || 'medium');
     const langSel = document.getElementById('languageSelect');
-    if(langSel){
-      getData('language', 'ar', false).then(v => langSel.value = v || 'ar');
-      langSel.addEventListener('change', async ()=>{
-        const msgBox = document.getElementById('settingsMsg');
-        if(langSel.value === 'en'){
-          langSel.value = 'ar';
-          if(msgBox) msgBox.innerHTML = `<div class="form-msg error">اللغة الإنجليزية غير متاحة بعد، سيتم تفعيلها قريبًا.</div>`;
-          return;
-        }
-        await setData('language', langSel.value, false);
-      });
-    }
+    if(langSel) langSel.value = LANG;
+
+    const resetPwBtn = document.getElementById('resetPasswordBtn');
+    if(resetPwBtn) resetPwBtn.addEventListener('click', modalResetPassword);
+    const deleteAccBtn = document.getElementById('deleteAccountBtn');
+    if(deleteAccBtn) deleteAccBtn.addEventListener('click', confirmDeleteAccount);
+
+    const saveBtn = document.getElementById('saveSettingsBtn');
+    if(saveBtn) saveBtn.addEventListener('click', async ()=>{
+      if(pendingAvatar !== undefined) await saveAvatar(pendingAvatar);
+      if(fontSel){ applyFontScale(fontSel.value); await setData('fontScale', fontSel.value, false); }
+      if(langSel && langSel.value !== LANG) await setLanguage(langSel.value);
+      const freshMsgBox = document.getElementById('settingsMsg');
+      if(freshMsgBox) freshMsgBox.innerHTML = `<div class="form-msg success">تم حفظ التعديلات بنجاح.</div>`;
+    });
   }
   if(route === 'login'){
     const switchBtn = document.getElementById('switchAuth');
@@ -2974,6 +3211,11 @@ async function handleAuthSubmit(e){
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email: pseudoEmail, password });
     if(error){ msgBox.innerHTML = `<div class="form-msg error">رقم الهاتف أو كلمة المرور غير صحيحة.</div>`; return; }
     const meta = data.user.user_metadata || {};
+    if(meta.accountDeleted){
+      await supabaseClient.auth.signOut();
+      msgBox.innerHTML = `<div class="form-msg error">هذا الحساب تم حذفه. يمكنك إنشاء حساب جديد من صفحة التسجيل.</div>`;
+      return;
+    }
     const finalPhone = meta.phone || phone;
     const allowed = await enforceDeviceLock(finalPhone, data.user.id);
     if(!allowed){
@@ -3064,7 +3306,11 @@ function applyFontScale(size){
 
 (async function boot(){
   if(!location.hash) location.hash = '#/home';
+  const savedLang = await getData('language', 'ar', false);
+  LANG = (savedLang === 'en') ? 'en' : 'ar';
+  applyLangAttrs();
   render(); // إظهار شاشة التحميل فورًا بدل ترك المحتوى فارغًا أثناء جلب البيانات
+  translateSubtree(document.body);
   await initData();
   const savedTheme = await getData('darkMode', false, false);
   applyTheme(savedTheme);
@@ -3072,6 +3318,14 @@ function applyFontScale(size){
   applyFontScale(savedFontScale);
   await render();
 })();
+
+/* تسجيل الـ Service Worker لتفعيل خاصية تثبيت التطبيق (PWA) على أندرويد وآيفون */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
+
 </script>
 </body>
 </html>
