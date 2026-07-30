@@ -265,9 +265,12 @@
   .course-hero-banner .course-detail-meta{ color:#d7e6ee; }
   .course-hero-banner .course-detail-meta b{ color:#fff; }
   .course-hero-banner .chip{ background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.35); color:#fff; }
-  .hero-settings-btn{ position:absolute; top:18px; left:18px; z-index:3; display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:999px; background:rgba(255,255,255,0.16); border:1.5px solid rgba(255,255,255,0.45); color:#fff; font-weight:700; font-size:13.5px; backdrop-filter:blur(6px); transition:.2s; text-decoration:none; }
-  .hero-settings-btn:hover{ background:#fff; color:var(--navy); border-color:#fff; }
-  @media (max-width:520px){ .hero-settings-btn{ position:static; margin-top:14px; } }
+  .hero-settings-btn{ position:absolute; top:18px; left:18px; z-index:5; display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:999px; background:rgba(255,255,255,0.16); border:1.5px solid rgba(255,255,255,0.45); color:#fff; font-weight:700; font-size:13.5px; backdrop-filter:blur(6px); transition:.2s; text-decoration:none; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:rgba(255,255,255,0.3); }
+  .hero-settings-btn:hover, .hero-settings-btn:active{ background:#fff; color:var(--navy); border-color:#fff; }
+  @media (max-width:520px){
+    .course-hero-banner{ padding-top:66px; }
+    .hero-settings-btn{ top:14px; left:14px; padding:8px 13px; font-size:12.5px; }
+  }
 
   .course-detail-layout{ display:grid; grid-template-columns:1fr 300px; gap:28px; align-items:start; }
   .course-detail-main{ min-width:0; }
