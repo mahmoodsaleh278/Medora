@@ -225,6 +225,28 @@
     .course-card{ aspect-ratio:auto; min-height:260px; }
   }
 
+  /* صفحة "دوراتي": قائمة عمودية مرتّبة بدل الشبكة، مع شريط تقدم لكل دورة */
+  .my-course-list{ display:flex; flex-direction:column; gap:14px; }
+  .my-course-row{ display:flex; align-items:center; gap:20px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 22px; transition:.25s; cursor:pointer; }
+  .my-course-row:hover{ box-shadow:0 10px 26px rgba(15,39,69,0.1); border-color:var(--teal); }
+  .my-course-row .course-emblem{ margin-bottom:0; }
+  .my-course-info{ flex:1.4; min-width:0; }
+  .my-course-row-top{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:3px; }
+  .my-course-row-top h3{ font-size:16.5px; color:var(--ink); font-weight:800; }
+  .my-course-progress{ width:220px; flex-shrink:0; }
+  .my-course-progress-head{ display:flex; justify-content:space-between; align-items:center; font-size:12.5px; font-weight:800; color:var(--ink); margin-bottom:6px; }
+  .my-course-progress-head b{ color:var(--teal); font-size:14px; }
+  .my-course-progress-track{ height:8px; background:var(--border); border-radius:999px; overflow:hidden; }
+  .my-course-progress-fill{ height:100%; background:linear-gradient(90deg, var(--teal), var(--navy)); border-radius:999px; transition:width .3s; }
+  .my-course-progress-sub{ display:block; font-size:11.5px; color:var(--muted); margin-top:5px; }
+  .my-course-actions{ flex-shrink:0; }
+  @media(max-width:760px){
+    .my-course-row{ flex-wrap:wrap; }
+    .my-course-progress{ width:100%; order:3; }
+    .my-course-actions{ width:100%; order:4; }
+    .my-course-actions .btn{ width:100%; justify-content:center; }
+  }
+
   .summary-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; }
   .summary-card{ background:var(--teal-light); border:1px solid var(--border); border-radius:var(--radius); padding:20px; display:flex; flex-direction:column; gap:10px; }
   .summary-card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
@@ -295,8 +317,8 @@
   .lecture-toggle-icon{ margin-inline-start:auto; width:36px; height:36px; border-radius:50%; background:var(--teal-light); color:var(--teal); display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:.25s; }
   .lecture-toggle-icon svg{ width:16px; height:16px; transition:transform .25s; }
   .lecture-row-summary:hover .lecture-toggle-icon{ background:var(--teal); color:#fff; }
-  .lecture-row[open] .lecture-toggle-icon{ background:var(--navy); color:#fff; }
-  .lecture-row[open] .lecture-toggle-icon svg{ transform:rotate(180deg); }
+  .lecture-row[open] > summary .lecture-toggle-icon{ background:var(--navy); color:#fff; }
+  .lecture-row[open] > summary .lecture-toggle-icon svg{ transform:rotate(180deg); }
   .lecture-row-content{ padding:0 20px 18px; border-top:1px solid var(--border); padding-top:14px; }
   .lecture-row .lecture-actions{ flex-direction:column; gap:10px; }
   .lecture-action-btn{ display:flex; align-items:center; gap:12px; padding:12px 18px; border-radius:12px; font-weight:800; font-size:14.5px; border:1.5px solid var(--border); background:var(--bg); color:var(--ink); transition:.2s; width:100%; }
@@ -324,7 +346,10 @@
   .course-detail-meta b{ color:var(--ink); }
 
   /* Lecture rows */
-  .lecture-num{ width:34px; height:34px; border-radius:10px; background:var(--navy); color:#fff; font-weight:800; font-size:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .lecture-num{ width:34px; height:34px; border-radius:10px; background:var(--navy); color:#fff; font-weight:800; font-size:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:.2s; }
+  .lecture-row.watched .lecture-num{ background:var(--good); }
+  .watch-toggle{ display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--ink); background:var(--good-light); padding:8px 12px; border-radius:10px; margin-bottom:12px; cursor:pointer; user-select:none; width:fit-content; }
+  .watch-toggle input{ width:16px; height:16px; accent-color:var(--good); cursor:pointer; }
   .lecture-actions{ display:flex; gap:8px; flex-wrap:wrap; }
   .lecture-tier-tag{ display:inline-block; font-size:11.5px; font-weight:800; padding:3px 10px; border-radius:999px; background:var(--teal-light); color:var(--teal); width:fit-content; }
   .lecture-tier-tag.locked{ background:#f3e8d8; color:#8a5a1c; }
@@ -343,8 +368,8 @@
   .section-group-title h3{ font-size:17px; color:var(--ink); font-weight:800; margin:0; }
   .section-group-title p{ font-size:12.5px; color:var(--muted); margin:3px 0 0; }
   .section-group-status{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
-  .section-group[open] .lecture-toggle-icon{ background:var(--navy); color:#fff; }
-  .section-group[open] .lecture-toggle-icon svg{ transform:rotate(180deg); }
+  .section-group[open] > summary .lecture-toggle-icon{ background:var(--navy); color:#fff; }
+  .section-group[open] > summary .lecture-toggle-icon svg{ transform:rotate(180deg); }
   .section-group-content{ padding:4px 20px 20px; border-top:1px solid var(--border); }
   .section-group-content .lecture-list{ margin-top:14px; }
   .section-group-empty{ padding:14px 20px 20px; color:var(--muted); font-size:13.5px; }
@@ -842,8 +867,8 @@ function watchDeviceLock(phone){
 
 /* ---------------- App state ---------------- */
 let state = {
-  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [],
-  session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', bankAdminView: false, content: {},
+  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [],
+  session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', bankAdminView: false, bankNotesView: false, content: {},
 };
 
 /* =========================================================
@@ -1080,7 +1105,7 @@ function courseSections(courseId){
 }
 
 async function initData(){
-  const [courses, lectures, questions, students, messages, enrollments, summaries, savedContent] = await Promise.all([
+  const [courses, lectures, questions, students, messages, enrollments, summaries, lectureProgress, savedContent, savedQuestions] = await Promise.all([
     getData('courses', SEED_COURSES, true),
     getData('lectures', SEED_LECTURES, true),
     getData('questions', SEED_QUESTIONS, true),
@@ -1088,11 +1113,15 @@ async function initData(){
     getData('messages', [], true),
     getData('enrollments', [], true),
     getData('summaries', [], true),
+    getData('lectureProgress', [], true),
     getData('content', {}, true),
+    getData('savedQuestions', [], true),
     syncSessionFromAuth(),
   ]);
   state.courses = courses.map(normalizeCourse); state.lectures = lectures.map(normalizeLecture); state.questions = questions;
   state.students = students; state.messages = messages; state.enrollments = enrollments; state.summaries = summaries;
+  state.lectureProgress = lectureProgress;
+  state.savedQuestions = Array.isArray(savedQuestions) ? savedQuestions : [];
   state.content = Object.assign({}, CONTENT_DEFAULTS, savedContent);
   state.loaded = true;
 }
@@ -1123,6 +1152,30 @@ async function selfEnrollSection(courseId, section){
   render();
 }
 
+/* ---------------- My Notes (الأسئلة المحفوظة) ----------------
+   يقدر الطالب يحفظ أي سؤال أثناء حل الاختبار أو مراجعة النتيجة، وتنعرض له
+   كل أسئلته المحفوظة في قسم "My Notes" بأعلى صفحة بنك الأسئلة. الحفظ مربوط
+   برقم هاتف الطالب فقط، فكل طالب يشوف أسئلته المحفوظة هو بس. */
+function isQuestionSaved(questionId){
+  if(!state.session || state.session.type !== 'student') return false;
+  const phone = state.session.phone;
+  return state.savedQuestions.some(s=> s.phone===phone && s.questionId===questionId);
+}
+async function toggleSaveQuestion(questionId){
+  if(!state.session || state.session.type !== 'student') return;
+  const phone = state.session.phone;
+  const idx = state.savedQuestions.findIndex(s=> s.phone===phone && s.questionId===questionId);
+  if(idx > -1) state.savedQuestions.splice(idx, 1);
+  else state.savedQuestions.push({ phone, questionId, savedAt: Date.now() });
+  await setData('savedQuestions', state.savedQuestions, true);
+}
+function mySavedQuestions(){
+  if(!state.session || state.session.type !== 'student') return [];
+  const phone = state.session.phone;
+  const ids = state.savedQuestions.filter(s=> s.phone===phone).map(s=> s.questionId);
+  return ids.map(id => state.questions.find(q=> q.id===id)).filter(Boolean);
+}
+
 /* الكورس "مفعّل" (لغايات كرت القوائم) إذا كان للطالب أي تفعيل ضمنه، بغض النظر عن القسم */
 function isEnrolled(courseId){
   if(!state.session || state.session.type !== 'student') return false;
@@ -1146,6 +1199,33 @@ function courseIsAllFree(course){
 }
 function courseIsAllPaid(course){
   return courseSections(course.id).every(s=>!course.pricing[s]);
+}
+
+/* ---------------- تتبّع تقدّم الطالب (المحاضرات التي "شاهدها") ----------------
+   كل سجل: { phone, lectureId }. يحدّده الطالب بنفسه بزر "تمت المشاهدة" داخل المحاضرة،
+   ويُستخدم لحساب نسبة التقدم في كل دورة ضمن صفحة "دوراتي". */
+function isLectureWatched(lectureId){
+  if(!state.session || state.session.type !== 'student') return false;
+  const phone = state.session.phone;
+  return state.lectureProgress.some(p=> p.phone===phone && p.lectureId===lectureId);
+}
+async function toggleLectureWatched(lectureId){
+  if(!state.session || state.session.type !== 'student') return;
+  const phone = state.session.phone;
+  const idx = state.lectureProgress.findIndex(p=> p.phone===phone && p.lectureId===lectureId);
+  if(idx > -1) state.lectureProgress.splice(idx, 1);
+  else state.lectureProgress.push({ phone, lectureId });
+  await setData('lectureProgress', state.lectureProgress, true);
+}
+/* نسبة تقدّم الطالب الحالي بدورة معيّنة: عدد المحاضرات المشاهَدة من إجمالي محاضرات الدورة */
+function courseProgress(courseId){
+  if(!state.session || state.session.type !== 'student') return { watched:0, total:0, pct:0 };
+  const phone = state.session.phone;
+  const courseLectures = state.lectures.filter(l=>l.courseId===courseId);
+  const total = courseLectures.length;
+  const watched = courseLectures.filter(l=> state.lectureProgress.some(p=> p.phone===phone && p.lectureId===l.id)).length;
+  const pct = total ? Math.round((watched/total)*100) : 0;
+  return { watched, total, pct };
 }
 
 function majorEmblem(major){
@@ -1646,38 +1726,42 @@ function pageMyCourses(){
   const myEnrollments = state.enrollments.filter(e=>e.phone===state.session.phone);
   const myCourseIds = myEnrollments.map(e=>e.courseId);
   const courses = state.courses.filter(c=>myCourseIds.includes(c.id));
-  const cards = courses.map(c => {
+  const rows = courses.map(c => {
     const lectureCount = state.lectures.filter(l=>l.courseId===c.id).length;
     const myEntries = myEnrollments.filter(e=>e.courseId===c.id);
     const sectionsLabel = myEntries.some(e=>!e.section) ? 'الكورس بالكامل' : myEntries.map(e=>SECTION_LABELS[e.section]).join(' + ');
+    const { watched, total, pct } = courseProgress(c.id);
     return `
-    <div class="course-card">
-      <div class="course-top"></div>
-      <div class="course-body">
-        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
-          <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
+    <a href="#/course/${c.id}" class="my-course-row">
+      <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
+      <div class="my-course-info">
+        <div class="my-course-row-top">
+          <h3>${escapeHtml(c.title)}</h3>
           <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
         </div>
         <div class="course-uni">${escapeHtml(c.university)}</div>
-        <h3>${escapeHtml(c.title)}</h3>
-        <p>${escapeHtml(c.description)}</p>
-        <div class="course-stats-row">
+        <div class="course-stats-row" style="margin-bottom:0;">
           <span class="course-stat-chip">⏱ ${c.hours} ساعات</span>
           <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
           <span class="course-stat-chip">✅ ${escapeHtml(sectionsLabel)}</span>
         </div>
-        <div class="course-actions">
-          <a href="#/course/${c.id}" class="btn teal small">عرض المحاضرات</a>
-        </div>
       </div>
-    </div>`;
+      <div class="my-course-progress">
+        <div class="my-course-progress-head"><span>مستوى التقدم</span><b>${pct}%</b></div>
+        <div class="my-course-progress-track"><div class="my-course-progress-fill" style="width:${pct}%;"></div></div>
+        <span class="my-course-progress-sub">${total ? `${watched} من ${total} محاضرة تمت مشاهدتها` : 'لا توجد محاضرات بعد'}</span>
+      </div>
+      <div class="my-course-actions">
+        <span class="btn teal small">عرض المحاضرات</span>
+      </div>
+    </a>`;
   }).join('');
 
   return `
   <section class="section">
     <div class="container">
       <div class="toolbar"><h2>دوراتي</h2></div>
-      ${courses.length ? `<div class="course-canvas"><div class="course-grid">${cards}</div></div>` : `<div class="empty-state"><h3>لا توجد كورسات مفعّلة بعد</h3><p>تواصل مع الإدارة لتفعيل الدورات التي تحتاجها.</p></div>`}
+      ${courses.length ? `<div class="my-course-list">${rows}</div>` : `<div class="empty-state"><h3>لا توجد كورسات مفعّلة بعد</h3><p>تواصل مع الإدارة لتفعيل الدورات التي تحتاجها.</p></div>`}
     </div>
   </section>
   `;
@@ -1747,17 +1831,24 @@ function pageCourseDetail(courseId){
         <span><span class="label-main">${f.label ? escapeHtml(f.label) : ('تحميل الملف' + (files.length>1 ? ' '+(idx+1) : ''))}</span><span class="label-sub">نسخة PDF</span></span>
       </a>`).join('');
     const hasMedia = videos.length || files.length;
+    const isStudent = state.session && state.session.type === 'student';
+    const watched = isStudent && isLectureWatched(l.id);
     return `
-    <details class="lecture-row ${unlocked?'':'locked'}">
+    <details class="lecture-row ${unlocked?'':'locked'} ${watched?'watched':''}">
       <summary class="lecture-row-summary">
-        <div class="lecture-num">${i+1}</div>
+        <div class="lecture-num">${watched ? '✓' : (i+1)}</div>
         <div class="lecture-row-main">
           <h4>${escapeHtml(l.title)}</h4>
         </div>
-        <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+        <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg></span>
       </summary>
       <div class="lecture-row-content">
         ${l.description ? `<p style="font-size:13.5px; color:var(--muted); margin-bottom:12px;">${escapeHtml(l.description)}</p>` : ''}
+        ${unlocked && isStudent ? `
+        <label class="watch-toggle">
+          <input type="checkbox" data-watch-toggle="${l.id}" ${watched ? 'checked' : ''}>
+          <span>${watched ? 'تمت مشاهدتها ✓' : 'وسمّها كمشاهَدة بعد الانتهاء'}</span>
+        </label>` : ''}
         ${unlocked ? `
         <div class="lecture-actions">
           ${hasMedia ? (videoRowsHtml + fileRowsHtml) : `<div class="lecture-lock-msg">${ICONS.play} لم تتم إضافة فيديو أو ملف لهذه المحاضرة بعد</div>`}
@@ -1805,7 +1896,7 @@ function pageCourseDetail(courseId){
           </div>
         </div>
         <div class="section-group-status">${statusBadge}</div>
-        <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+        <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg></span>
       </summary>
       <div class="section-group-content">${rowsHtml}</div>
     </details>`;
@@ -1897,6 +1988,7 @@ function pageCourseDetail(courseId){
    ========================================================= */
 function natureLabel(n){ return n === 'ref' ? 'أسئلة مراجع' : 'أسئلة سنوات سابقة'; }
 
+
 function pageBankManage(){
   const groups = state.courses.map(course => {
     const qs = state.questions.filter(q => q.courseId === course.id);
@@ -1906,11 +1998,11 @@ function pageBankManage(){
       <div class="q-card">
         <span class="q-tag ${q.nature==='ref'?'ref':'past'}">${natureLabel(q.nature)}</span>
         ${lec ? `<span class="q-tag" style="background:var(--teal-light); color:var(--teal);">${escapeHtml(lec.title)}</span>` : ''}
-        <div class="q-text">${escapeHtml(q.question)}</div>
-        <div class="q-options">
+        <div class="q-text" dir="ltr" style="text-align:left;">${escapeHtml(q.question)}</div>
+        <div class="q-options" dir="ltr" style="text-align:left;">
           ${q.options.map((opt,i)=>`<div class="q-opt ${i===q.correctIndex?'correct':''}"><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</div>`).join('')}
         </div>
-        ${q.explanation ? `<div class="q-explain"><b>التفسير:</b> ${escapeHtml(q.explanation)}</div>` : ''}
+        ${q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
         <div class="q-card-foot"><button class="btn edit small" data-edit-question="${q.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-question="${q.id}">${ICONS.trash} حذف السؤال</button></div>
       </div>
     `;
@@ -1942,11 +2034,12 @@ function isLectureIncluded(lid){
   return quiz.selectedLectures.includes(lid);
 }
 
-const NUM_EMOJI = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣'];
 function pageBankSetup(){
   const isAdmin = state.session && state.session.type === 'admin';
   const adminToggle = isAdmin ? `<div style="text-align:center; margin-bottom:22px;"><button class="btn small" id="toManageBtn">🛠 إدارة بنك الأسئلة (إضافة / تعديل / حذف)</button></div>` : '';
-  const stepOffset = isAdmin ? 0 : 2;
+  const isStudent = state.session && state.session.type === 'student';
+  const notesCount = isStudent ? mySavedQuestions().length : 0;
+  const notesToggle = isStudent ? `<div style="text-align:center; margin-bottom:22px;"><button class="btn teal small" id="toMyNotesBtn" dir="ltr">📌 My Notes${notesCount ? ` <span class="count" style="background:rgba(255,255,255,0.25); color:inherit; padding:2px 8px; border-radius:999px; margin-inline-start:4px;">${notesCount}</span>` : ''}</button></div>` : '';
 
   let universityBlock = '';
   let majorBlock = '';
@@ -1957,7 +2050,7 @@ function pageBankSetup(){
       quiz.university = studentUni;
       universityBlock = `
       <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[1]} الجامعة</div>
+        <div class="bank-block-label">الجامعة</div>
         <div class="bank-select" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:default;">
           <span>🎓 ${escapeHtml(studentUni)}</span>
           <span class="lecture-tier-tag">جامعتك</span>
@@ -1967,7 +2060,7 @@ function pageBankSetup(){
       const uniOptions = `<option value="">— اختر الجامعة —</option>` + UNIVERSITIES.map(u=>`<option value="${escapeHtml(u.name)}" ${quiz.university===u.name?'selected':''}>${escapeHtml(u.name)}</option>`).join('');
       universityBlock = `
       <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[1]} الجامعة</div>
+        <div class="bank-block-label">الجامعة</div>
         <select id="bankUniversitySelect" class="bank-select">${uniOptions}</select>
       </div>`;
     }
@@ -1977,7 +2070,7 @@ function pageBankSetup(){
       quiz.major = studentMajor;
       majorBlock = `
       <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[2]} التخصص</div>
+        <div class="bank-block-label">التخصص</div>
         <div class="bank-select" style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:default;">
           <span>🦷 ${escapeHtml(studentMajor)}</span>
           <span class="lecture-tier-tag">تخصصك</span>
@@ -1987,7 +2080,7 @@ function pageBankSetup(){
       const majorOptions = `<option value="">— اختر التخصص —</option>` + MAJORS.map(m=>`<option value="${escapeHtml(m.name)}" ${quiz.major===m.name?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
       majorBlock = `
       <div class="bank-block">
-        <div class="bank-block-label">${NUM_EMOJI[2]} التخصص</div>
+        <div class="bank-block-label">التخصص</div>
         <select id="bankMajorSelect" class="bank-select">${majorOptions}</select>
       </div>`;
     }
@@ -2011,7 +2104,7 @@ function pageBankSetup(){
     ];
     natureBlock = `
     <div class="bank-block">
-      <div class="bank-block-label">${NUM_EMOJI[2+stepOffset]} طبيعة الأسئلة</div>
+      <div class="bank-block-label">طبيعة الأسئلة</div>
       <div class="option-cards small">
         ${natureOptions.map(o=>`<div class="option-card ${quiz.nature===o.v?'selected':''}" data-nature="${o.v}" style="cursor:pointer;"><b>${o.label}</b></div>`).join('')}
       </div>
@@ -2032,7 +2125,7 @@ function pageBankSetup(){
 
     lecturesBlock = `
     <div class="bank-block">
-      <div class="bank-block-label">${NUM_EMOJI[3+stepOffset]} المحاضرات <button type="button" class="link-btn" id="toggleAllLectures">تحديد / إلغاء الكل</button></div>
+      <div class="bank-block-label">المحاضرات <button type="button" class="link-btn" id="toggleAllLectures">تحديد / إلغاء الكل</button></div>
       ${lectures.length ? `<div class="lecture-select-list">${lectureRows}</div>` : `<p class="hint" style="margin:0;">لا توجد محاضرات مضافة لهذا الكورس بعد.</p>`}
       ${generalCount ? `<p class="hint" style="margin:12px 0 0; text-align:start;">+ ${generalCount} سؤال عام غير مرتبط بمحاضرة محددة (يُضاف تلقائيًا)</p>` : ''}
     </div>`;
@@ -2042,20 +2135,16 @@ function pageBankSetup(){
       .filter(q=> !q.lectureId || isLectureIncluded(q.lectureId))
       .length;
 
-    const presets = [5,10,15,20];
-    const isCustomCount = quiz.count !== null && !presets.includes(quiz.count);
-    const chips = presets.map(n=>`<button class="count-chip ${quiz.count===n?'active':''}" data-count="${n}">${n}</button>`).join('')
-      + `<button class="count-chip ${quiz.count===null?'active':''}" data-count="all">كل الأسئلة (${available})</button>`;
     countBlock = `
     <div class="bank-block">
       <div class="bank-block-label">عدد الأسئلة <span style="font-weight:600; color:var(--muted); font-size:13px;">المتاح: ${available}</span></div>
-      <div class="count-input-row">${chips}<input type="number" id="customCountInput" class="count-chip ${isCustomCount?'active':''}" style="width:90px; text-align:center;" min="1" max="50" placeholder="عدد آخر" value="${isCustomCount?quiz.count:''}"></div>
-      <p class="hint" style="margin:8px 0 0; text-align:center;">يمكنك كتابة عدد مخصص للأسئلة (الحد الأقصى 50 سؤالًا)</p>
+      <div class="count-input-row"><input type="number" id="customCountInput" class="count-chip" style="width:120px; text-align:center;" min="1" max="50" placeholder="مثال: 10" value="${quiz.count || ''}"></div>
+      <p class="hint" style="margin:8px 0 0; text-align:center;">اكتب عدد الأسئلة الذي تريده (الحد الأقصى 50 سؤالًا)</p>
     </div>`;
 
     modeBlock = `
     <div class="bank-block">
-      <div class="bank-block-label">${NUM_EMOJI[4+stepOffset]} طبيعة الاختبار</div>
+      <div class="bank-block-label">طبيعة الاختبار</div>
       <div class="option-cards">
         <div class="option-card ${quiz.mode==='study'?'selected':''}" data-mode="study" style="cursor:pointer;"><b>📖 نظام دراسي</b><span>شاهد الإجابة الصحيحة والتفسير مباشرة بعد كل سؤال</span></div>
         <div class="option-card ${quiz.mode==='exam'?'selected':''}" data-mode="exam" style="cursor:pointer;"><b>⏱ نظام اختبار</b><span>أجب عن جميع الأسئلة، ثم شاهد نتيجتك النهائية</span></div>
@@ -2064,12 +2153,12 @@ function pageBankSetup(){
 
     startBlock = `
     <div style="text-align:center; margin-top:6px;">
-      <button class="btn teal solid" id="startQuizBtn" ${available===0?'disabled':''}>${NUM_EMOJI[5+stepOffset]} ابدأ الاختبار</button>
+      <button class="btn teal solid" id="startQuizBtn" ${available===0?'disabled':''}>ابدأ الاختبار</button>
       ${available===0 ? `<p class="hint" style="margin-top:10px;">لا توجد أسئلة مطابقة لهذا الاختيار حاليًا.</p>` : ''}
     </div>`;
   }
 
-  return adminToggle + `
+  return adminToggle + notesToggle + `
   <section class="section">
     <div class="wizard-wrap">
       <div class="wizard-card">
@@ -2078,7 +2167,7 @@ function pageBankSetup(){
         ${universityBlock}
         ${majorBlock}
         <div class="bank-block">
-          <div class="bank-block-label">${NUM_EMOJI[1+stepOffset]} المادة</div>
+          <div class="bank-block-label">المادة</div>
           <select id="bankCourseSelect" class="bank-select" ${courseSelectDisabled}>${courseOptions}</select>
           ${noEligibleHint}
         </div>
@@ -2088,6 +2177,40 @@ function pageBankSetup(){
         ${modeBlock}
         ${startBlock}
       </div>
+    </div>
+  </section>`;
+}
+
+/* ---------------- My Notes: صفحة مستقلة تظهر لما الطالب يضغط زر My Notes ----------------
+   فيها كل الأسئلة اللي حفظها الطالب أثناء الاختبار أو مراجعة النتيجة. */
+function pageMyNotes(){
+  const savedQs = mySavedQuestions();
+  const cards = savedQs.map(q=>{
+    const course = state.courses.find(c=>c.id===q.courseId);
+    return `
+    <div class="q-card">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:4px;">
+        ${course ? `<span class="q-tag" style="background:var(--teal-light); color:var(--teal);">${escapeHtml(course.title)}</span>` : '<span></span>'}
+        <button type="button" class="btn danger small" data-toggle-save="${q.id}">${ICONS.trash} Remove</button>
+      </div>
+      <div class="q-text" dir="ltr" style="text-align:left;">${escapeHtml(q.question)}</div>
+      <div class="q-options" dir="ltr" style="text-align:left;">
+        ${q.options.map((opt,i)=>`<div class="q-opt ${i===q.correctIndex?'correct':''}"><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</div>`).join('')}
+      </div>
+      ${q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  return `
+  <section class="section">
+    <div class="wizard-wrap">
+      <div style="margin-bottom:18px;"><button class="btn small" id="backFromNotesBtn">→ رجوع لبنك الأسئلة</button></div>
+      <div class="section-head" style="margin-bottom:24px;">
+        <div class="eyebrow">MY NOTES</div>
+        <h2 dir="ltr">📌 My Notes</h2>
+        <p>Questions you save while practicing show up here for quick review, in English.</p>
+      </div>
+      ${savedQs.length ? cards : `<div class="empty-state"><h3 dir="ltr">No saved questions yet</h3><p dir="ltr">Tap "Save to My Notes" on any question during a quiz or in your results to add it here.</p></div>`}
     </div>
   </section>`;
 }
@@ -2116,11 +2239,17 @@ function pageBankRunning(){
     } else if(answered === i){
       cls += ' correct';
     }
-    return `<button class="${cls}" data-answer="${i}" ${revealed ? 'disabled' : ''}><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</button>`;
+    return `<button class="${cls}" data-answer="${i}" dir="ltr" style="text-align:left;" ${revealed ? 'disabled' : ''}><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</button>`;
   }).join('');
 
   const isLast = quiz.idx === total - 1;
   const canProceed = answered !== undefined;
+
+  const isStudent = state.session && state.session.type === 'student';
+  const saved = isStudent && isQuestionSaved(q.id);
+  const saveBtnHtml = isStudent
+    ? `<button type="button" class="btn small ${saved?'teal solid':''}" data-toggle-save="${q.id}" style="margin-inline-start:8px;">${saved ? '★ Saved to My Notes' : '☆ Save to My Notes'}</button>`
+    : '';
 
   return `
   <section class="section">
@@ -2131,10 +2260,13 @@ function pageBankRunning(){
       </div>
       <div class="quiz-progress-bar"><div style="width:${pct}%;"></div></div>
       <div class="wizard-card">
-        <span class="q-tag ${q.nature==='ref'?'ref':'past'}">${natureLabel(q.nature)}</span>
-        <div class="quiz-q-text">${escapeHtml(q.question)}</div>
-        <div class="quiz-options">${optionsHtml}</div>
-        ${revealed && q.explanation ? `<div class="q-explain"><b>التفسير:</b> ${escapeHtml(q.explanation)}</div>` : ''}
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+          <span class="q-tag ${q.nature==='ref'?'ref':'past'}">${natureLabel(q.nature)}</span>
+          ${saveBtnHtml}
+        </div>
+        <div class="quiz-q-text" dir="ltr" style="text-align:left;">${escapeHtml(q.question)}</div>
+        <div class="quiz-options" dir="ltr">${optionsHtml}</div>
+        ${revealed && q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
         <div class="wizard-nav">
           <button class="btn small" id="quitQuizBtn">إنهاء والخروج</button>
           <button class="btn teal solid" id="quizNextBtn" ${canProceed ? '' : 'disabled'}>${isLast ? 'إنهاء وعرض النتيجة' : 'السؤال التالي'}</button>
@@ -2149,17 +2281,25 @@ function pageBankResults(){
   const total = quiz.pool.length;
   const correct = quiz.pool.filter(q => quiz.answers[q.id] === q.correctIndex).length;
   const pctScore = total ? Math.round((correct/total)*100) : 0;
+  const isStudent = state.session && state.session.type === 'student';
   const review = quiz.pool.map((q,i) => {
     const chosen = quiz.answers[q.id];
     const isRight = chosen === q.correctIndex;
+    const saved = isStudent && isQuestionSaved(q.id);
+    const saveBtnHtml = isStudent
+      ? `<button type="button" class="btn small ${saved?'teal solid':''}" data-toggle-save="${q.id}">${saved ? '★ Saved' : '☆ Save'}</button>`
+      : '';
     return `
     <div class="review-item">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <b style="color:var(--ink); font-size:14px;">${i+1}. ${escapeHtml(q.question)}</b>
-        <span class="ans-tag ${isRight?'right':'wrong'}">${isRight ? 'صحيح' : 'خاطئ'}</span>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px;">
+        <b style="color:var(--ink); font-size:14px; direction:ltr; text-align:left;">${i+1}. ${escapeHtml(q.question)}</b>
+        <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+          <span class="ans-tag ${isRight?'right':'wrong'}">${isRight ? 'صحيح' : 'خاطئ'}</span>
+          ${saveBtnHtml}
+        </div>
       </div>
-      <div style="font-size:13.5px; color:var(--muted);">إجابتك: ${chosen!==undefined ? escapeHtml(q.options[chosen]) : 'لم تُجب'} ${!isRight ? ' — الصحيحة: ' + escapeHtml(q.options[q.correctIndex]) : ''}</div>
-      ${q.explanation ? `<div class="q-explain"><b>التفسير:</b> ${escapeHtml(q.explanation)}</div>` : ''}
+      <div style="font-size:13.5px; color:var(--muted); direction:ltr; text-align:left;">إجابتك: ${chosen!==undefined ? escapeHtml(q.options[chosen]) : 'لم تُجب'} ${!isRight ? ' — الصحيحة: ' + escapeHtml(q.options[q.correctIndex]) : ''}</div>
+      ${q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
     </div>`;
   }).join('');
 
@@ -2184,6 +2324,7 @@ function pageBank(){
   if(!state.session){
     return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>بنك الأسئلة متاح فقط للطلاب المسجّلين. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
+  if(state.session.type === 'student' && state.bankNotesView) return pageMyNotes();
   switch(quiz.step){
     case 'no-questions': return pageBankNoQuestions();
     case 'running': return pageBankRunning();
@@ -2749,13 +2890,13 @@ function questionFormFields(defaults){
     <div class="field"><label>الكورس</label><select name="courseId" id="qCourseSelect">${courseOptions}</select></div>
     <div class="field"><label>المحاضرة (اختياري)</label><select name="lectureId" id="qLectureSelect">${lectureOptionsFor(d.courseId || state.courses[0]?.id, d.lectureId)}</select></div>
     <div class="field"><label>طبيعة السؤال</label><select name="nature"><option value="past" ${d.nature==='past'||!d.nature?'selected':''}>أسئلة سنوات سابقة</option><option value="ref" ${d.nature==='ref'?'selected':''}>أسئلة مراجع</option></select></div>
-    <div class="field"><label>نص السؤال</label><textarea name="question" required placeholder="اكتب السؤال هنا">${escapeHtml(d.question||'')}</textarea></div>
-    <div class="field"><label>الخيار A</label><input type="text" name="opt0" required value="${escapeHtml(d.options ? d.options[0] : '')}"></div>
-    <div class="field"><label>الخيار B</label><input type="text" name="opt1" required value="${escapeHtml(d.options ? d.options[1] : '')}"></div>
-    <div class="field"><label>الخيار C</label><input type="text" name="opt2" required value="${escapeHtml(d.options ? d.options[2] : '')}"></div>
-    <div class="field"><label>الخيار D</label><input type="text" name="opt3" required value="${escapeHtml(d.options ? d.options[3] : '')}"></div>
+    <div class="field"><label>نص السؤال (بالإنجليزي)</label><textarea name="question" dir="ltr" style="text-align:left;" required placeholder="Write the question here">${escapeHtml(d.question||'')}</textarea></div>
+    <div class="field"><label>الخيار A</label><input type="text" name="opt0" dir="ltr" style="text-align:left;" required value="${escapeHtml(d.options ? d.options[0] : '')}"></div>
+    <div class="field"><label>الخيار B</label><input type="text" name="opt1" dir="ltr" style="text-align:left;" required value="${escapeHtml(d.options ? d.options[1] : '')}"></div>
+    <div class="field"><label>الخيار C</label><input type="text" name="opt2" dir="ltr" style="text-align:left;" required value="${escapeHtml(d.options ? d.options[2] : '')}"></div>
+    <div class="field"><label>الخيار D</label><input type="text" name="opt3" dir="ltr" style="text-align:left;" required value="${escapeHtml(d.options ? d.options[3] : '')}"></div>
     <div class="field"><label>الإجابة الصحيحة</label><select name="correctIndex">${[0,1,2,3].map(i=>`<option value="${i}" ${d.correctIndex===i?'selected':''}>${String.fromCharCode(65+i)}</option>`).join('')}</select></div>
-    <div class="field"><label>تفسير الإجابة (اختياري)</label><textarea name="explanation" placeholder="اكتب تفسيرًا يظهر للطالب مع الإجابة الصحيحة">${escapeHtml(d.explanation||'')}</textarea></div>
+    <div class="field"><label>Explanation (تفسير الإجابة، اختياري)</label><textarea name="explanation" dir="ltr" style="text-align:left;" placeholder="Write an explanation shown to the student with the correct answer">${escapeHtml(d.explanation||'')}</textarea></div>
   `;
 }
 
@@ -3080,6 +3221,11 @@ function confirmDeleteAccount(){
   });
 }
 
+/* ملاحظة: render() ما عاد يصفّر مكان السكرول تلقائيًا في كل مرة.
+   يصفّره فقط لما يكون هناك تنقّل فعلي بين صفحات مختلفة (تغيّر الـ route)،
+   حتى لا يرجّع المستخدم لأعلى الصفحة بعد كل ضغطة داخل نفس الصفحة
+   (مثل الإجابة على سؤال في بنك الأسئلة أو تعديل بيانات من نفس الصفحة). */
+let lastRenderedRoute = null;
 async function render(){
   if(!state.loaded){
     document.getElementById('app').innerHTML = `<div style="min-height:80vh; display:flex; align-items:center; justify-content:center; text-align:center; padding:20px;"><span class="loading-dot"></span> جارِ التحميل...</div>`;
@@ -3107,11 +3253,19 @@ async function render(){
       default: html = pageHome();
     }
   }
+  const isNewRoute = (route !== lastRenderedRoute);
+  const scrollBefore = window.scrollY;
   document.getElementById('app').innerHTML = html;
   renderNavState();
   bindPageEvents(route);
   translateSubtree(document.body);
-  window.scrollTo({top:0, behavior:'instant'});
+  if(isNewRoute){
+    window.scrollTo({top:0, behavior:'instant'});
+  } else {
+    /* نفس الصفحة: نحافظ على مكان السكرول الحالي بدل الرجوع لأعلى الصفحة */
+    window.scrollTo({top:scrollBefore, behavior:'instant'});
+  }
+  lastRenderedRoute = route;
 }
 
 function bindPageEvents(route){
@@ -3208,6 +3362,13 @@ function bindPageEvents(route){
         });
       });
     });
+    document.querySelectorAll('[data-watch-toggle]').forEach(cb=>{
+      cb.addEventListener('click', (e)=> e.stopPropagation());
+      cb.addEventListener('change', async ()=>{
+        await toggleLectureWatched(cb.dataset.watchToggle);
+        render();
+      });
+    });
   }
 
   if(route === 'bank'){
@@ -3235,6 +3396,17 @@ function bindPageEvents(route){
     // unified setup page
     const toManageBtn = document.getElementById('toManageBtn');
     if(toManageBtn) toManageBtn.addEventListener('click', ()=>{ state.bankAdminView = true; render(); });
+    const toMyNotesBtn = document.getElementById('toMyNotesBtn');
+    if(toMyNotesBtn) toMyNotesBtn.addEventListener('click', ()=>{ state.bankNotesView = true; render(); });
+    const backFromNotesBtn = document.getElementById('backFromNotesBtn');
+    if(backFromNotesBtn) backFromNotesBtn.addEventListener('click', ()=>{ state.bankNotesView = false; render(); });
+
+    document.querySelectorAll('[data-toggle-save]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        await toggleSaveQuestion(btn.dataset.toggleSave);
+        render();
+      });
+    });
 
     if(quiz.step === 'setup'){
       const majorSelect = document.getElementById('bankMajorSelect');
@@ -3274,9 +3446,6 @@ function bindPageEvents(route){
         const allSelected = quiz.selectedLectures === null || allIds.every(id=>quiz.selectedLectures.includes(id));
         quiz.selectedLectures = allSelected ? [] : [...allIds];
         render();
-      });
-      document.querySelectorAll('[data-count]').forEach(chip=>{
-        chip.addEventListener('click', ()=>{ quiz.count = chip.dataset.count === 'all' ? null : Number(chip.dataset.count); render(); });
       });
       const customCountInput = document.getElementById('customCountInput');
       if(customCountInput){
