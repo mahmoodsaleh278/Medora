@@ -225,6 +225,30 @@
     .course-card{ aspect-ratio:auto; min-height:260px; }
   }
 
+  .summary-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; }
+  .summary-card{ background:var(--teal-light); border:1px solid var(--border); border-radius:var(--radius); padding:20px; display:flex; flex-direction:column; gap:10px; }
+  .summary-card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .summary-card-head h4{ font-size:16px; color:var(--ink); font-weight:800; line-height:1.4; }
+  .summary-card-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .summary-card-body{ font-size:14px; color:var(--text); line-height:1.7; overflow-x:auto; }
+  .summary-card-body p{ margin:0 0 8px; }
+  .summary-card-body img{ max-width:100%; border-radius:8px; margin:6px 0; display:block; }
+  .summary-card-body table{ width:100%; border-collapse:collapse; margin:8px 0; font-size:13px; }
+  .summary-card-body table td, .summary-card-body table th{ border:1px solid var(--border); padding:6px 10px; text-align:right; }
+  .summary-card-body ul, .summary-card-body ol{ padding-inline-start:20px; margin:6px 0; }
+  @media(max-width:900px){ .summary-grid{ grid-template-columns:1fr 1fr; } }
+  @media(max-width:600px){ .summary-grid{ grid-template-columns:1fr; } }
+  body.dark .summary-card{ background:var(--card); }
+  /* محرر الملخص المنسّق: شريط أدوات + منطقة قابلة للتحرير تدعم صور وجداول */
+  .rte-toolbar{ display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:6px; border:1.5px solid var(--border); border-bottom:none; border-radius:10px 10px 0 0; background:var(--bg); }
+  .rte-btn{ display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--ink); font-size:14px; }
+  .rte-btn:hover{ background:var(--teal-light); border-color:var(--teal); color:var(--teal); }
+  .rte-editor{ min-height:160px; max-height:360px; overflow-y:auto; border:1.5px solid var(--border); border-top:none; border-radius:0 0 10px 10px; padding:12px 14px; font-family:inherit; font-size:14.5px; color:var(--text); background:var(--card); line-height:1.7; }
+  .rte-editor:focus{ outline:2px solid var(--teal); outline-offset:-2px; }
+  .rte-editor:empty:before{ content:attr(data-placeholder); color:var(--muted); }
+  .rte-editor img{ max-width:100%; border-radius:8px; margin:6px 0; }
+  .rte-editor table{ width:100%; border-collapse:collapse; margin:8px 0; }
+  .rte-editor table td, .rte-editor table th{ border:1px solid var(--border); padding:6px 10px; min-width:40px; }
   .empty-state{ text-align:center; padding:60px 20px; color:var(--muted); background:#fff; border:1.5px dashed var(--border); border-radius:var(--radius); }
   .empty-state h3{ color:var(--ink); margin-bottom:8px; font-size:18px; }
 
@@ -590,7 +614,7 @@
       <div class="footer-col">
         <h5>روابط سريعة</h5>
         <a href="#/courses">الدورات</a>
-        <a href="#/bank">بنك الأسئلة</a>
+        <a href="#/bank" id="footerBankLink">بنك الأسئلة</a>
         <a href="#/about">من نحن</a>
         <a href="#/contact">تواصل معنا</a>
         <a href="#/privacy">سياسة الخصوصية</a>
@@ -815,7 +839,7 @@ function watchDeviceLock(phone){
 
 /* ---------------- App state ---------------- */
 let state = {
-  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [],
+  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', bankAdminView: false, content: {},
 };
 
@@ -829,6 +853,9 @@ const I18N_PAIRS = [
   ['الصفحة الرئيسية','Home'], ['بنك الأسئلة متاح فقط للطلاب المسجّلين.','The question bank is only available to registered students.'],
   ['بنك الأسئلة','Question Bank'], ['من نحن','About Us'], ['تواصل معنا','Contact Us'],
   ['دوراتي','My Courses'], ['مساحة الطالب متاحة فقط للطلاب المسجّلين.','Student space is only available to registered students.'],
+  ['ملخصاتي','My Summaries'], ['إضافة ملخص','Add Summary'], ['لا توجد ملخصات بعد','No summaries yet'],
+  ['ابدأ بإضافة أول ملخص خاص بك ليبقى محفوظًا في حسابك.','Add your first summary and keep it saved in your account.'],
+  ['أضف ملخصاتك الخاصة واحتفظ بها في حسابك','Add your own summaries and keep them saved in your account'],
   ['مساحة الطالب','Student Space'], ['تسجيل الدخول','Login'], ['خروج','Logout'],
   ['تحميل التطبيق','Download App'], ['الوضع الليلي','Dark Mode'], ['فتح القائمة','Open Menu'],
   ['🛡️ أنت الآن في وضع المشرف — يمكنك إضافة أو حذف الدورات والمحاضرات والأسئلة مباشرة من الصفحات.','You are now in admin mode — you can add or delete courses, lectures, and questions directly from the pages.'],
@@ -1050,18 +1077,19 @@ function courseSections(courseId){
 }
 
 async function initData(){
-  const [courses, lectures, questions, students, messages, enrollments, savedContent] = await Promise.all([
+  const [courses, lectures, questions, students, messages, enrollments, summaries, savedContent] = await Promise.all([
     getData('courses', SEED_COURSES, true),
     getData('lectures', SEED_LECTURES, true),
     getData('questions', SEED_QUESTIONS, true),
     getData('students', [], true),
     getData('messages', [], true),
     getData('enrollments', [], true),
+    getData('summaries', [], true),
     getData('content', {}, true),
     syncSessionFromAuth(),
   ]);
   state.courses = courses.map(normalizeCourse); state.lectures = lectures.map(normalizeLecture); state.questions = questions;
-  state.students = students; state.messages = messages; state.enrollments = enrollments;
+  state.students = students; state.messages = messages; state.enrollments = enrollments; state.summaries = summaries;
   state.content = Object.assign({}, CONTENT_DEFAULTS, savedContent);
   state.loaded = true;
 }
@@ -1185,12 +1213,19 @@ function renderNavState(){
   } else {
     loginLink.classList.remove('hidden');
     myCoursesLink.classList.add('hidden');
-    bankLink.classList.remove('hidden');
+    bankLink.classList.add('hidden');
     studentSpaceLink.classList.add('hidden');
     userArea.innerHTML = '';
   }
   const lb = document.getElementById('logoutBtn');
   if(lb) lb.addEventListener('click', logout);
+
+  // إخفاء روابط بنك الأسئلة في التذييل والصفحة الرئيسية للزوار غير المسجّلين
+  const isLoggedIn = !!state.session;
+  const footerBankLinkEl = document.getElementById('footerBankLink');
+  if(footerBankLinkEl) footerBankLinkEl.classList.toggle('hidden', !isLoggedIn);
+  const heroBankLinkEl = document.getElementById('heroBankLink');
+  if(heroBankLinkEl) heroBankLinkEl.classList.toggle('hidden', !isLoggedIn);
 
   const footerDesc = document.getElementById('footerDescText');
   if(footerDesc) footerDesc.innerHTML = `${escapeHtml(cval('footer_desc'))}${editBtn('footer_desc')}`;
@@ -1220,7 +1255,7 @@ const ICONS = { book:'📘', quiz:'📝', users:'🎓', trash:'🗑️', plus:'�
   whatsapp:'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.9c0 1.77.46 3.5 1.34 5.02L2.05 22l5.2-1.36a9.94 9.94 0 0 0 4.78 1.22h.01c5.46 0 9.9-4.45 9.9-9.9 0-2.65-1.03-5.13-2.9-7C17.16 3.03 14.68 2 12.04 2m0 1.67c2.2 0 4.26.86 5.82 2.42a8.18 8.18 0 0 1 2.41 5.81c0 4.53-3.7 8.23-8.24 8.23a8.2 8.2 0 0 1-4.18-1.15l-.3-.17-3.09.81.82-3-.2-.32a8.15 8.15 0 0 1-1.25-4.4c0-4.53 3.7-8.23 8.21-8.23m-4.5 4.73c-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02s.87 2.34 1 2.5c.12.17 1.7 2.69 4.19 3.7 2.32.9 2.32.6 2.74.56.42-.04 1.36-.55 1.55-1.09.19-.54.19-1 .13-1.09-.06-.1-.22-.15-.46-.27-.24-.12-1.4-.7-1.62-.77-.22-.08-.37-.12-.53.12s-.62.77-.75.93c-.14.15-.28.17-.52.05-.24-.12-1.01-.37-1.92-1.19-.71-.63-1.19-1.42-1.33-1.66-.14-.24-.02-.36.1-.48.11-.11.24-.28.37-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.53-1.3-.73-1.78-.19-.46-.39-.4-.53-.41z"/></svg>',
   facebook:'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.5 1.49-3.89 3.77-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.44 2.91h-2.34V22c4.78-.76 8.44-4.92 8.44-9.94z"/></svg>',
   youtube:'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M23.5 6.2s-.23-1.64-.94-2.36c-.9-.94-1.9-.95-2.36-1C16.9 2.5 12 2.5 12 2.5h-.01s-4.9 0-8.19.34c-.46.05-1.46.06-2.36 1C.73 4.56.5 6.2.5 6.2S.25 8.14.25 10.07v1.75c0 1.93.25 3.87.25 3.87s.23 1.64.94 2.36c.9.94 2.08.91 2.6 1.01 1.89.18 8.06.35 8.06.35s4.9-.01 8.19-.35c.46-.05 1.46-.07 2.36-1 .71-.72.94-2.36.94-2.36s.25-1.93.25-3.87v-1.75c0-1.93-.25-3.87-.25-3.87zM9.75 14.9V7.98l6.5 3.46-6.5 3.46z"/></svg>',
-  lock:'🔒', gear:'⚙️', camera:'📷' };
+  lock:'🔒', gear:'⚙️', camera:'📷', note:'🗒️' };
 
 const SOCIAL_LINKS = [
   { key:'whatsapp', label:'واتساب', href:'https://wa.me/962790000000' },
@@ -1352,7 +1387,7 @@ function pageHome(){
         <p class="lead">${escapeHtml(cval('hero_lead'))}${editBtn('hero_lead')}</p>
         <div class="hero-actions">
           <a href="#/courses" class="btn solid">تصفّح الدورات</a>
-          <a href="#/bank" class="btn">بنك الأسئلة</a>
+          <a href="#/bank" class="btn" id="heroBankLink">بنك الأسئلة</a>
         </div>
       </div>
       <div class="hero-card"><h3>${escapeHtml(cval('hero_card_title'))}${editBtn('hero_card_title')}</h3>${uniRows}</div>
@@ -1513,6 +1548,11 @@ function pageStudentSpace(){
           <b>بنك الأسئلة</b>
           <span>ابدأ اختبارًا من بنك الأسئلة حسب دوراتك</span>
         </a>
+        <a href="#/my-summaries" class="option-card" style="text-decoration:none; display:block;">
+          <div style="font-size:30px; margin-bottom:10px;">${ICONS.note}</div>
+          <b>ملخصاتي</b>
+          <span>أضف ملخصاتك الخاصة واحتفظ بها في حسابك</span>
+        </a>
       </div>
     </div>
   </section>
@@ -1635,6 +1675,41 @@ function pageMyCourses(){
     <div class="container">
       <div class="toolbar"><h2>دوراتي</h2></div>
       ${courses.length ? `<div class="course-canvas"><div class="course-grid">${cards}</div></div>` : `<div class="empty-state"><h3>لا توجد كورسات مفعّلة بعد</h3><p>تواصل مع الإدارة لتفعيل الدورات التي تحتاجها.</p></div>`}
+    </div>
+  </section>
+  `;
+}
+
+/* =========================================================
+   PAGE: MY SUMMARIES (بطاقات ملخصات يضيفها الطالب بنفسه وتُحفظ في حسابه)
+   ========================================================= */
+function pageMySummaries(){
+  if(!state.session || state.session.type !== 'student'){
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لإضافة ملخصاتهم الخاصة. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+  }
+  const phone = state.session.phone;
+  const mySummaries = state.summaries.filter(s=>s.phone===phone).sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
+  const cards = mySummaries.map(s => `
+    <div class="summary-card">
+      <div class="summary-card-head">
+        <h4>${escapeHtml(s.title)}</h4>
+        <div class="summary-card-actions">
+          <button type="button" class="content-edit-btn" data-edit-summary="${s.id}" title="تعديل">${ICONS.edit}</button>
+          <button type="button" class="content-edit-btn" data-del-summary="${s.id}" title="حذف" style="border-color:var(--danger); background:transparent; color:var(--danger);">${ICONS.trash}</button>
+        </div>
+      </div>
+      <div class="summary-card-body">${s.content}</div>
+    </div>
+  `).join('');
+
+  return `
+  <section class="section">
+    <div class="container">
+      <div class="toolbar">
+        <h2>${ICONS.note} ملخصاتي</h2>
+        <div class="toolbar-actions"><button type="button" class="btn teal solid small" id="addSummaryBtn">${ICONS.plus} إضافة ملخص</button></div>
+      </div>
+      ${mySummaries.length ? `<div class="summary-grid">${cards}</div>` : `<div class="empty-state"><h3>لا توجد ملخصات بعد</h3><p>ابدأ بإضافة أول ملخص خاص بك ليبقى محفوظًا في حسابك.</p></div>`}
     </div>
   </section>
   `;
@@ -2742,6 +2817,67 @@ function modalEditQuestion(questionId){
   });
 }
 
+/* =========================================================
+   ملخصات الطالب: إضافة/تعديل بطاقة ملخص خاصة به وحفظها في حسابه
+   ========================================================= */
+function modalAddSummary(){
+  openModal(`
+    <h3>${ICONS.note} إضافة ملخص جديد</h3>
+    <form id="summaryForm">
+      <div class="field"><label>عنوان الملخص</label><input type="text" name="title" required maxlength="80" placeholder="مثال: ملخص الدرس الأول"></div>
+      <div class="field"><label>محتوى الملخص</label>${rteToolbarHtml('summaryEditor')}<div class="rte-editor" id="summaryEditor" contenteditable="true" data-placeholder="اكتب ملخصك هنا... يمكنك إضافة صور وجداول من شريط الأدوات"></div></div>
+      <div id="summaryMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ الملخص</button></div>
+    </form>`);
+  wireRteToolbar(document.getElementById('summaryForm'));
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('summaryForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const title = fd.get('title').trim();
+    const editorEl = document.getElementById('summaryEditor');
+    const content = sanitizeSummaryHtml(editorEl.innerHTML);
+    const hasText = editorEl.textContent.trim().length > 0;
+    const hasMedia = /<img|<table/i.test(content);
+    if(!title || !(hasText || hasMedia)){
+      document.getElementById('summaryMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان والمحتوى.</div>`; return;
+    }
+    state.summaries.push({ id:'sm'+Date.now(), phone: state.session.phone, title, content, createdAt: Date.now() });
+    await setData('summaries', state.summaries, true);
+    closeModal(); render();
+  });
+}
+
+function modalEditSummary(summaryId){
+  const s = state.summaries.find(x=>x.id===summaryId);
+  if(!s) return;
+  openModal(`
+    <h3>${ICONS.edit} تعديل الملخص</h3>
+    <form id="summaryEditForm">
+      <div class="field"><label>عنوان الملخص</label><input type="text" name="title" required maxlength="80" value="${escapeHtml(s.title)}"></div>
+      <div class="field"><label>محتوى الملخص</label>${rteToolbarHtml('summaryEditorEdit')}<div class="rte-editor" id="summaryEditorEdit" contenteditable="true">${s.content}</div></div>
+      <div id="summaryMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
+    </form>`);
+  wireRteToolbar(document.getElementById('summaryEditForm'));
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('summaryEditForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const title = fd.get('title').trim();
+    const editorEl = document.getElementById('summaryEditorEdit');
+    const content = sanitizeSummaryHtml(editorEl.innerHTML);
+    const hasText = editorEl.textContent.trim().length > 0;
+    const hasMedia = /<img|<table/i.test(content);
+    if(!title || !(hasText || hasMedia)){
+      document.getElementById('summaryMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان والمحتوى.</div>`; return;
+    }
+    s.title = title; s.content = content;
+    await setData('summaries', state.summaries, true);
+    closeModal(); render();
+  });
+}
+
 function confirmDelete(message, onConfirm){
   openModal(`
     <h3>تأكيد الحذف</h3>
@@ -2754,6 +2890,112 @@ function confirmDelete(message, onConfirm){
 /* =========================================================
    Main render + event binding
    ========================================================= */
+/* =========================================================
+   محرر نصوص مبسّط (Rich Text) لصفحة "ملخصاتي": يدعم عريض/مائل/قوائم
+   إضافة إلى إدراج صور (تُحوَّل base64) وجداول داخل محتوى الملخص
+   ========================================================= */
+function rteToolbarHtml(editorId){
+  return `
+  <div class="rte-toolbar" data-target="${editorId}">
+    <button type="button" class="rte-btn" data-cmd="bold" title="عريض"><b>B</b></button>
+    <button type="button" class="rte-btn" data-cmd="italic" title="مائل"><i>I</i></button>
+    <button type="button" class="rte-btn" data-cmd="underline" title="تسطير"><u>U</u></button>
+    <button type="button" class="rte-btn" data-cmd="insertUnorderedList" title="قائمة نقطية">•≡</button>
+    <button type="button" class="rte-btn rte-img-btn" title="إضافة صورة">🖼️</button>
+    <button type="button" class="rte-btn rte-table-btn" title="إضافة جدول">▦</button>
+    <input type="file" accept="image/*" class="rte-img-input" style="display:none;">
+  </div>`;
+}
+
+function wireRteToolbar(scopeEl){
+  scopeEl.querySelectorAll('.rte-toolbar').forEach(toolbar=>{
+    const editor = document.getElementById(toolbar.dataset.target);
+    if(!editor) return;
+    let savedRange = null;
+    const saveSelection = ()=>{
+      const sel = window.getSelection();
+      if(sel && sel.rangeCount && editor.contains(sel.anchorNode)) savedRange = sel.getRangeAt(0).cloneRange();
+    };
+    const restoreSelection = ()=>{
+      if(!savedRange) return;
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
+    };
+    editor.addEventListener('keyup', saveSelection);
+    editor.addEventListener('mouseup', saveSelection);
+    toolbar.querySelectorAll('.rte-btn[data-cmd]').forEach(btn=>{
+      btn.addEventListener('mousedown', (e)=> e.preventDefault());
+      btn.addEventListener('click', ()=>{
+        editor.focus(); restoreSelection();
+        document.execCommand(btn.dataset.cmd, false, null);
+        saveSelection();
+      });
+    });
+    const imgBtn = toolbar.querySelector('.rte-img-btn');
+    const imgInput = toolbar.querySelector('.rte-img-input');
+    if(imgBtn && imgInput){
+      imgBtn.addEventListener('mousedown', (e)=>{ e.preventDefault(); saveSelection(); });
+      imgBtn.addEventListener('click', ()=> imgInput.click());
+      imgInput.addEventListener('change', async ()=>{
+        const file = imgInput.files[0];
+        imgInput.value = '';
+        if(!file) return;
+        try{
+          const dataUrl = await resizeImageFile(file, 700);
+          editor.focus(); restoreSelection();
+          document.execCommand('insertHTML', false, `<img src="${dataUrl}">`);
+          saveSelection();
+        }catch(err){ /* تجاهل الصورة إن تعذّرت قراءتها */ }
+      });
+    }
+    const tableBtn = toolbar.querySelector('.rte-table-btn');
+    if(tableBtn){
+      tableBtn.addEventListener('mousedown', (e)=>{ e.preventDefault(); saveSelection(); });
+      tableBtn.addEventListener('click', ()=>{
+        editor.focus(); restoreSelection();
+        const tableHtml = `<table><tbody>
+          <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+          <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        </tbody></table><p><br></p>`;
+        document.execCommand('insertHTML', false, tableHtml);
+        saveSelection();
+      });
+    }
+  });
+}
+
+/* ينظّف الـ HTML القادم من المحرر قبل حفظه: يسمح فقط بوسوم آمنة (نص، صور،
+   جداول، قوائم) ويحذف أي وسوم/خصائص أخرى (سكربتات، معالجات أحداث، روابط غريبة) */
+function sanitizeSummaryHtml(html){
+  const ALLOWED = new Set(['P','DIV','BR','B','STRONG','I','EM','U','UL','OL','LI','IMG','TABLE','THEAD','TBODY','TR','TD','TH','SPAN']);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const clean = (node)=>{
+    Array.from(node.childNodes).forEach(child=>{
+      if(child.nodeType === 1){
+        if(!ALLOWED.has(child.tagName)){
+          while(child.firstChild) node.insertBefore(child.firstChild, child);
+          node.removeChild(child);
+          return;
+        }
+        Array.from(child.attributes).forEach(attr=>{
+          const name = attr.name.toLowerCase();
+          if(name === 'src' && child.tagName === 'IMG'){
+            if(!/^data:image\//i.test(attr.value)) child.removeAttribute(attr.name);
+          } else {
+            child.removeAttribute(attr.name);
+          }
+        });
+        clean(child);
+      } else if(child.nodeType !== 3){
+        node.removeChild(child);
+      }
+    });
+  };
+  clean(doc.body);
+  return doc.body.innerHTML.trim();
+}
+
 /* يصغّر صورة الملف المرفوع إلى صورة مربعة تقريبًا (JPEG) قبل تخزينها كنص base64،
    حتى لا يكون حجم بيانات الطالب كبيرًا جدًا في قاعدة البيانات. */
 function resizeImageFile(file, maxSize=400){
@@ -2849,6 +3091,7 @@ async function render(){
       case 'home': html = pageHome(); break;
       case 'courses': html = pageCourses(); break;
       case 'my-courses': html = pageMyCourses(); break;
+      case 'my-summaries': html = pageMySummaries(); break;
       case 'student-space': html = pageStudentSpace(); break;
       case 'student-settings': html = pageStudentSettings(); break;
       case 'bank': html = pageBank(); break;
@@ -2909,6 +3152,23 @@ function bindPageEvents(route){
           await setData('courses', state.courses, true);
           await setData('lectures', state.lectures, true);
           await setData('questions', state.questions, true);
+        });
+      });
+    });
+  }
+
+  if(route === 'my-summaries'){
+    const addSummaryBtn = document.getElementById('addSummaryBtn');
+    if(addSummaryBtn) addSummaryBtn.addEventListener('click', modalAddSummary);
+    document.querySelectorAll('[data-edit-summary]').forEach(btn=>{
+      btn.addEventListener('click', ()=> modalEditSummary(btn.dataset.editSummary));
+    });
+    document.querySelectorAll('[data-del-summary]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.delSummary;
+        confirmDelete('سيتم حذف هذا الملخص نهائيًا. هل أنت متأكد؟', async ()=>{
+          state.summaries = state.summaries.filter(s=>s.id!==id);
+          await setData('summaries', state.summaries, true);
         });
       });
     });
