@@ -54,6 +54,37 @@
   .icon-toggle:hover{ background:var(--teal-light); border-color:var(--teal); }
   .content-edit-btn{ display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; border:1px dashed var(--teal); background:var(--teal-light); color:var(--teal); font-size:12px; margin-inline-start:8px; vertical-align:middle; padding:0; }
   .content-edit-btn:hover{ background:var(--teal); color:#fff; }
+  /* ===== هلامة مائية متحركة (اسم الطالب + رقم الهاتف): وحدة بالمنتصف واثنتان بالأطراف + حماية بنك الأسئلة من النسخ ===== */
+  body.copy-protected .wizard-card,
+  body.copy-protected .q-card{
+    position:relative; overflow:hidden;
+  }
+  .wm-wrap{ position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+  .wm-item{
+    position:absolute; white-space:nowrap; direction:ltr;
+    font-weight:800; color:rgba(15,39,69,0.028);
+  }
+  body.dark .wm-item{ color:rgba(255,255,255,0.032); }
+  .wm-item.wm-center{ top:50%; left:50%; font-size:26px; animation:wmDriftCenter 24s ease-in-out infinite; }
+  .wm-item.wm-top{ top:8%; left:10%; font-size:16px; animation:wmDriftCorner 20s ease-in-out infinite; }
+  .wm-item.wm-bottom{ bottom:8%; right:10%; font-size:16px; animation:wmDriftCorner 26s ease-in-out infinite reverse; }
+  @keyframes wmDriftCenter{
+    0%{ transform:translate(-50%,-50%) rotate(-24deg); }
+    25%{ transform:translate(calc(-50% + 18px),calc(-50% + 10px)) rotate(-24deg); }
+    50%{ transform:translate(calc(-50% - 8px),calc(-50% + 20px)) rotate(-24deg); }
+    75%{ transform:translate(calc(-50% - 18px),calc(-50% - 10px)) rotate(-24deg); }
+    100%{ transform:translate(-50%,-50%) rotate(-24deg); }
+  }
+  @keyframes wmDriftCorner{
+    0%{ transform:rotate(-24deg) translate(0,0); }
+    25%{ transform:rotate(-24deg) translate(10px,6px); }
+    50%{ transform:rotate(-24deg) translate(-4px,12px); }
+    75%{ transform:rotate(-24deg) translate(-10px,-6px); }
+    100%{ transform:rotate(-24deg) translate(0,0); }
+  }
+  body.copy-protected #app{ user-select:none !important; -webkit-user-select:none !important; -moz-user-select:none !important; }
+  body.copy-protected #app img{ pointer-events:none; -webkit-user-drag:none; }
+
   *{box-sizing:border-box; margin:0; padding:0;}
   html{scroll-behavior:smooth;}
   body{
@@ -266,12 +297,18 @@
   .rte-toolbar{ display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:6px; border:1.5px solid var(--border); border-bottom:none; border-radius:10px 10px 0 0; background:var(--bg); }
   .rte-btn{ display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--ink); font-size:14px; }
   .rte-btn:hover{ background:var(--teal-light); border-color:var(--teal); color:var(--teal); }
+  .rte-select{ height:32px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--ink); font-size:12.5px; padding:0 4px; cursor:pointer; }
+  .rte-color-input{ width:32px; height:32px; padding:2px; border:1px solid var(--border); border-radius:8px; cursor:pointer; background:var(--card); }
   .rte-editor{ min-height:160px; max-height:360px; overflow-y:auto; border:1.5px solid var(--border); border-top:none; border-radius:0 0 10px 10px; padding:12px 14px; font-family:inherit; font-size:14.5px; color:var(--text); background:var(--card); line-height:1.7; }
   .rte-editor:focus{ outline:2px solid var(--teal); outline-offset:-2px; }
   .rte-editor:empty:before{ content:attr(data-placeholder); color:var(--muted); }
   .rte-editor img{ max-width:100%; border-radius:8px; margin:6px 0; }
   .rte-editor table{ width:100%; border-collapse:collapse; margin:8px 0; }
   .rte-editor table td, .rte-editor table th{ border:1px solid var(--border); padding:6px 10px; min-width:40px; }
+  /* عرض المحتوى المنسّق (صور/جداول/تنسيق خط) داخل نص السؤال والتفسير في كل أماكن عرض الأسئلة */
+  .q-text img, .q-explain img, .quiz-q-text img{ max-width:100%; border-radius:8px; margin:6px 0; display:block; }
+  .q-text table, .q-explain table, .quiz-q-text table{ width:100%; border-collapse:collapse; margin:8px 0; }
+  .q-text table td, .q-text table th, .q-explain table td, .q-explain table th, .quiz-q-text table td, .quiz-q-text table th{ border:1px solid var(--border); padding:6px 10px; min-width:40px; }
   .empty-state{ text-align:center; padding:60px 20px; color:var(--muted); background:#fff; border:1.5px dashed var(--border); border-radius:var(--radius); }
   .empty-state h3{ color:var(--ink); margin-bottom:8px; font-size:18px; }
 
@@ -437,6 +474,9 @@
 
   .modal-overlay{ position:fixed; inset:0; background:rgba(15,39,69,0.5); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
   .modal-box{ background:#fff; border-radius:var(--radius); padding:30px; width:100%; max-width:520px; max-height:88vh; overflow-y:auto; }
+  .modal-box.wide{ max-width:760px; }
+  .import-q-card .field{ margin-bottom:10px; }
+  .import-q-card textarea{ min-height:60px; }
   .modal-box h3{ color:var(--ink); font-size:20px; font-weight:800; margin-bottom:18px; }
   .modal-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
 
@@ -522,11 +562,51 @@
   .link-btn{ background:none; border:none; color:var(--teal); font-size:12.5px; font-weight:700; padding:0; text-decoration:underline; }
   .q-explain{ margin-top:12px; background:var(--teal-light); border-right:3px solid var(--teal); border-radius:8px; padding:12px 14px; font-size:13.5px; color:var(--navy-2); }
   .q-explain b{ color:var(--teal); }
+  .review-item .ans-tag.review{ background:#eef2f7; color:var(--navy-2); }
+
+  /* ---- نمط السؤال: خيارات (radio) في نموذج الإضافة/التعديل ---- */
+  .opt-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .opt-row input[type="radio"]{ width:18px; height:18px; accent-color:var(--good); flex-shrink:0; }
+  .opt-row .opt-letter{ font-weight:800; color:var(--navy-2); flex-shrink:0; width:16px; }
+  .opt-row input[type="text"]{ flex:1; min-width:0; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:13.5px; color:var(--text); background:#fbfdfe; direction:ltr; text-align:left; }
+  .opt-row input[type="text"]:focus{ outline:none; border-color:var(--teal); background:#fff; }
+
+  /* ---- نمط السؤال: توصيل (matching) ---- */
+  .match-pair-row .match-left{ flex:0 0 40%; }
+  .match-pair-row .match-right{ flex:1; min-width:0; }
+  .match-pair-arrow{ flex-shrink:0; color:var(--muted); font-weight:700; }
+  .match-answer-list{ display:flex; flex-direction:column; gap:10px; margin-bottom:22px; }
+  .match-answer-row{ display:flex; align-items:center; gap:10px; padding:12px 14px; border:1.5px solid var(--border); border-radius:10px; }
+  .match-answer-row select{ flex:1; min-width:0; padding:9px 10px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; direction:ltr; background:#fff; color:var(--text); }
+  .match-answer-row.correct{ border-color:var(--good); background:var(--good-light); }
+  .match-answer-row.wrong{ border-color:var(--danger); background:#fdeceb; }
+
+  /* ---- نمط السؤال: كتابي (written) ---- */
+  .written-answer-box{ margin-bottom:14px; }
+  .written-answer-box textarea{ width:100%; min-height:120px; padding:12px 14px; border:1.5px solid var(--border); border-radius:10px; font-family:inherit; font-size:14px; color:var(--text); direction:ltr; text-align:left; background:#fbfdfe; resize:vertical; }
+  .written-answer-box textarea:focus{ outline:none; border-color:var(--teal); background:#fff; }
+
+  .q-type-tag{ display:inline-block; font-size:11.5px; font-weight:800; padding:3px 10px; border-radius:999px; margin-bottom:10px; margin-inline-end:6px; background:#eef2f7; color:var(--navy-2); }
   .btn.edit{ border-color:var(--teal-2); color:var(--teal-2); }
   .btn.edit:hover{ background:var(--teal-2); color:#fff; }
 
   .quiz-progress-bar{ height:8px; background:var(--border); border-radius:999px; overflow:hidden; margin-bottom:22px; }
   .quiz-progress-bar div{ height:100%; background:linear-gradient(90deg, var(--teal), var(--navy)); border-radius:999px; transition:.3s; }
+
+  /* ---------------- Admin analytics dashboard ---------------- */
+  .analytics-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:18px; margin-bottom:30px; }
+  .analytics-kpi{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; text-align:center; }
+  .analytics-kpi b{ display:block; font-size:26px; color:var(--ink); font-weight:800; }
+  .analytics-kpi span{ font-size:12.5px; color:var(--muted); font-weight:700; }
+  .analytics-cols{ display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px; }
+  .analytics-card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:22px; }
+  .analytics-card h3{ font-size:15.5px; color:var(--ink); font-weight:800; margin-bottom:16px; }
+  .analytics-row{ margin-bottom:12px; }
+  .analytics-row-head{ display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:var(--muted); margin-bottom:6px; }
+  .analytics-row-head b{ color:var(--ink); }
+  .analytics-bar{ height:9px; background:var(--border); border-radius:999px; overflow:hidden; }
+  .analytics-bar div{ height:100%; background:linear-gradient(90deg, var(--teal), var(--navy)); border-radius:999px; }
+  @media (max-width: 860px){ .analytics-grid{ grid-template-columns:repeat(2,1fr); } .analytics-cols{ grid-template-columns:1fr; } }
   .quiz-topline{ display:flex; justify-content:space-between; align-items:center; font-size:13.5px; color:var(--muted); margin-bottom:8px; font-weight:700; }
   .quiz-mode-badge{ background:var(--teal-light); color:var(--teal); padding:3px 10px; border-radius:999px; font-size:12px; font-weight:800; }
   .quiz-q-text{ font-size:18px; font-weight:800; color:var(--ink); margin-bottom:22px; line-height:1.6; }
@@ -620,6 +700,7 @@
       <a href="#/contact" data-route="contact">تواصل معنا</a>
       <a href="#/my-courses" data-route="my-courses" id="navMyCoursesLink" class="hidden">دوراتي</a>
       <a href="#/student-space" data-route="student-space" id="navStudentSpaceLink" class="hidden">مساحة الطالب</a>
+      <a href="#/admin-analytics" data-route="admin-analytics" id="navAnalyticsLink" class="hidden">📊 التحليلات</a>
       <a href="#/login" data-route="login" id="navLoginLink">تسجيل الدخول</a>
     </nav>
     <div class="nav-actions">
@@ -1273,8 +1354,8 @@ function courseSubscribeActionHtml(c, isAdmin){
 }
 
 /* ---------------- Quiz wizard state ---------------- */
-let quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{} };
-function resetQuiz(){ quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{} }; }
+let quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{}, revealedWritten:{} };
+function resetQuiz(){ quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{}, revealedWritten:{} }; }
 
 /* ---------------- Router ---------------- */
 function currentRoute(){ return location.hash.replace('#/', '') || 'home'; }
@@ -1294,12 +1375,14 @@ function renderNavState(){
   const myCoursesLink = document.getElementById('navMyCoursesLink');
   const bankLink = document.getElementById('navBankLink');
   const studentSpaceLink = document.getElementById('navStudentSpaceLink');
+  const analyticsLink = document.getElementById('navAnalyticsLink');
 
   if(state.session && state.session.type === 'student'){
     loginLink.classList.add('hidden');
     myCoursesLink.classList.add('hidden');
     bankLink.classList.add('hidden');
     studentSpaceLink.classList.remove('hidden');
+    analyticsLink.classList.add('hidden');
     const uniSuffix = state.session.university ? ` — ${state.session.university}` : '';
     const avatarImg = state.session.avatar ? `<img src="${state.session.avatar}" class="user-pill-avatar" alt="">` : '👋';
     userArea.innerHTML = `<span class="user-pill">${avatarImg} <span>${escapeHtml(state.session.name + uniSuffix)}</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
@@ -1308,12 +1391,14 @@ function renderNavState(){
     myCoursesLink.classList.add('hidden');
     bankLink.classList.remove('hidden');
     studentSpaceLink.classList.add('hidden');
+    analyticsLink.classList.remove('hidden');
     userArea.innerHTML = `<span class="user-pill"><span>🛡️ ${escapeHtml(state.session.name)}</span> <span class="admin-tag">مشرف</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
   } else {
     loginLink.classList.remove('hidden');
     myCoursesLink.classList.add('hidden');
     bankLink.classList.add('hidden');
     studentSpaceLink.classList.add('hidden');
+    analyticsLink.classList.add('hidden');
     userArea.innerHTML = '';
   }
   const lb = document.getElementById('logoutBtn');
@@ -1335,6 +1420,7 @@ function renderNavState(){
   if(state.session && state.session.type === 'admin'){
     bannerWrap.innerHTML = `<div class="admin-banner">
         <span>🛡️ أنت الآن في وضع المشرف — يمكنك إضافة أو حذف الدورات والمحاضرات والأسئلة مباشرة من الصفحات.</span>
+        <a href="#/admin-analytics" class="btn small" style="border-color:#fff;color:#fff;">📊 التحليلات</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
       </div>`;
@@ -1350,6 +1436,13 @@ async function logout(){
 }
 
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str ?? ''; return d.innerHTML; }
+/* يعرض محتوى نص السؤال/التفسير: إن كان يحوي وسوم HTML فعليًا (من المحرر الغني، ومُطهَّر
+   مسبقًا وقت الحفظ عبر sanitizeSummaryHtml) يُعرض كما هو، وإلا (نص قديم من قبل دعم
+   المحرر الغني) يُعامل كنص عادي ويُهرَّب لمنع أي أحرف خاصة من كسر الصفحة */
+function renderRichContent(str){
+  const val = str ?? '';
+  return /<[a-z][\s\S]*>/i.test(val) ? val : escapeHtml(val);
+}
 function shuffleArr(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
 const ICONS = { book:'📘', quiz:'📝', users:'🎓', trash:'🗑️', plus:'➕', edit:'✏️', shield:'🛡️', play:'▶️', download:'⬇️', mail:'✉️', phone:'📞', pin:'📍',
@@ -2158,6 +2251,32 @@ function pageCourseDetail(courseId){
    ========================================================= */
 function natureLabel(n){ return n === 'ref' ? 'أسئلة مراجع' : 'أسئلة سنوات سابقة'; }
 
+/* واجهة توليد عشوائي مستقر (نفس السؤال يعطي نفس الترتيب دائمًا)، تُستخدم لخلط خيارات
+   الطرف الأيمن في سؤال التوصيل بحيث ما تكون بنفس ترتيب اليسار */
+function shuffledIndices(n, seed){
+  const arr = Array.from({length:n}, (_,i)=>i);
+  let s = 0; for(const ch of String(seed||'')) s = (s*31 + ch.charCodeAt(0)) % 233280;
+  for(let i=arr.length-1;i>0;i--){
+    s = (s*9301+49297) % 233280;
+    const j = Math.floor((s/233280)*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+/* عرض محتوى السؤال (نص فقط، بدون تفاعل) حسب نمطه — تُستخدم في بطاقة إدارة بنك
+   الأسئلة و My Notes، حيث الإجابة الصحيحة تظهر دائمًا */
+function questionContentHtml(q){
+  const type = q.type || 'mcq';
+  if(type === 'written'){
+    return `<div class="q-type-tag">✍️ سؤال كتابي</div>${q.modelAnswer ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Model Answer:</b> ${escapeHtml(q.modelAnswer)}</div>` : `<p class="hint" style="margin:0;">بدون نموذج إجابة محفوظ.</p>`}`;
+  }
+  if(type === 'matching'){
+    const rows = (q.pairs||[]).map((p,i)=>`<div class="q-opt" style="display:flex; justify-content:space-between; gap:10px;"><span><b>${i+1}.</b> ${escapeHtml(p.left)}</span><span>↔ ${escapeHtml(p.right)}</span></div>`).join('');
+    return `<div class="q-type-tag">🔗 سؤال توصيل</div><div class="q-options" dir="ltr" style="text-align:left; grid-template-columns:1fr;">${rows}</div>`;
+  }
+  return `<div class="q-options" dir="ltr" style="text-align:left;">${(q.options||[]).map((opt,i)=>`<div class="q-opt ${i===q.correctIndex?'correct':''}"><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</div>`).join('')}</div>`;
+}
 
 function pageBankManage(){
   const groups = state.courses.map(course => {
@@ -2168,11 +2287,9 @@ function pageBankManage(){
       <div class="q-card">
         <span class="q-tag ${q.nature==='ref'?'ref':'past'}">${natureLabel(q.nature)}</span>
         ${lec ? `<span class="q-tag" style="background:var(--teal-light); color:var(--teal);">${escapeHtml(lec.title)}</span>` : ''}
-        <div class="q-text" dir="ltr" style="text-align:left;">${escapeHtml(q.question)}</div>
-        <div class="q-options" dir="ltr" style="text-align:left;">
-          ${q.options.map((opt,i)=>`<div class="q-opt ${i===q.correctIndex?'correct':''}"><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</div>`).join('')}
-        </div>
-        ${q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
+        <div class="q-text" dir="ltr" style="text-align:left;">${renderRichContent(q.question)}</div>
+        ${questionContentHtml(q)}
+        ${q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${renderRichContent(q.explanation)}</div>` : ''}
         <div class="q-card-foot"><button class="btn edit small" data-edit-question="${q.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-question="${q.id}">${ICONS.trash} حذف السؤال</button></div>
       </div>
     `;
@@ -2187,6 +2304,7 @@ function pageBankManage(){
         <h2>إدارة بنك الأسئلة</h2>
         <div class="toolbar-actions">
           <button class="btn small" id="toExamModeBtn">↩ الانتقال لواجهة الاختبار</button>
+          <button class="btn small" id="importQuestionsBtn">📄 استيراد من ملف (PDF/Word)</button>
           <button class="btn teal solid" id="addQuestionBtn">${ICONS.plus} إضافة سؤال جديد</button>
         </div>
       </div>
@@ -2388,11 +2506,9 @@ function pageMyNotes(){
         ${course ? `<span class="q-tag" style="background:var(--teal-light); color:var(--teal);">${escapeHtml(course.title)}</span>` : '<span></span>'}
         <button type="button" class="btn danger small" data-toggle-save="${q.id}">${ICONS.trash} Remove</button>
       </div>
-      <div class="q-text" dir="ltr" style="text-align:left;">${escapeHtml(q.question)}</div>
-      <div class="q-options" dir="ltr" style="text-align:left;">
-        ${q.options.map((opt,i)=>`<div class="q-opt ${i===q.correctIndex?'correct':''}"><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</div>`).join('')}
-      </div>
-      ${q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
+      <div class="q-text" dir="ltr" style="text-align:left;">${renderRichContent(q.question)}</div>
+      ${questionContentHtml(q)}
+      ${q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${renderRichContent(q.explanation)}</div>` : ''}
     </div>`;
   }).join('');
 
@@ -2418,27 +2534,65 @@ function pageBankNoQuestions(){
   </div></div></section>`;
 }
 
+/* هل الطالب أجاب على هذا السؤال (بأي نمط كان)؟ تُستخدم لتفعيل زر "التالي" */
+function isQuestionAnswered(q){
+  const type = q.type || 'mcq';
+  const a = quiz.answers[q.id];
+  if(type === 'written') return typeof a === 'string' && a.trim().length > 0;
+  if(type === 'matching') return !!a && (q.pairs||[]).length>0 && (q.pairs||[]).every((_,i)=> a[i] !== undefined);
+  return a !== undefined;
+}
+
 function pageBankRunning(){
   const q = quiz.pool[quiz.idx];
   const total = quiz.pool.length;
+  const type = q.type || 'mcq';
   const answered = quiz.answers[q.id];
-  const revealed = quiz.mode === 'study' && answered !== undefined;
+  const canProceed = isQuestionAnswered(q);
   const pct = Math.round(((quiz.idx) / total) * 100);
 
-  const optionsHtml = q.options.map((opt, i) => {
-    let cls = 'q-opt clickable';
-    if(revealed){
-      cls = 'q-opt';
-      if(i === q.correctIndex) cls += ' correct';
-      else if(i === answered) cls += ' wrong';
-    } else if(answered === i){
-      cls += ' correct';
-    }
-    return `<button class="${cls}" data-answer="${i}" dir="ltr" style="text-align:left;" ${revealed ? 'disabled' : ''}><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</button>`;
-  }).join('');
+  let bodyHtml = '';
+  let revealed = false;
+
+  if(type === 'mcq'){
+    revealed = quiz.mode === 'study' && answered !== undefined;
+    const optionsHtml = (q.options||[]).map((opt, i) => {
+      let cls = 'q-opt clickable';
+      if(revealed){
+        cls = 'q-opt';
+        if(i === q.correctIndex) cls += ' correct';
+        else if(i === answered) cls += ' wrong';
+      } else if(answered === i){
+        cls += ' correct';
+      }
+      return `<button class="${cls}" data-answer="${i}" dir="ltr" style="text-align:left;" ${revealed ? 'disabled' : ''}><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</button>`;
+    }).join('');
+    bodyHtml = `<div class="quiz-options" dir="ltr">${optionsHtml}</div>`;
+  } else if(type === 'written'){
+    const showModel = !!(quiz.revealedWritten && quiz.revealedWritten[q.id]);
+    bodyHtml = `
+      <div class="written-answer-box">
+        <textarea id="writtenAnswerInput" dir="ltr" style="text-align:left;" placeholder="Type your answer here...">${escapeHtml(typeof answered==='string' ? answered : '')}</textarea>
+      </div>
+      ${q.modelAnswer ? `<button type="button" class="btn small" id="revealWrittenBtn">${showModel ? '🙈 إخفاء نموذج الإجابة' : '👁 إظهار نموذج الإجابة'}</button>` : ''}
+      ${showModel && q.modelAnswer ? `<div class="q-explain" dir="ltr" style="text-align:left; margin-top:10px;"><b>Model Answer:</b> ${escapeHtml(q.modelAnswer)}</div>` : ''}
+      <div style="margin-bottom:10px;"></div>
+    `;
+  } else if(type === 'matching'){
+    const a = answered || {};
+    revealed = quiz.mode === 'study' && canProceed;
+    const rightOrder = shuffledIndices((q.pairs||[]).length, q.id);
+    const rows = (q.pairs||[]).map((p,i)=>{
+      const selVal = a[i];
+      let rowCls = 'match-answer-row';
+      if(revealed) rowCls += (selVal === i) ? ' correct' : ' wrong';
+      const options = `<option value="">— اختر —</option>` + rightOrder.map(j=>`<option value="${j}" ${selVal===j?'selected':''}>${escapeHtml(q.pairs[j].right)}</option>`).join('');
+      return `<div class="${rowCls}"><span style="min-width:140px; font-weight:700;">${i+1}. ${escapeHtml(p.left)}</span><select class="match-answer-select" data-left-index="${i}" ${revealed?'disabled':''}>${options}</select>${revealed ? (selVal===i ? ' ✅' : ' ❌') : ''}</div>`;
+    }).join('');
+    bodyHtml = `<div class="match-answer-list">${rows}</div>`;
+  }
 
   const isLast = quiz.idx === total - 1;
-  const canProceed = answered !== undefined;
 
   const isStudent = state.session && state.session.type === 'student';
   const saved = isStudent && isQuestionSaved(q.id);
@@ -2459,9 +2613,9 @@ function pageBankRunning(){
           <span class="q-tag ${q.nature==='ref'?'ref':'past'}">${natureLabel(q.nature)}</span>
           ${saveBtnHtml}
         </div>
-        <div class="quiz-q-text" dir="ltr" style="text-align:left;">${escapeHtml(q.question)}</div>
-        <div class="quiz-options" dir="ltr">${optionsHtml}</div>
-        ${revealed && q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
+        <div class="quiz-q-text" dir="ltr" style="text-align:left;">${renderRichContent(q.question)}</div>
+        ${bodyHtml}
+        ${revealed && q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${renderRichContent(q.explanation)}</div>` : ''}
         <div class="wizard-nav">
           <button class="btn small" id="quitQuizBtn">إنهاء والخروج</button>
           <button class="btn teal solid" id="quizNextBtn" ${canProceed ? '' : 'disabled'}>${isLast ? 'إنهاء وعرض النتيجة' : 'السؤال التالي'}</button>
@@ -2472,29 +2626,68 @@ function pageBankRunning(){
   `;
 }
 
+/* تُرجع true/false للأسئلة القابلة للتصحيح التلقائي (اختيار متعدد/توصيل)، و null للأسئلة الكتابية
+   التي تحتاج مراجعة ذاتية من الطالب نفسه */
+function isQuestionCorrect(q){
+  const type = q.type || 'mcq';
+  const a = quiz.answers[q.id];
+  if(type === 'written') return null;
+  if(type === 'matching'){
+    if(!a || !(q.pairs||[]).length) return false;
+    return q.pairs.every((_,i)=> a[i] === i);
+  }
+  return a === q.correctIndex;
+}
+
 function pageBankResults(){
   const total = quiz.pool.length;
-  const correct = quiz.pool.filter(q => quiz.answers[q.id] === q.correctIndex).length;
-  const pctScore = total ? Math.round((correct/total)*100) : 0;
+  const gradable = quiz.pool.filter(q => (q.type||'mcq') !== 'written');
+  const writtenCount = total - gradable.length;
+  const correct = gradable.filter(q => isQuestionCorrect(q) === true).length;
+  const pctScore = gradable.length ? Math.round((correct/gradable.length)*100) : 0;
   const isStudent = state.session && state.session.type === 'student';
+
   const review = quiz.pool.map((q,i) => {
-    const chosen = quiz.answers[q.id];
-    const isRight = chosen === q.correctIndex;
+    const type = q.type || 'mcq';
     const saved = isStudent && isQuestionSaved(q.id);
     const saveBtnHtml = isStudent
       ? `<button type="button" class="btn small ${saved?'teal solid':''}" data-toggle-save="${q.id}">${saved ? '★ Saved' : '☆ Save'}</button>`
       : '';
+
+    let statusTag = '', bodyHtml = '';
+    if(type === 'written'){
+      const a = quiz.answers[q.id];
+      statusTag = `<span class="ans-tag review">مراجعة ذاتية</span>`;
+      bodyHtml = `<div style="font-size:13.5px; color:var(--muted); direction:ltr; text-align:left;">إجابتك: ${a && a.trim() ? escapeHtml(a) : 'لم تُجب'}</div>
+        ${q.modelAnswer ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Model Answer:</b> ${escapeHtml(q.modelAnswer)}</div>` : ''}`;
+    } else if(type === 'matching'){
+      const a = quiz.answers[q.id] || {};
+      const isRight = isQuestionCorrect(q);
+      statusTag = `<span class="ans-tag ${isRight?'right':'wrong'}">${isRight ? 'صحيح' : 'خاطئ'}</span>`;
+      bodyHtml = (q.pairs||[]).map((p,pi)=>{
+        const chosenIdx = a[pi];
+        const chosenText = (chosenIdx!==undefined && q.pairs[chosenIdx]) ? q.pairs[chosenIdx].right : 'لم تُجب';
+        const rowRight = chosenIdx === pi;
+        return `<div style="font-size:13px; color:${rowRight?'var(--good)':'var(--danger-dark)'}; direction:ltr; text-align:left;">${escapeHtml(p.left)} → ${escapeHtml(chosenText)}${!rowRight ? ' (الصحيح: ' + escapeHtml(p.right) + ')' : ''}</div>`;
+      }).join('');
+    } else {
+      const chosen = quiz.answers[q.id];
+      const isRight = chosen === q.correctIndex;
+      statusTag = `<span class="ans-tag ${isRight?'right':'wrong'}">${isRight ? 'صحيح' : 'خاطئ'}</span>`;
+      bodyHtml = `<div style="font-size:13.5px; color:var(--muted); direction:ltr; text-align:left;">إجابتك: ${chosen!==undefined ? escapeHtml(q.options[chosen]) : 'لم تُجب'} ${!isRight ? ' — الصحيحة: ' + escapeHtml(q.options[q.correctIndex]) : ''}</div>`;
+    }
+
     return `
     <div class="review-item">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px;">
-        <b style="color:var(--ink); font-size:14px; direction:ltr; text-align:left;">${i+1}. ${escapeHtml(q.question)}</b>
+        <b style="color:var(--ink); font-size:14px; direction:ltr; text-align:left;">${i+1}. ${renderRichContent(q.question)}</b>
         <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-          <span class="ans-tag ${isRight?'right':'wrong'}">${isRight ? 'صحيح' : 'خاطئ'}</span>
+          ${statusTag}
           ${saveBtnHtml}
         </div>
       </div>
-      <div style="font-size:13.5px; color:var(--muted); direction:ltr; text-align:left;">إجابتك: ${chosen!==undefined ? escapeHtml(q.options[chosen]) : 'لم تُجب'} ${!isRight ? ' — الصحيحة: ' + escapeHtml(q.options[q.correctIndex]) : ''}</div>
-      ${q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${escapeHtml(q.explanation)}</div>` : ''}
+      ${bodyHtml}
+      ${q.explanation ? `<div class="q-explain" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${renderRichContent(q.explanation)}</div>` : ''}
     </div>`;
   }).join('');
 
@@ -2503,7 +2696,8 @@ function pageBankResults(){
     <div class="wizard-wrap">
       <div class="wizard-card" style="text-align:center;">
         <h3>نتيجة الاختبار</h3>
-        <div class="score-circle"><b>${pctScore}%</b><span>${correct} من ${total}</span></div>
+        <div class="score-circle"><b>${pctScore}%</b><span>${correct} من ${gradable.length}</span></div>
+        ${writtenCount ? `<p class="hint" style="margin-top:-14px; margin-bottom:14px;">+ ${writtenCount} سؤال كتابي يحتاج مراجعة ذاتية (غير محتسب ضمن النسبة)</p>` : ''}
         <p style="color:var(--muted); font-size:14.5px; margin-bottom:24px;">${pctScore>=70 ? 'أداء ممتاز! استمر بالمراجعة 👏' : 'لا بأس، راجع الأسئلة أدناه وحاول مجددًا 💪'}</p>
         <button class="btn teal solid small" id="newQuizBtn">بدء اختبار جديد</button>
       </div>
@@ -2526,6 +2720,109 @@ function pageBank(){
     case 'results': return pageBankResults();
     default: return pageBankSetup();
   }
+}
+
+/* =========================================================
+   PAGE: ADMIN ANALYTICS — لوحة إحصائيات للمشرف فقط
+   (عدد الطلاب/الكورسات، توزيعهم حسب الجامعة والتخصص، أكثر الكورسات
+   تفعيلًا، وتركيبة المحتوى بين مجاني/مدفوع)
+   ========================================================= */
+function pageAdminAnalytics(){
+  if(!isAdminSession()){
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="#/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
+  }
+
+  const totalStudents = state.students.length;
+  const totalCourses = state.courses.length;
+  const totalLectures = state.lectures.length;
+  const totalQuestions = state.questions.length;
+  const totalEnrollments = state.enrollments.length;
+  const totalSummaries = state.summaries.length;
+
+  const engagedPhones = new Set(state.enrollments.map(e=>e.phone));
+  const engagedCount = state.students.filter(s=>engagedPhones.has(s.phone)).length;
+  const engagedPct = totalStudents ? Math.round((engagedCount/totalStudents)*100) : 0;
+
+  const uniCounts = UNIVERSITIES.map(u => ({ name:u.name, count: state.students.filter(s=>s.university===u.name).length }));
+  const knownUniTotal = uniCounts.reduce((a,b)=>a+b.count,0);
+  const otherUniCount = totalStudents - knownUniTotal;
+  if(otherUniCount > 0) uniCounts.push({ name:'أخرى/غير محدد', count: otherUniCount });
+  const maxUni = Math.max(1, ...uniCounts.map(u=>u.count));
+
+  const majorCounts = MAJORS.map(m => ({ name:m.name, count: state.students.filter(s=>s.major===m.name).length }));
+  const maxMajor = Math.max(1, ...majorCounts.map(m=>m.count));
+
+  const courseEnrollCounts = state.courses
+    .map(c => ({ title:c.title, count: enrollmentsFor(c.id).length }))
+    .sort((a,b)=>b.count-a.count)
+    .slice(0,5);
+  const maxCourseEnroll = Math.max(1, ...courseEnrollCounts.map(c=>c.count));
+
+  const freeCourses = state.courses.filter(c=>courseIsAllFree(c)).length;
+  const paidCourses = state.courses.filter(c=>courseIsAllPaid(c)).length;
+  const mixedCourses = totalCourses - freeCourses - paidCourses;
+
+  const refQuestions = state.questions.filter(q=>q.nature==='ref').length;
+  const pastQuestions = totalQuestions - refQuestions;
+
+  const barRow = (label, count, max) => `
+    <div class="analytics-row">
+      <div class="analytics-row-head"><span>${escapeHtml(label)}</span><b>${count}</b></div>
+      <div class="analytics-bar"><div style="width:${max ? Math.round((count/max)*100) : 0}%;"></div></div>
+    </div>`;
+
+  return `
+  <section class="section">
+    <div class="container">
+      <div class="toolbar">
+        <h2>لوحة التحليلات</h2>
+      </div>
+
+      <div class="analytics-grid">
+        <div class="analytics-kpi"><b>${totalStudents}</b><span>طالب مسجّل</span></div>
+        <div class="analytics-kpi"><b>${totalCourses}</b><span>كورس</span></div>
+        <div class="analytics-kpi"><b>${totalLectures}</b><span>محاضرة</span></div>
+        <div class="analytics-kpi"><b>${totalQuestions}</b><span>سؤال في البنك</span></div>
+        <div class="analytics-kpi"><b>${totalEnrollments}</b><span>تفعيل/اشتراك</span></div>
+        <div class="analytics-kpi"><b>${engagedPct}%</b><span>نسبة الطلاب المفعّلين</span></div>
+        <div class="analytics-kpi"><b>${totalSummaries}</b><span>ملخص من الطلاب</span></div>
+        <div class="analytics-kpi"><b>${state.messages.length}</b><span>رسالة واردة</span></div>
+      </div>
+
+      <div class="analytics-cols">
+        <div class="analytics-card">
+          <h3>الطلاب حسب الجامعة</h3>
+          ${uniCounts.filter(u=>u.count>0).length
+            ? uniCounts.filter(u=>u.count>0).sort((a,b)=>b.count-a.count).map(u=>barRow(u.name,u.count,maxUni)).join('')
+            : `<p style="color:var(--muted); font-size:13.5px;">لا يوجد طلاب مسجّلون بعد.</p>`}
+        </div>
+        <div class="analytics-card">
+          <h3>الطلاب حسب التخصص</h3>
+          ${totalStudents
+            ? majorCounts.map(m=>barRow(m.name,m.count,maxMajor)).join('')
+            : `<p style="color:var(--muted); font-size:13.5px;">لا يوجد طلاب مسجّلون بعد.</p>`}
+        </div>
+      </div>
+
+      <div class="analytics-cols">
+        <div class="analytics-card">
+          <h3>الأكثر تفعيلًا (Top 5 كورسات)</h3>
+          ${courseEnrollCounts.filter(c=>c.count>0).length
+            ? courseEnrollCounts.filter(c=>c.count>0).map(c=>barRow(c.title,c.count,maxCourseEnroll)).join('')
+            : `<p style="color:var(--muted); font-size:13.5px;">لا توجد تفعيلات بعد.</p>`}
+        </div>
+        <div class="analytics-card">
+          <h3>تركيبة المحتوى</h3>
+          ${barRow('كورسات مجانية بالكامل', freeCourses, totalCourses || 1)}
+          ${barRow('كورسات مدفوعة بالكامل', paidCourses, totalCourses || 1)}
+          ${barRow('كورسات بأسعار متعددة حسب القسم', mixedCourses, totalCourses || 1)}
+          ${totalQuestions ? barRow('أسئلة مراجع', refQuestions, totalQuestions) : ''}
+          ${totalQuestions ? barRow('أسئلة سنوات سابقة', pastQuestions, totalQuestions) : ''}
+        </div>
+      </div>
+    </div>
+  </section>
+  `;
 }
 
 /* =========================================================
@@ -2790,8 +3087,8 @@ function pageAdminLogin(){
 /* =========================================================
    Modal helpers
    ========================================================= */
-function openModal(html){
-  document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" id="modalOverlay"><div class="modal-box">${html}</div></div>`;
+function openModal(html, wide){
+  document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" id="modalOverlay"><div class="modal-box${wide?' wide':''}">${html}</div></div>`;
   document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id === 'modalOverlay') closeModal(); });
   translateSubtree(document.getElementById('modalRoot'));
 }
@@ -2898,13 +3195,55 @@ function modalEditCourse(courseId){
   });
 }
 
+/* تحلّل نص فيه عدة أرقام هواتف طلاب دفعة وحدة: تقبل الفصل بسطر/فاصلة/مسافة،
+   وأيضًا الأرقام الملصوقة ورا بعض بدون أي فاصل (كل رقم ثابت 10 خانات ويبدأ بـ 07)
+   فتفصلها تلقائيًا كل 10 خانات. ترجع { valid: [أرقام صحيحة بدون تكرار], invalid: [مقاطع ما قدرت تُقرأ] } */
+function parsePhoneBatch(raw){
+  const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+  let text = (raw||'').replace(/[٠-٩]/g, d => String(arabicDigits.indexOf(d)));
+  const tokens = text.split(/[\s,;،؛\/|]+/).map(t=>t.trim()).filter(Boolean);
+  const valid = [];
+  const seen = new Set();
+  const invalid = [];
+  tokens.forEach(tok=>{
+    const digits = tok.replace(/\D/g,'');
+    if(!digits) return;
+    let chunks = null;
+    if(digits.length===10 && isValidPhone(digits)){
+      chunks = [digits];
+    } else if(digits.length>10 && digits.length%10===0){
+      const parts = [];
+      let ok = true;
+      for(let i=0;i<digits.length;i+=10){
+        const part = digits.slice(i,i+10);
+        if(!isValidPhone(part)){ ok=false; break; }
+        parts.push(part);
+      }
+      if(ok) chunks = parts;
+    }
+    if(chunks){
+      chunks.forEach(c=>{ if(!seen.has(c)){ seen.add(c); valid.push(c); } });
+    } else {
+      invalid.push(tok);
+    }
+  });
+  return { valid, invalid };
+}
+
 function modalEnrollStudent(courseId){
   const course = state.courses.find(c=>c.id===courseId);
   const secs = courseSections(courseId);
   openModal(`
-    <h3>${ICONS.plus} تفعيل الكورس لطالب</h3>
+    <h3>${ICONS.plus} تفعيل الكورس لعدة طلاب دفعة وحدة</h3>
     <form id="enrollForm">
-      <div class="field"><label>رقم هاتف الطالب</label><input type="tel" name="phone" required placeholder="اكتب رقم الهاتف كما سجّل به" style="direction:ltr;"></div>
+      <div class="field">
+        <label>أرقام هواتف الطلاب</label>
+        <textarea name="phones" required rows="6" style="direction:ltr; font-family:monospace; resize:vertical;" placeholder="0791234567
+0781234567
+0771234567
+...أو الصقهم متسلسلين بدون أي فواصل، بيتم فصلهم تلقائيًا كل 10 أرقام"></textarea>
+        <p class="hint" style="margin-top:6px; font-size:12.5px; color:var(--muted);">حط رقم بكل سطر، أو مفصولين بفاصلة/مسافة، أو حتى ملصوقين ورا بعض بدون فواصل — كل رقم 10 خانات ويبدأ بـ 07.</p>
+      </div>
       <div class="field">
         <label>الأقسام المطلوب تفعيلها</label>
         <div class="lecture-select-list">
@@ -2912,51 +3251,84 @@ function modalEnrollStudent(courseId){
         </div>
       </div>
       <div id="enrollMsg"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">تفعيل الأقسام المحددة</button></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">تفعيل الأقسام المحددة للجميع</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   document.getElementById('enrollForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    const phone = normalizePhone(fd.get('phone'));
     const msgBox = document.getElementById('enrollMsg');
-    const student = state.students.find(s=>s.phone===phone);
-    if(!student){ msgBox.innerHTML = `<div class="form-msg error">لا يوجد طالب مسجّل بهذا الرقم. تأكد من رقم الهاتف.</div>`; return; }
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const { valid: phones, invalid } = parsePhoneBatch(fd.get('phones'));
+    if(!phones.length){ msgBox.innerHTML = `<div class="form-msg error">ما لقيت أي رقم هاتف صحيح (لازم يكون 10 خانات ويبدأ بـ 07).</div>`; return; }
     const sections = secs.filter(s=>fd.get('section_'+s));
     if(!sections.length){ msgBox.innerHTML = `<div class="form-msg error">اختر قسمًا واحدًا على الأقل.</div>`; return; }
-    let addedAny = false;
-    sections.forEach(section=>{
-      if(state.enrollments.some(en=>en.courseId===courseId && en.phone===phone && (en.section===section || !en.section))) return;
-      state.enrollments.push({ courseId, phone, section });
-      addedAny = true;
+    submitBtn.disabled = true;
+    const success = [], notFound = [], already = [];
+    phones.forEach(phone=>{
+      const student = state.students.find(s=>s.phone===phone);
+      if(!student){ notFound.push(phone); return; }
+      let addedAny = false;
+      sections.forEach(section=>{
+        if(state.enrollments.some(en=>en.courseId===courseId && en.phone===phone && (en.section===section || !en.section))) return;
+        state.enrollments.push({ courseId, phone, section });
+        addedAny = true;
+      });
+      if(addedAny) success.push(phone); else already.push(phone);
     });
-    if(!addedAny){ msgBox.innerHTML = `<div class="form-msg error">هذا الطالب مفعّل بالفعل لكل الأقسام المحددة.</div>`; return; }
-    await setData('enrollments', state.enrollments, true);
-    closeModal(); render();
+    if(success.length) await setData('enrollments', state.enrollments, true);
+    submitBtn.disabled = false;
+    let html = '';
+    if(success.length) html += `<div class="form-msg ok">✅ تم تفعيل ${success.length} طالب بنجاح: ${success.map(escapeHtml).join('، ')}</div>`;
+    if(already.length) html += `<div class="form-msg error">⚠️ ${already.length} طالب مفعّل مسبقًا لكل الأقسام المحددة: ${already.map(escapeHtml).join('، ')}</div>`;
+    if(notFound.length) html += `<div class="form-msg error">❌ ${notFound.length} رقم غير مسجّل كطالب: ${notFound.map(escapeHtml).join('، ')}</div>`;
+    if(invalid.length) html += `<div class="form-msg error">⚠️ مقاطع ما قدرت تُقرأ كأرقام صحيحة: ${invalid.map(escapeHtml).join('، ')}</div>`;
+    msgBox.innerHTML = html;
+    if(success.length) render();
   });
 }
 
 function modalResetStudentDevice(){
   openModal(`
-    <h3>${ICONS.lock} إعادة تعيين أجهزة الطالب</h3>
-    <p style="color:var(--muted); font-size:13.5px; margin-bottom:10px;">أدخل رقم هاتف الطالب لإلغاء ربط حسابه بجهازه الحالي، ليتمكّن من تسجيل الدخول من جهاز جديد.</p>
+    <h3>${ICONS.lock} إعادة تعيين أجهزة عدة طلاب دفعة وحدة</h3>
+    <p style="color:var(--muted); font-size:13.5px; margin-bottom:10px;">ألصق أرقام هواتف الطلاب لإلغاء ربط حساباتهم بأجهزتهم الحالية، ليتمكنوا من تسجيل الدخول من جهاز جديد.</p>
     <form id="resetDeviceForm">
-      <div class="field"><label>رقم هاتف الطالب</label><input type="tel" name="phone" required placeholder="اكتب رقم الهاتف كما سجّل به" style="direction:ltr;"></div>
+      <div class="field">
+        <label>أرقام هواتف الطلاب</label>
+        <textarea name="phones" required rows="6" style="direction:ltr; font-family:monospace; resize:vertical;" placeholder="0791234567
+0781234567
+0771234567
+...أو الصقهم متسلسلين بدون أي فواصل، بيتم فصلهم تلقائيًا كل 10 أرقام"></textarea>
+        <p class="hint" style="margin-top:6px; font-size:12.5px; color:var(--muted);">حط رقم بكل سطر، أو مفصولين بفاصلة/مسافة، أو حتى ملصوقين ورا بعض بدون فواصل — كل رقم 10 خانات ويبدأ بـ 07.</p>
+      </div>
       <div id="resetDeviceMsg"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn danger small">إعادة تعيين الجهاز</button></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn danger small">إعادة تعيين الأجهزة للجميع</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   document.getElementById('resetDeviceForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    const phone = normalizePhone(fd.get('phone'));
     const msgBox = document.getElementById('resetDeviceMsg');
+    const submitBtn = e.target.querySelector('button[type="submit"]');
     if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
-    const { error, count } = await supabaseClient.from('student_devices').delete({ count:'exact' }).eq('phone', phone);
-    if(error){ msgBox.innerHTML = `<div class="form-msg error">تعذّرت العملية، تأكد أن جدول student_devices وصلاحياته مُعدّة بشكل صحيح.</div>`; return; }
-    if(!count){ msgBox.innerHTML = `<div class="form-msg error">لا يوجد جهاز مسجَّل بهذا الرقم أصلًا.</div>`; return; }
-    msgBox.innerHTML = `<div class="form-msg ok">تم إلغاء ربط الجهاز بنجاح، يمكن للطالب الآن الدخول من جهاز جديد.</div>`;
-    e.target.reset();
+    const { valid: phones, invalid } = parsePhoneBatch(fd.get('phones'));
+    if(!phones.length){ msgBox.innerHTML = `<div class="form-msg error">ما لقيت أي رقم هاتف صحيح (لازم يكون 10 خانات ويبدأ بـ 07).</div>`; return; }
+    submitBtn.disabled = true;
+    msgBox.innerHTML = `<div class="form-msg">جاري إعادة تعيين ${phones.length} جهاز...</div>`;
+    const success = [], notFound = [], failed = [];
+    for(const phone of phones){
+      const { error, count } = await supabaseClient.from('student_devices').delete({ count:'exact' }).eq('phone', phone);
+      if(error){ failed.push(phone); continue; }
+      if(!count){ notFound.push(phone); continue; }
+      success.push(phone);
+    }
+    submitBtn.disabled = false;
+    let html = '';
+    if(success.length) html += `<div class="form-msg ok">✅ تم إلغاء ربط ${success.length} جهاز بنجاح: ${success.map(escapeHtml).join('، ')}</div>`;
+    if(notFound.length) html += `<div class="form-msg error">⚠️ ${notFound.length} رقم ما إله جهاز مسجَّل أصلًا: ${notFound.map(escapeHtml).join('، ')}</div>`;
+    if(failed.length) html += `<div class="form-msg error">❌ فشلت العملية لـ ${failed.length} رقم: ${failed.map(escapeHtml).join('، ')}</div>`;
+    if(invalid.length) html += `<div class="form-msg error">⚠️ مقاطع ما قدرت تُقرأ كأرقام صحيحة: ${invalid.map(escapeHtml).join('، ')}</div>`;
+    msgBox.innerHTML = html;
   });
 }
 
@@ -3078,24 +3450,102 @@ function lectureOptionsFor(courseId, selectedLectureId){
   return `<option value="" ${!selectedLectureId?'selected':''}>— سؤال عام (غير مرتبط بمحاضرة) —</option>${opts}`;
 }
 
-function questionFormFields(defaults){
+/* أزواج التوصيل (matching) — صف واحد فيه عنصر يمين وعنصر يسار، بنفس نمط صفوف الروابط */
+function matchPairRowHtml(leftVal, rightVal){
+  return `<div class="link-row match-pair-row">
+    <input type="text" class="match-left" dir="ltr" placeholder="العنصر الأول (مثال: مصطلح)" value="${escapeHtml(leftVal||'')}">
+    <span class="match-pair-arrow">↔</span>
+    <input type="text" class="match-right" dir="ltr" placeholder="ما يقابله (مثال: تعريف)" value="${escapeHtml(rightVal||'')}">
+    <button type="button" class="link-remove match-remove" title="حذف">✕</button>
+  </div>`;
+}
+function bindMatchPairRows(){
+  const container = document.getElementById('matchPairRows');
+  const addBtn = document.getElementById('addMatchPairRow');
+  if(!container || !addBtn) return;
+  container.addEventListener('click', (e)=>{
+    const rm = e.target.closest('.match-remove');
+    if(!rm) return;
+    if(container.querySelectorAll('.match-pair-row').length <= 2) return; // أقل شي زوجين
+    rm.closest('.match-pair-row').remove();
+  });
+  addBtn.addEventListener('click', ()=>{
+    if(container.querySelectorAll('.match-pair-row').length >= 8) return; // أقصى شي 8 أزواج
+    container.insertAdjacentHTML('beforeend', matchPairRowHtml('',''));
+  });
+}
+function collectMatchPairsFromForm(){
+  return Array.from(document.querySelectorAll('#matchPairRows .match-pair-row')).map(row=>({
+    left: row.querySelector('.match-left').value.trim(),
+    right: row.querySelector('.match-right').value.trim()
+  })).filter(p=>p.left && p.right);
+}
+
+/* الحقول الخاصة بكل نمط سؤال (تُعاد رسمها ديناميكيًا عند تغيير نمط السؤال) */
+function questionTypeFieldsHtml(type, d){
+  d = d || {};
+  if(type === 'written'){
+    return `
+    <div class="field"><label>نموذج الإجابة (Model Answer، اختياري — يظهر للطالب كمرجع للمراجعة الذاتية)</label><textarea name="modelAnswer" dir="ltr" style="text-align:left;" placeholder="Write a sample/model answer here">${escapeHtml(d.modelAnswer||'')}</textarea></div>`;
+  }
+  if(type === 'matching'){
+    const pairs = (d.pairs && d.pairs.length) ? d.pairs : [{left:'',right:''},{left:'',right:''}];
+    return `
+    <div class="field">
+      <label>أزواج التوصيل (اكتب كل عنصر وما يقابله — زوجين على الأقل، وحتى 8 أزواج)</label>
+      <div class="link-rows" id="matchPairRows">${pairs.map(p=>matchPairRowHtml(p.left,p.right)).join('')}</div>
+      <button type="button" class="btn small" id="addMatchPairRow">${ICONS.plus} إضافة زوج</button>
+    </div>`;
+  }
+  /* mcq (الافتراضي) — حتى 5 خيارات، أول خيارين مطلوبين والباقي اختياري، مع تحديد الإجابة الصحيحة بزر راديو */
+  const opts = d.options || [];
+  const activeCorrect = d.correctIndex===undefined ? 0 : d.correctIndex;
+  const rows = [0,1,2,3,4].map(i=>`
+    <div class="opt-row">
+      <input type="radio" name="correctIndex" value="${i}" ${activeCorrect===i?'checked':''}>
+      <span class="opt-letter">${String.fromCharCode(65+i)}.</span>
+      <input type="text" name="opt${i}" dir="ltr" placeholder="${i<2 ? 'مطلوب' : 'اختياري'}" value="${escapeHtml(opts[i]||'')}">
+    </div>`).join('');
+  return `
+    <div class="field">
+      <label>الخيارات (فعّل الدائرة بجانب الإجابة الصحيحة — أول خيارين مطلوبين، حتى 5 خيارات إجمالًا)</label>
+      ${rows}
+    </div>`;
+}
+
+/* المحرر المستخدم لنص السؤال والتفسير يدعم الآن: عريض/مائل/تسطير، نوع/حجم/لون الخط،
+   إضافة صور، وإضافة جداول بعدد صفوف/أعمدة يحدّده الأدمن. idSuffix يميّز بين فورم
+   الإضافة وفورم التعديل حتى لا يتعارض معرّف العنصر (id) لو فُتحا بنفس الاسم. */
+function questionFormFields(defaults, idSuffix){
   const d = defaults || {};
+  const suffix = idSuffix || '';
+  const type = d.type || 'mcq';
   const courseOptions = state.courses.map(c=>`<option value="${c.id}" ${d.courseId===c.id?'selected':''}>${escapeHtml(c.title)}</option>`).join('');
+  const questionEditorId = 'qQuestionEditor'+suffix;
+  const explanationEditorId = 'qExplanationEditor'+suffix;
   return `
     <div class="field"><label>الكورس</label><select name="courseId" id="qCourseSelect">${courseOptions}</select></div>
     <div class="field"><label>المحاضرة (اختياري)</label><select name="lectureId" id="qLectureSelect">${lectureOptionsFor(d.courseId || state.courses[0]?.id, d.lectureId)}</select></div>
     <div class="field"><label>طبيعة السؤال</label><select name="nature"><option value="past" ${d.nature==='past'||!d.nature?'selected':''}>أسئلة سنوات سابقة</option><option value="ref" ${d.nature==='ref'?'selected':''}>أسئلة مراجع</option></select></div>
-    <div class="field"><label>نص السؤال (بالإنجليزي)</label><textarea name="question" dir="ltr" style="text-align:left;" required placeholder="Write the question here">${escapeHtml(d.question||'')}</textarea></div>
-    <div class="field"><label>الخيار A</label><input type="text" name="opt0" dir="ltr" style="text-align:left;" required value="${escapeHtml(d.options ? d.options[0] : '')}"></div>
-    <div class="field"><label>الخيار B</label><input type="text" name="opt1" dir="ltr" style="text-align:left;" required value="${escapeHtml(d.options ? d.options[1] : '')}"></div>
-    <div class="field"><label>الخيار C</label><input type="text" name="opt2" dir="ltr" style="text-align:left;" required value="${escapeHtml(d.options ? d.options[2] : '')}"></div>
-    <div class="field"><label>الخيار D</label><input type="text" name="opt3" dir="ltr" style="text-align:left;" required value="${escapeHtml(d.options ? d.options[3] : '')}"></div>
-    <div class="field"><label>الإجابة الصحيحة</label><select name="correctIndex">${[0,1,2,3].map(i=>`<option value="${i}" ${d.correctIndex===i?'selected':''}>${String.fromCharCode(65+i)}</option>`).join('')}</select></div>
-    <div class="field"><label>Explanation (تفسير الإجابة، اختياري)</label><textarea name="explanation" dir="ltr" style="text-align:left;" placeholder="Write an explanation shown to the student with the correct answer">${escapeHtml(d.explanation||'')}</textarea></div>
+    <div class="field"><label>نمط السؤال</label><select name="type" id="qTypeSelect">
+      <option value="mcq" ${type==='mcq'?'selected':''}>اختيار من متعدد (حتى 5 خيارات)</option>
+      <option value="written" ${type==='written'?'selected':''}>سؤال كتابي (إجابة حرة)</option>
+      <option value="matching" ${type==='matching'?'selected':''}>سؤال توصيل (Matching)</option>
+    </select></div>
+    <div class="field"><label>نص السؤال (بالإنجليزي) — يمكن إضافة صور وجداول وتنسيق الخط</label>
+      ${rteToolbarHtml(questionEditorId)}
+      <div class="rte-editor" id="${questionEditorId}" contenteditable="true" dir="ltr" style="text-align:left;" data-placeholder="Write the question here">${d.question||''}</div>
+    </div>
+    <div id="qTypeFields">${questionTypeFieldsHtml(type, d)}</div>
+    <div class="field"><label>Explanation (تفسير الإجابة، اختياري) — يمكن إضافة صور وجداول وتنسيق الخط</label>
+      ${rteToolbarHtml(explanationEditorId)}
+      <div class="rte-editor" id="${explanationEditorId}" contenteditable="true" dir="ltr" style="text-align:left;" data-placeholder="Write an explanation shown to the student with the correct answer">${d.explanation||''}</div>
+    </div>
+    <div id="questionMsg"></div>
   `;
 }
 
-function bindQuestionCourseLectureSync(){
+function bindQuestionFormDynamics(formEl){
   const courseSelect = document.getElementById('qCourseSelect');
   const lectureSelect = document.getElementById('qLectureSelect');
   if(courseSelect && lectureSelect){
@@ -3103,6 +3553,48 @@ function bindQuestionCourseLectureSync(){
       lectureSelect.innerHTML = lectureOptionsFor(courseSelect.value, null);
     });
   }
+  const typeSelect = document.getElementById('qTypeSelect');
+  const typeFields = document.getElementById('qTypeFields');
+  if(typeSelect && typeFields){
+    typeSelect.addEventListener('change', ()=>{
+      typeFields.innerHTML = questionTypeFieldsHtml(typeSelect.value, {});
+      bindMatchPairRows();
+    });
+  }
+  bindMatchPairRows();
+  if(formEl) wireRteToolbar(formEl);
+}
+/* يقرأ محتوى محرِّر غني (نص السؤال/التفسير) بعد تطهيره، ويتحقّق هل يحوي نصًا
+   ظاهرًا أو وسائط (صورة/جدول) حتى لا يُحفظ سؤال فارغ */
+function readRichEditor(editorId){
+  const el = document.getElementById(editorId);
+  if(!el) return { html:'', hasContent:false };
+  const html = sanitizeSummaryHtml(el.innerHTML);
+  const hasText = el.textContent.trim().length > 0;
+  const hasMedia = /<img|<table/i.test(html);
+  return { html, hasContent: hasText || hasMedia };
+}
+
+/* تجميع بيانات النمط الحالي من الفورم مع تحقق بسيط، ترجع {ok:true, ...بيانات} أو {ok:false, error} */
+function collectMcqFromForm(fd){
+  const collected = [];
+  [0,1,2,3,4].forEach(i=>{
+    const v = (fd.get('opt'+i)||'').trim();
+    if(v) collected.push({ originalIndex:i, value:v });
+  });
+  if(collected.length < 2) return { ok:false, error:'أدخل خيارين على الأقل.' };
+  const checked = Number(fd.get('correctIndex'));
+  const newIndex = collected.findIndex(o=>o.originalIndex===checked);
+  if(newIndex === -1) return { ok:false, error:'حدد الإجابة الصحيحة من بين الخيارات المكتوبة فعليًا.' };
+  return { ok:true, options: collected.map(o=>o.value), correctIndex: newIndex };
+}
+function collectMatchingFromForm(){
+  const pairs = collectMatchPairsFromForm();
+  if(pairs.length < 2) return { ok:false, error:'أضف زوجين على الأقل لسؤال التوصيل.' };
+  return { ok:true, pairs };
+}
+function collectWrittenFromForm(fd){
+  return { ok:true, modelAnswer: (fd.get('modelAnswer')||'').trim() };
 }
 
 function modalAddQuestion(){
@@ -3114,19 +3606,35 @@ function modalAddQuestion(){
   openModal(`
     <h3>${ICONS.plus} إضافة سؤال جديد</h3>
     <form id="questionForm">
-      ${questionFormFields({})}
+      ${questionFormFields({}, '')}
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ السؤال</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
-  bindQuestionCourseLectureSync();
+  bindQuestionFormDynamics(document.getElementById('questionForm'));
   document.getElementById('questionForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    state.questions.push({
-      id:'q'+Date.now(), courseId:fd.get('courseId'), lectureId: fd.get('lectureId') || null, nature:fd.get('nature'), question:fd.get('question').trim(),
-      options:[fd.get('opt0'), fd.get('opt1'), fd.get('opt2'), fd.get('opt3')].map(o=>o.trim()), correctIndex:Number(fd.get('correctIndex')),
-      explanation:(fd.get('explanation')||'').trim(),
-    });
+    const msgBox = document.getElementById('questionMsg');
+    const type = fd.get('type') || 'mcq';
+    const questionContent = readRichEditor('qQuestionEditor');
+    if(!questionContent.hasContent){ msgBox.innerHTML = `<div class="form-msg error">يرجى كتابة نص السؤال.</div>`; return; }
+    const base = {
+      id:'q'+Date.now(), courseId:fd.get('courseId'), lectureId: fd.get('lectureId') || null, nature:fd.get('nature'), question:questionContent.html,
+      type, explanation: readRichEditor('qExplanationEditor').html,
+    };
+    if(type === 'matching'){
+      const r = collectMatchingFromForm();
+      if(!r.ok){ msgBox.innerHTML = `<div class="form-msg error">${r.error}</div>`; return; }
+      base.pairs = r.pairs;
+    } else if(type === 'written'){
+      const r = collectWrittenFromForm(fd);
+      base.modelAnswer = r.modelAnswer;
+    } else {
+      const r = collectMcqFromForm(fd);
+      if(!r.ok){ msgBox.innerHTML = `<div class="form-msg error">${r.error}</div>`; return; }
+      base.options = r.options; base.correctIndex = r.correctIndex;
+    }
+    state.questions.push(base);
     await setData('questions', state.questions, true);
     closeModal(); render();
   });
@@ -3138,22 +3646,336 @@ function modalEditQuestion(questionId){
   openModal(`
     <h3>${ICONS.edit} تعديل السؤال</h3>
     <form id="questionEditForm">
-      ${questionFormFields(q)}
+      ${questionFormFields(q, 'Edit')}
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
-  bindQuestionCourseLectureSync();
+  bindQuestionFormDynamics(document.getElementById('questionEditForm'));
   document.getElementById('questionEditForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
+    const msgBox = document.getElementById('questionMsg');
+    const type = fd.get('type') || 'mcq';
+    const questionContent = readRichEditor('qQuestionEditorEdit');
+    if(!questionContent.hasContent){ msgBox.innerHTML = `<div class="form-msg error">يرجى كتابة نص السؤال.</div>`; return; }
+    let payload;
+    if(type === 'matching'){
+      const r = collectMatchingFromForm();
+      if(!r.ok){ msgBox.innerHTML = `<div class="form-msg error">${r.error}</div>`; return; }
+      payload = { pairs: r.pairs };
+    } else if(type === 'written'){
+      const r = collectWrittenFromForm(fd);
+      payload = { modelAnswer: r.modelAnswer };
+    } else {
+      const r = collectMcqFromForm(fd);
+      if(!r.ok){ msgBox.innerHTML = `<div class="form-msg error">${r.error}</div>`; return; }
+      payload = { options: r.options, correctIndex: r.correctIndex };
+    }
     q.courseId = fd.get('courseId'); q.lectureId = fd.get('lectureId') || null; q.nature = fd.get('nature');
-    q.question = fd.get('question').trim();
-    q.options = [fd.get('opt0'), fd.get('opt1'), fd.get('opt2'), fd.get('opt3')].map(o=>o.trim());
-    q.correctIndex = Number(fd.get('correctIndex'));
-    q.explanation = (fd.get('explanation')||'').trim();
+    q.question = questionContent.html;
+    q.explanation = readRichEditor('qExplanationEditorEdit').html;
+    q.type = type;
+    delete q.options; delete q.correctIndex; delete q.pairs; delete q.modelAnswer;
+    Object.assign(q, payload);
     await setData('questions', state.questions, true);
     closeModal(); render();
   });
+}
+
+/* =========================================================
+   استيراد أسئلة من ملف PDF أو Word
+   يقرأ الأدمن ملفًا (أو يلصق نصًا)، ويحاول النظام تلقائيًا تقسيمه إلى
+   أسئلة: نص السؤال، الخيارات، الإجابة الصحيحة، والتفسير — كل عنصر
+   في مكانه — ثم يعرضها للمراجعة والتعديل قبل حفظها في بنك الأسئلة.
+   ========================================================= */
+function extOf(filename){
+  const m = /\.([a-zA-Z0-9]+)$/.exec(filename || '');
+  return m ? m[1].toLowerCase() : '';
+}
+
+function loadScriptOnce(src, isLoaded){
+  return new Promise((resolve, reject)=>{
+    if(isLoaded()) return resolve();
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if(existing){
+      existing.addEventListener('load', ()=>resolve());
+      existing.addEventListener('error', ()=>reject(new Error('تعذّر تحميل المكتبة اللازمة لقراءة الملف.')));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = ()=>resolve();
+    s.onerror = ()=>reject(new Error('تعذّر تحميل المكتبة اللازمة لقراءة الملف، تحقق من اتصال الإنترنت.'));
+    document.head.appendChild(s);
+  });
+}
+
+async function ensureMammothLib(){
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/mammoth@1.7.2/mammoth.browser.min.js', ()=>!!window.mammoth);
+}
+async function ensurePdfJsLib(){
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', ()=>!!window.pdfjsLib);
+  if(window.pdfjsLib && !window.pdfjsLib.GlobalWorkerOptions.workerSrc){
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  }
+}
+
+async function extractTextFromDocxFile(arrayBuffer){
+  await ensureMammothLib();
+  const result = await window.mammoth.extractRawText({ arrayBuffer });
+  return result.value || '';
+}
+
+async function extractTextFromPdfFile(arrayBuffer){
+  await ensurePdfJsLib();
+  const doc = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for(let i=1;i<=doc.numPages;i++){
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    // إعادة بناء الأسطر تقريبيًا بتجميع العناصر المتقاربة في الموضع الرأسي
+    const lines = [];
+    let currentY = null, currentLine = [];
+    content.items.forEach(item=>{
+      const y = Math.round(item.transform[5]);
+      if(currentY === null || Math.abs(y - currentY) > 2){
+        if(currentLine.length) lines.push(currentLine.join(' '));
+        currentLine = [item.str];
+        currentY = y;
+      } else {
+        currentLine.push(item.str);
+      }
+    });
+    if(currentLine.length) lines.push(currentLine.join(' '));
+    fullText += lines.join('\n') + '\n\n';
+  }
+  return fullText;
+}
+
+/* خرائط ترميز الخيارات لحرف/رقم -> فهرس (A/أ = 0، B/ب = 1 ...) */
+const AR_OPTION_LETTER_MAP = {'أ':0,'ا':0,'ب':1,'ج':2,'د':3,'ه':4,'و':5};
+const EN_OPTION_LETTER_MAP = {A:0,B:1,C:2,D:3,E:4,F:5};
+function letterToOptionIndex(raw){
+  if(!raw) return null;
+  const ch = raw.trim().charAt(0);
+  const upper = ch.toUpperCase();
+  if(EN_OPTION_LETTER_MAP.hasOwnProperty(upper)) return EN_OPTION_LETTER_MAP[upper];
+  if(AR_OPTION_LETTER_MAP.hasOwnProperty(ch)) return AR_OPTION_LETTER_MAP[ch];
+  if(/[1-6]/.test(ch)) return Number(ch) - 1;
+  return null;
+}
+
+const IMPORT_QUESTION_START_RE = /^\(?\s*(?:[Qq](?:uestion)?\.?\s*|السؤال\s*)?(\d{1,3})\s*[\.\)\-:]\s*(.+)$/;
+const IMPORT_OPTION_RE = /^\(?\s*([A-Da-dأبجده])\s*[\)\.\-:]\s+(.+)$/;
+const IMPORT_OPTION_NUM_RE = /^\(?\s*([1-6])\s*\)\s+(.+)$/;
+const IMPORT_ANSWER_RE = /^(?:Answer|Correct\s*Answer|الإجابة(?:\s*الصحيحة)?|الجواب(?:\s*الصحيح)?)\s*[:\-]?\s*(.+)$/i;
+const IMPORT_EXPLAIN_RE = /^(?:Explanation|تفسير|توضيح|شرح)\s*[:\-]?\s*(.*)$/i;
+
+/* يقسّم نصًا خامًا (مستخرجًا من PDF/Word أو ملصوقًا يدويًا) إلى مصفوفة أسئلة
+   منظمة: {question, options[4], correctIndex, correctFound, explanation}.
+   هذا استخراج تقريبي "أفضل جهد ممكن" — يُعرض بعده على الأدمن للمراجعة والتعديل. */
+function parseQuestionsFromText(rawText){
+  const allLines = (rawText || '').replace(/\r/g,'').split('\n').map(l=>l.trim());
+  const hasNumbering = allLines.some(l=> l && IMPORT_QUESTION_START_RE.test(l) && l.length < 300);
+
+  const blocks = [];
+  if(hasNumbering){
+    let current = [];
+    allLines.forEach(line=>{
+      if(!line) return;
+      const m = IMPORT_QUESTION_START_RE.exec(line);
+      const currentHasOptions = current.some(l=> IMPORT_OPTION_RE.test(l) || IMPORT_OPTION_NUM_RE.test(l));
+      if(m && (current.length === 0 || currentHasOptions)){
+        if(current.length) blocks.push(current);
+        current = [m[2]];
+      } else {
+        current.push(line);
+      }
+    });
+    if(current.length) blocks.push(current);
+  } else {
+    // لا يوجد ترقيم واضح للأسئلة، نفصل حسب الأسطر الفارغة (فقرات)
+    let buff = [];
+    allLines.forEach(line=>{
+      if(!line){
+        if(buff.length){ blocks.push(buff); buff = []; }
+      } else buff.push(line);
+    });
+    if(buff.length) blocks.push(buff);
+  }
+
+  const results = [];
+  blocks.forEach(blockLines=>{
+    const questionParts = [];
+    const options = [];
+    let correctIndex = null;
+    const explanationParts = [];
+    let inExplanation = false;
+    blockLines.forEach(line=>{
+      if(!line) return;
+      if(inExplanation){ explanationParts.push(line); return; }
+      let m;
+      if((m = IMPORT_OPTION_RE.exec(line))){ options.push(m[2].trim()); return; }
+      if(options.length < 6 && (m = IMPORT_OPTION_NUM_RE.exec(line))){ options.push(m[2].trim()); return; }
+      if((m = IMPORT_ANSWER_RE.exec(line))){
+        const idx = letterToOptionIndex(m[1]);
+        if(idx !== null) correctIndex = idx;
+        return;
+      }
+      if((m = IMPORT_EXPLAIN_RE.exec(line))){
+        inExplanation = true;
+        if(m[1]) explanationParts.push(m[1].trim());
+        return;
+      }
+      if(options.length === 0) questionParts.push(line);
+    });
+    const questionText = questionParts.join(' ').trim();
+    if(!questionText || options.length < 2) return; // تجاهل أي كتلة غير صالحة كسؤال
+    while(options.length < 4) options.push('');
+    results.push({
+      question: questionText,
+      options: options.slice(0,4),
+      correctIndex: (correctIndex !== null && correctIndex < 4) ? correctIndex : 0,
+      correctFound: correctIndex !== null,
+      explanation: explanationParts.join(' ').trim(),
+    });
+  });
+  return results;
+}
+
+let importSession = { courseId:null, lectureId:null, nature:'past', parsed:[] };
+
+function modalImportQuestions(){
+  if(state.courses.length === 0){
+    openModal(`<h3>تنبيه</h3><p>أضف كورسًا أولًا قبل استيراد الأسئلة.</p><div class="modal-actions"><button class="btn small" id="cancelModal">إغلاق</button></div>`);
+    document.getElementById('cancelModal').addEventListener('click', closeModal);
+    return;
+  }
+  renderImportStep1();
+}
+
+function renderImportStep1(statusHtml){
+  const courseOptions = state.courses.map(c=>`<option value="${c.id}">${escapeHtml(c.title)}</option>`).join('');
+  openModal(`
+    <h3>📄 استيراد أسئلة من ملف PDF أو Word</h3>
+    <p style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">اختر الكورس، ثم ارفع ملف PDF أو Word (.docx) يحتوي على الأسئلة، وسيقوم النظام تلقائيًا بترتيب كل عنصر في مكانه: نص السؤال، الخيارات، الإجابة الصحيحة، والتفسير. تقدر تراجع وتعدّل كل سؤال قبل الحفظ النهائي.</p>
+    <form id="importSetupForm">
+      <div class="field"><label>الكورس</label><select name="courseId" id="importCourseSelect">${courseOptions}</select></div>
+      <div class="field"><label>المحاضرة (اختياري)</label><select name="lectureId" id="importLectureSelect">${lectureOptionsFor(state.courses[0]?.id, null)}</select></div>
+      <div class="field"><label>طبيعة الأسئلة (تُطبّق على كل الأسئلة المستوردة)</label><select name="nature"><option value="past">أسئلة سنوات سابقة</option><option value="ref">أسئلة مراجع</option></select></div>
+      <div class="field"><label>ملف الأسئلة (PDF أو Word .docx)</label><input type="file" name="file" id="importFileInput" accept=".pdf,.docx"></div>
+      <p style="color:var(--muted); font-size:12.5px; margin:-8px 0 14px;">ملاحظة: يجب أن يكون كل خيار في سطر مستقل (مثال: A) ... أو أ) ...)، والإجابة بصيغة "Answer:" أو "الإجابة:"، والتفسير بصيغة "Explanation:" أو "تفسير:". صيغة .doc القديمة غير مدعومة، فقط .docx.</p>
+      <div class="field"><label>أو الصق نص الأسئلة يدويًا بدل رفع ملف (اختياري)</label><textarea name="pasteText" rows="5" placeholder="الصق نص الأسئلة هنا إن لم ترفع ملفًا"></textarea></div>
+      ${statusHtml || ''}
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">تحليل واستخراج الأسئلة</button></div>
+    </form>`, true);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  const courseSelect = document.getElementById('importCourseSelect');
+  const lectureSelect = document.getElementById('importLectureSelect');
+  courseSelect.addEventListener('change', ()=>{ lectureSelect.innerHTML = lectureOptionsFor(courseSelect.value, null); });
+  document.getElementById('importSetupForm').addEventListener('submit', handleImportAnalyze);
+}
+
+async function handleImportAnalyze(e){
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData(form);
+  const courseId = fd.get('courseId');
+  const lectureId = fd.get('lectureId') || null;
+  const nature = fd.get('nature');
+  const pasteText = (fd.get('pasteText') || '').trim();
+  const fileInput = document.getElementById('importFileInput');
+  const file = fileInput.files[0];
+  const submitBtn = form.querySelector('button[type=submit]');
+
+  if(!pasteText && !file){
+    renderImportStep1(`<div class="form-msg error">يرجى رفع ملف أو لصق نص الأسئلة.</div>`);
+    return;
+  }
+  submitBtn.disabled = true; submitBtn.textContent = 'جاري التحليل...';
+  try{
+    let text = pasteText;
+    if(!text && file){
+      const ext = extOf(file.name);
+      const buffer = await file.arrayBuffer();
+      if(ext === 'docx'){
+        text = await extractTextFromDocxFile(buffer);
+      } else if(ext === 'pdf'){
+        text = await extractTextFromPdfFile(buffer);
+      } else if(ext === 'doc'){
+        throw new Error('صيغة .doc القديمة غير مدعومة، يرجى حفظ الملف بصيغة .docx ثم إعادة المحاولة.');
+      } else {
+        throw new Error('صيغة الملف غير مدعومة، يرجى رفع ملف PDF أو Word (.docx).');
+      }
+    }
+    const parsed = parseQuestionsFromText(text);
+    if(!parsed.length){
+      renderImportStep1(`<div class="form-msg error">لم يتم العثور على أسئلة قابلة للاستخراج في هذا الملف. تأكد أن كل سؤال له خياران على الأقل في أسطر مستقلة، أو جرّب لصق النص يدويًا.</div>`);
+      return;
+    }
+    importSession = { courseId, lectureId, nature, parsed };
+    renderImportReview();
+  } catch(err){
+    renderImportStep1(`<div class="form-msg error">${escapeHtml(err.message || 'حدث خطأ أثناء تحليل الملف.')}</div>`);
+  }
+}
+
+function renderImportReview(){
+  const course = state.courses.find(c=>c.id===importSession.courseId);
+  const lecture = importSession.lectureId ? state.lectures.find(l=>l.id===importSession.lectureId) : null;
+  const cards = importSession.parsed.map((q,i)=>`
+    <div class="import-q-card" data-idx="${i}" style="border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px;"><input type="checkbox" class="imp-include" checked> إدراج هذا السؤال</label>
+        <span style="font-size:12px; color:${q.correctFound ? 'var(--good)' : 'var(--danger)'};">${q.correctFound ? '✓ تم التعرف على الإجابة تلقائيًا' : '⚠️ لم يتم إيجاد الإجابة، اخترها يدويًا'}</span>
+      </div>
+      <div class="field"><label>نص السؤال</label><textarea class="imp-question" dir="ltr" style="text-align:left;">${escapeHtml(q.question)}</textarea></div>
+      ${[0,1,2,3].map(oi=>`<div class="field"><label>الخيار ${String.fromCharCode(65+oi)}</label><input type="text" class="imp-opt" data-oi="${oi}" dir="ltr" style="text-align:left;" value="${escapeHtml(q.options[oi]||'')}"></div>`).join('')}
+      <div class="field"><label>الإجابة الصحيحة</label><select class="imp-correct">${[0,1,2,3].map(oi=>`<option value="${oi}" ${q.correctIndex===oi?'selected':''}>${String.fromCharCode(65+oi)}</option>`).join('')}</select></div>
+      <div class="field"><label>التفسير (اختياري)</label><textarea class="imp-explain" dir="ltr" style="text-align:left;">${escapeHtml(q.explanation||'')}</textarea></div>
+    </div>
+  `).join('');
+
+  openModal(`
+    <h3>📄 مراجعة الأسئلة المستخرجة (${importSession.parsed.length})</h3>
+    <p style="color:var(--muted); font-size:13.5px; margin-bottom:14px;">سيتم إضافتها إلى: <b>${escapeHtml(course?.title || '')}</b>${lecture ? ` — ${escapeHtml(lecture.title)}` : ''} — ${natureLabel(importSession.nature)}. راجع كل سؤال وعدّل ما يلزم، ثم اضغط "حفظ الأسئلة المحددة".</p>
+    <div id="importReviewList">${cards}</div>
+    <div class="modal-actions"><button type="button" class="btn small" id="importBackBtn">⟲ رجوع</button><button type="button" class="btn teal solid small" id="importSaveBtn">💾 حفظ الأسئلة المحددة</button></div>
+  `, true);
+  document.getElementById('importBackBtn').addEventListener('click', ()=> renderImportStep1());
+  document.getElementById('importSaveBtn').addEventListener('click', handleImportSave);
+}
+
+async function handleImportSave(){
+  const cards = document.querySelectorAll('#importReviewList .import-q-card');
+  const toAdd = [];
+  cards.forEach(card=>{
+    const include = card.querySelector('.imp-include').checked;
+    if(!include) return;
+    const questionText = card.querySelector('.imp-question').value.trim();
+    const opts = Array.from(card.querySelectorAll('.imp-opt')).map(inp=>inp.value.trim());
+    const correctIndex = Number(card.querySelector('.imp-correct').value);
+    const explanation = card.querySelector('.imp-explain').value.trim();
+    if(!questionText || opts.filter(o=>o).length < 2) return;
+    toAdd.push({
+      id:'q'+Date.now()+Math.random().toString(36).slice(2,7),
+      courseId: importSession.courseId,
+      lectureId: importSession.lectureId,
+      nature: importSession.nature,
+      question: questionText,
+      options: opts,
+      correctIndex,
+      explanation,
+    });
+  });
+  if(!toAdd.length){
+    alert('لم يتم تحديد أي سؤال صالح للحفظ.');
+    return;
+  }
+  state.questions.push(...toAdd);
+  await setData('questions', state.questions, true);
+  closeModal();
+  render();
 }
 
 /* =========================================================
@@ -3233,15 +4055,30 @@ function confirmDelete(message, onConfirm){
    محرر نصوص مبسّط (Rich Text) لصفحة "ملخصاتي": يدعم عريض/مائل/قوائم
    إضافة إلى إدراج صور (تُحوَّل base64) وجداول داخل محتوى الملخص
    ========================================================= */
+const RTE_FONT_FAMILIES = [
+  ['', 'الخط الافتراضي'],
+  ['Cairo, sans-serif', 'Cairo'],
+  ['Arial, sans-serif', 'Arial'],
+  ["'Times New Roman', serif", 'Times New Roman'],
+  ["'Courier New', monospace", 'Courier New'],
+  ['Georgia, serif', 'Georgia'],
+  ['Tahoma, sans-serif', 'Tahoma']
+];
+const RTE_FONT_SIZES = [12,13,14,15,16,18,20,22,24,28,32];
 function rteToolbarHtml(editorId){
+  const familyOptions = RTE_FONT_FAMILIES.map(([val,label])=>`<option value="${escapeHtml(val)}">${escapeHtml(label)}</option>`).join('');
+  const sizeOptions = RTE_FONT_SIZES.map(sz=>`<option value="${sz}" ${sz===15?'selected':''}>${sz}px</option>`).join('');
   return `
   <div class="rte-toolbar" data-target="${editorId}">
     <button type="button" class="rte-btn" data-cmd="bold" title="عريض"><b>B</b></button>
     <button type="button" class="rte-btn" data-cmd="italic" title="مائل"><i>I</i></button>
     <button type="button" class="rte-btn" data-cmd="underline" title="تسطير"><u>U</u></button>
     <button type="button" class="rte-btn" data-cmd="insertUnorderedList" title="قائمة نقطية">•≡</button>
+    <select class="rte-select rte-font-family" title="نوع الخط">${familyOptions}</select>
+    <select class="rte-select rte-font-size" title="حجم الخط">${sizeOptions}</select>
+    <input type="color" class="rte-color-input rte-font-color" title="لون الخط للنص المحدَّد" value="#16232f">
     <button type="button" class="rte-btn rte-img-btn" title="إضافة صورة">🖼️</button>
-    <button type="button" class="rte-btn rte-table-btn" title="إضافة جدول">▦</button>
+    <button type="button" class="rte-btn rte-table-btn" title="إضافة جدول (تحديد عدد الصفوف والأعمدة)">▦</button>
     <input type="file" accept="image/*" class="rte-img-input" style="display:none;">
   </div>`;
 }
@@ -3292,20 +4129,66 @@ function wireRteToolbar(scopeEl){
     if(tableBtn){
       tableBtn.addEventListener('mousedown', (e)=>{ e.preventDefault(); saveSelection(); });
       tableBtn.addEventListener('click', ()=>{
+        const rowsInput = prompt('كم عدد صفوف الجدول؟', '2');
+        if(rowsInput === null) return;
+        const colsInput = prompt('كم عدد أعمدة الجدول؟', '2');
+        if(colsInput === null) return;
+        const rows = Math.min(Math.max(parseInt(rowsInput, 10) || 0, 1), 20);
+        const cols = Math.min(Math.max(parseInt(colsInput, 10) || 0, 1), 20);
         editor.focus(); restoreSelection();
-        const tableHtml = `<table><tbody>
-          <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
-          <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
-        </tbody></table><p><br></p>`;
+        let rowsHtml = '';
+        for(let r=0; r<rows; r++){
+          let cellsHtml = '';
+          for(let c=0; c<cols; c++) cellsHtml += '<td>&nbsp;</td>';
+          rowsHtml += `<tr>${cellsHtml}</tr>`;
+        }
+        const tableHtml = `<table><tbody>${rowsHtml}</tbody></table><p><br></p>`;
         document.execCommand('insertHTML', false, tableHtml);
         saveSelection();
       });
     }
+    const familySelect = toolbar.querySelector('.rte-font-family');
+    if(familySelect){
+      familySelect.addEventListener('mousedown', saveSelection);
+      familySelect.addEventListener('change', ()=>{
+        if(savedRange && !savedRange.collapsed && familySelect.value){
+          applyStyleToRange(savedRange.cloneRange(), { fontFamily: familySelect.value });
+        }
+      });
+    }
+    const sizeSelect = toolbar.querySelector('.rte-font-size');
+    if(sizeSelect){
+      sizeSelect.addEventListener('mousedown', saveSelection);
+      sizeSelect.addEventListener('change', ()=>{
+        if(savedRange && !savedRange.collapsed){
+          applyStyleToRange(savedRange.cloneRange(), { fontSize: sizeSelect.value+'px' });
+        }
+      });
+    }
+    const colorInput = toolbar.querySelector('.rte-font-color');
+    if(colorInput){
+      colorInput.addEventListener('mousedown', saveSelection);
+      colorInput.addEventListener('input', ()=>{
+        if(savedRange && !savedRange.collapsed){
+          applyStyleToRange(savedRange.cloneRange(), { color: colorInput.value });
+        }
+      });
+    }
   });
+}
+/* يطبّق مجموعة أنماط CSS (لون، نوع خط، حجم خط...) على نطاق نص محدَّد بتغليفه بوسم span؛
+   نسخة معمَّمة من applyColorToRange تُستخدم في محرري الملخصات/الأسئلة ومحرر محتوى الموقع */
+function applyStyleToRange(range, styles){
+  if(!range || range.collapsed) return;
+  const span = document.createElement('span');
+  Object.keys(styles).forEach(prop=>{ span.style[prop] = styles[prop]; });
+  try{ range.surroundContents(span); }
+  catch(e){ const content = range.extractContents(); span.appendChild(content); range.insertNode(span); }
 }
 
 /* ينظّف الـ HTML القادم من المحرر قبل حفظه: يسمح فقط بوسوم آمنة (نص، صور،
    جداول، قوائم) ويحذف أي وسوم/خصائص أخرى (سكربتات، معالجات أحداث، روابط غريبة) */
+const RTE_ALLOWED_STYLE_PROPS = new Set(['color', 'font-family', 'font-size', 'font-weight', 'font-style', 'text-decoration']);
 function sanitizeSummaryHtml(html){
   const ALLOWED = new Set(['P','DIV','BR','B','STRONG','I','EM','U','UL','OL','LI','IMG','TABLE','THEAD','TBODY','TR','TD','TH','SPAN']);
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -3321,6 +4204,21 @@ function sanitizeSummaryHtml(html){
           const name = attr.name.toLowerCase();
           if(name === 'src' && child.tagName === 'IMG'){
             if(!/^data:image\//i.test(attr.value)) child.removeAttribute(attr.name);
+          } else if(name === 'style'){
+            /* يُبقي فقط على خصائص التنسيق الآمنة (لون/نوع خط/حجم خط...) ويحذف أي قيمة
+               تحتوي على url(/expression(/javascript: لمنع أي محاولة حقن عبر الأنماط */
+            const kept = [];
+            child.style.cssText.split(';').forEach(decl=>{
+              const idx = decl.indexOf(':');
+              if(idx === -1) return;
+              const prop = decl.slice(0, idx).trim().toLowerCase();
+              const val = decl.slice(idx+1).trim();
+              if(RTE_ALLOWED_STYLE_PROPS.has(prop) && val && !/url\(|expression\(|javascript:/i.test(val)){
+                kept.push(`${prop}: ${val}`);
+              }
+            });
+            if(kept.length) child.setAttribute('style', kept.join('; '));
+            else child.removeAttribute('style');
           } else {
             child.removeAttribute(attr.name);
           }
@@ -3445,6 +4343,7 @@ async function render(){
       case 'terms': html = pageTerms(); break;
       case 'login': html = pageLogin(); break;
       case 'admin-login': html = pageAdminLogin(); break;
+      case 'admin-analytics': html = pageAdminAnalytics(); break;
       default: html = pageHome();
     }
   }
@@ -3461,7 +4360,45 @@ async function render(){
     window.scrollTo({top:scrollBefore, behavior:'instant'});
   }
   lastRenderedRoute = route;
+  updateWatermark(route);
 }
+
+/* هلامة مائية باهتة جدًا داخل مربع السؤال (اسم الطالب + رقم هاتفه): وحدة بالمنتصف واثنتان بالأطراف،
+   وتمنع تحديد/نسخ محتوى الأسئلة. تظهر فقط للطالب المسجّل دخوله وفقط في صفحة "bank". */
+function updateWatermark(route){
+  const isStudent = state.session && state.session.type === 'student';
+  const shouldShow = isStudent && route === 'bank';
+  document.body.classList.toggle('copy-protected', shouldShow);
+  const label = shouldShow ? `${state.session.name || ''}  •  ${state.session.phone || ''}` : '';
+  document.querySelectorAll('#app .wizard-card, #app .q-card').forEach(el=>{
+    const existing = el.querySelector('.wm-wrap');
+    if(existing) existing.remove();
+    if(!shouldShow) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'wm-wrap';
+    const safeLabel = escapeHtml(label);
+    wrap.innerHTML =
+      `<span class="wm-item wm-center">${safeLabel}</span>` +
+      `<span class="wm-item wm-top">${safeLabel}</span>` +
+      `<span class="wm-item wm-bottom">${safeLabel}</span>`;
+    el.appendChild(wrap);
+  });
+}
+
+/* منع النسخ/القص/القائمة اليمنى/اختصارات النسخ وأدوات المطوّر أثناء عرض بنك الأسئلة فقط
+   (حماية رادعة وليست مطلقة — لا يوجد حل يمنع لقطة الشاشة تمامًا). */
+document.addEventListener('copy', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
+document.addEventListener('cut', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
+document.addEventListener('contextmenu', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
+document.addEventListener('selectstart', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
+document.addEventListener('dragstart', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
+document.addEventListener('keydown', (e)=>{
+  if(!document.body.classList.contains('copy-protected')) return;
+  const k = (e.key || '').toLowerCase();
+  if((e.ctrlKey || e.metaKey) && ['c','x','u','s','p'].includes(k)) e.preventDefault();
+  if(e.key === 'F12') e.preventDefault();
+  if((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(k)) e.preventDefault();
+});
 
 function bindPageEvents(route){
   document.querySelectorAll('[data-self-enroll]').forEach(btn=>{
@@ -3573,6 +4510,8 @@ function bindPageEvents(route){
       if(toExam) toExam.addEventListener('click', ()=>{ state.bankAdminView = false; resetQuiz(); render(); });
       const addBtn = document.getElementById('addQuestionBtn');
       if(addBtn) addBtn.addEventListener('click', modalAddQuestion);
+      const importBtn = document.getElementById('importQuestionsBtn');
+      if(importBtn) importBtn.addEventListener('click', modalImportQuestions);
       document.querySelectorAll('[data-edit-question]').forEach(btn=>{
         btn.addEventListener('click', ()=> modalEditQuestion(btn.dataset.editQuestion));
       });
@@ -3664,14 +4603,43 @@ function bindPageEvents(route){
     }
     if(quiz.step === 'running'){
       const q = quiz.pool[quiz.idx];
-      document.querySelectorAll('[data-answer]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-          if(quiz.answers[q.id] !== undefined && quiz.mode === 'study') return;
-          quiz.answers[q.id] = Number(btn.dataset.answer);
+      const type = q.type || 'mcq';
+      const nextBtn = document.getElementById('quizNextBtn');
+      if(type === 'mcq'){
+        document.querySelectorAll('[data-answer]').forEach(btn=>{
+          btn.addEventListener('click', ()=>{
+            if(quiz.answers[q.id] !== undefined && quiz.mode === 'study') return;
+            quiz.answers[q.id] = Number(btn.dataset.answer);
+            render();
+          });
+        });
+      } else if(type === 'written'){
+        const ta = document.getElementById('writtenAnswerInput');
+        if(ta){
+          ta.addEventListener('input', ()=>{
+            quiz.answers[q.id] = ta.value;
+            if(nextBtn) nextBtn.disabled = !ta.value.trim().length;
+          });
+        }
+        const revealBtn = document.getElementById('revealWrittenBtn');
+        if(revealBtn) revealBtn.addEventListener('click', ()=>{
+          quiz.revealedWritten = quiz.revealedWritten || {};
+          quiz.revealedWritten[q.id] = !quiz.revealedWritten[q.id];
           render();
         });
-      });
-      const nextBtn = document.getElementById('quizNextBtn');
+      } else if(type === 'matching'){
+        document.querySelectorAll('.match-answer-select').forEach(sel=>{
+          sel.addEventListener('change', ()=>{
+            const li = Number(sel.dataset.leftIndex);
+            quiz.answers[q.id] = quiz.answers[q.id] || {};
+            if(sel.value === '') delete quiz.answers[q.id][li];
+            else quiz.answers[q.id][li] = Number(sel.value);
+            const allAnswered = (q.pairs||[]).every((_,i)=> quiz.answers[q.id][i] !== undefined);
+            if(nextBtn) nextBtn.disabled = !allAnswered;
+            if(quiz.mode === 'study' && allAnswered) render();
+          });
+        });
+      }
       if(nextBtn) nextBtn.addEventListener('click', ()=>{
         if(quiz.idx < quiz.pool.length - 1){ quiz.idx++; render(); }
         else { quiz.step = 'results'; render(); }
@@ -3773,7 +4741,7 @@ function startQuiz(){
   pool = pool.filter(q => !q.lectureId || (isLectureIncluded(q.lectureId) && isLectureAccessibleForBank(q.lectureId)));
   pool = shuffleArr(pool);
   if(quiz.count) pool = pool.slice(0, quiz.count);
-  quiz.pool = pool; quiz.idx = 0; quiz.answers = {}; quiz.revealed = {};
+  quiz.pool = pool; quiz.idx = 0; quiz.answers = {}; quiz.revealed = {}; quiz.revealedWritten = {};
   quiz.step = pool.length ? 'running' : 'no-questions';
   render();
 }
@@ -3785,7 +4753,7 @@ function normalizePhone(raw){
   return (raw||'').trim().replace(/[\s\-()]/g,'');
 }
 function isValidPhone(phone){
-  return /^\+?[0-9]{8,14}$/.test(phone);
+  return /^07[0-9]{8}$/.test(phone);
 }
 function phoneToPseudoEmail(phone){
   return 's'+phone.replace(/\D/g,'')+'@medora.app';
@@ -3798,7 +4766,7 @@ async function handleAuthSubmit(e){
   const password = fd.get('password');
   const msgBox = document.getElementById('authMsg');
   if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
-  if(!isValidPhone(phone)){ msgBox.innerHTML = `<div class="form-msg error">رقم الهاتف غير صالح، اكتبه بالأرقام فقط (مثال: 0791234567).</div>`; return; }
+  if(!isValidPhone(phone)){ msgBox.innerHTML = `<div class="form-msg error">الرجاء إدخال رقم الهاتف الأردني والذي يبدأ ب 07.</div>`; return; }
   const pseudoEmail = phoneToPseudoEmail(phone);
   if(authMode === 'register'){
     const fullName = fd.get('fullName').trim();
