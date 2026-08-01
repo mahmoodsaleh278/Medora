@@ -701,6 +701,7 @@
       <a href="#/my-courses" data-route="my-courses" id="navMyCoursesLink" class="hidden">دوراتي</a>
       <a href="#/student-space" data-route="student-space" id="navStudentSpaceLink" class="hidden">مساحة الطالب</a>
       <a href="#/admin-analytics" data-route="admin-analytics" id="navAnalyticsLink" class="hidden">📊 التحليلات</a>
+      <a href="#/admin-coupons" data-route="admin-coupons" id="navCouponsLink" class="hidden">🎟️ الكوبونات</a>
       <a href="#/login" data-route="login" id="navLoginLink">تسجيل الدخول</a>
     </nav>
     <div class="nav-actions">
@@ -962,7 +963,7 @@ function watchDeviceLock(phone){
 
 /* ---------------- App state ---------------- */
 let state = {
-  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [],
+  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', bankAdminView: false, bankNotesView: false, content: {},
 };
 
@@ -1200,7 +1201,7 @@ function courseSections(courseId){
 }
 
 async function initData(){
-  const [courses, lectures, questions, students, messages, enrollments, summaries, lectureProgress, savedContent, savedQuestions, savedDesign] = await Promise.all([
+  const [courses, lectures, questions, students, messages, enrollments, summaries, lectureProgress, savedContent, savedQuestions, savedDesign, savedCoupons] = await Promise.all([
     getData('courses', SEED_COURSES, true),
     getData('lectures', SEED_LECTURES, true),
     getData('questions', SEED_QUESTIONS, true),
@@ -1212,12 +1213,14 @@ async function initData(){
     getData('content', {}, true),
     getData('savedQuestions', [], true),
     getData('design', DESIGN_DEFAULTS, true),
+    getData('coupons', [], true),
     syncSessionFromAuth(),
   ]);
   state.courses = courses.map(normalizeCourse); state.lectures = lectures.map(normalizeLecture); state.questions = questions;
   state.students = students; state.messages = messages; state.enrollments = enrollments; state.summaries = summaries;
   state.lectureProgress = lectureProgress;
   state.savedQuestions = Array.isArray(savedQuestions) ? savedQuestions : [];
+  state.coupons = Array.isArray(savedCoupons) ? savedCoupons : [];
   state.content = Object.assign({}, CONTENT_DEFAULTS, savedContent);
   state.design = Object.assign({}, DESIGN_DEFAULTS, savedDesign);
   state.loaded = true;
@@ -1247,6 +1250,276 @@ async function selfEnrollSection(courseId, section){
   state.enrollments.push({ courseId, phone, section });
   await setData('enrollments', state.enrollments, true);
   render();
+}
+
+/* ---------------- Coupons (كوبونات الخصم/الفتح المجاني) ----------------
+   كل كوبون مرتبط بكورس، وإما بقسم محدد ضمنه (فيرست/ميد/فاينال) أو بكل أقسامه.
+   نوعان: free (يفتح الوصول تلقائيًا فور إدخال الكود) أو discount (رسالة توضيحية
+   بنسبة خصم، لأن المنصة ما فيها دفع إلكتروني والتفعيل يصير يدويًا من الإدارة).
+   maxUses=null تعني بدون حد أقصى لعدد مرات الاستخدام. usedBy تتبع كل طالب استخدم
+   الكوبون (رقم هاتفه ووقت الاستخدام) لمنع نفس الطالب من استخدامه أكثر من مرة. */
+function generateCouponCode(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for(let i=0;i<8;i++) code += chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+function findCouponByCode(code){
+  const norm = (code||'').trim().toUpperCase();
+  return state.coupons.find(c=>c.code===norm);
+}
+function couponUsesLeft(coupon){
+  if(coupon.maxUses==null) return Infinity;
+  return Math.max(0, coupon.maxUses - (coupon.usedBy||[]).length);
+}
+function hasStudentUsedCoupon(coupon, phone){
+  return (coupon.usedBy||[]).some(u=>u.phone===phone);
+}
+/* صلاحية الكوبون: expiresAt هو timestamp (مللي ثانية) أو null لكوبون بدون تاريخ انتهاء. */
+function isCouponExpired(coupon){
+  return coupon.expiresAt != null && Date.now() > coupon.expiresAt;
+}
+/* رقم تسلسلي فريد لبطاقة الخصم، مبني من كود الكوبون + رقم هاتف الطالب + لحظة
+   الاستخدام بالضبط + "ملح" ثابت داخل الكود. لا يمكن لأحد توليد نفس الرقم بدون
+   معرفة هذه القيم الثلاث، وأي رقم مزوَّر لن يطابق ما هو مخزَّن فعليًا ضمن سجل
+   استخدامات الكوبون (usedBy) الذي يراه المشرف من لوحة التحكم — فتصبح عملية
+   التحقق أن يقارن الدعم الفني الرقم الموجود على البطاقة المُرسلة مع الرقم
+   المخزَّن في usedBy لنفس الكوبون. */
+function computeCouponSerial(code, phone, usedAt){
+  const raw = `${code}|${phone}|${usedAt}|MEDORA-CARD-SALT-v1`;
+  let hash = 5381;
+  for(let i=0;i<raw.length;i++){ hash = ((hash*33) ^ raw.charCodeAt(i)) >>> 0; }
+  return 'MED-' + hash.toString(36).toUpperCase().padStart(7,'0');
+}
+async function redeemCoupon(rawCode){
+  if(!state.session || state.session.type !== 'student') return { ok:false, msg:'سجّل الدخول كطالب أولًا لاستخدام كوبون.' };
+  const code = (rawCode||'').trim().toUpperCase();
+  if(!code) return { ok:false, msg:'أدخل كود الكوبون.' };
+  const coupon = findCouponByCode(code);
+  if(!coupon || !coupon.active) return { ok:false, msg:'كود الكوبون غير صحيح أو غير مفعّل.' };
+  if(isCouponExpired(coupon)) return { ok:false, msg:'انتهت صلاحية هذا الكوبون ولم يعد قابلًا للاستخدام.' };
+  if(couponUsesLeft(coupon) <= 0) return { ok:false, msg:'تم استنفاد عدد مرات استخدام هذا الكوبون.' };
+  const phone = state.session.phone;
+  if(hasStudentUsedCoupon(coupon, phone)) return { ok:false, msg:'لقد استخدمت هذا الكوبون مسبقًا.' };
+  const course = state.courses.find(c=>c.id===coupon.courseId);
+  if(!course) return { ok:false, msg:'الكورس المرتبط بهذا الكوبون لم يعد متاحًا.' };
+  const targetLabel = coupon.section ? `قسم ${SECTION_LABELS[coupon.section]} من مادة "${course.title}"` : `مادة "${course.title}" بكل أقسامها`;
+  let msg, card = null;
+  const usedAt = Date.now();
+  if(coupon.type === 'free'){
+    const sections = coupon.section ? [coupon.section] : courseSections(coupon.courseId);
+    let addedAny = false;
+    sections.forEach(s=>{
+      if(!isEnrolledSection(coupon.courseId, s)){
+        state.enrollments.push({ courseId: coupon.courseId, phone, section: s });
+        addedAny = true;
+      }
+    });
+    if(addedAny) await setData('enrollments', state.enrollments, true);
+    msg = `🎉 تم فتح ${targetLabel} مجانًا في حسابك مباشرة!`;
+  } else {
+    msg = `🏷️ كوبونك يمنحك خصم ${coupon.discountPercent}% على ${targetLabel}. حمّل بطاقة الخصم أدناه وأرسلها للدعم الفني لإتمام تفعيل اشتراكك بالخصم.`;
+    const serial = computeCouponSerial(coupon.code, phone, usedAt);
+    card = {
+      studentName: state.session.name || '',
+      phone,
+      discountPercent: coupon.discountPercent,
+      courseTitle: course.title,
+      targetLabel,
+      serial,
+      code: coupon.code,
+      issuedAt: usedAt,
+    };
+  }
+  coupon.usedBy = coupon.usedBy || [];
+  const usedByEntry = { phone, usedAt };
+  if(card) usedByEntry.serial = card.serial;
+  coupon.usedBy.push(usedByEntry);
+  await setData('coupons', state.coupons, true);
+  return { ok:true, msg, card };
+}
+
+/* يلفّ نصًا عربيًا داخل عرض أقصى معيّن على الكانفاس، سطرًا سطرًا (استخدام بسيط
+   لكتابة الأسطر الطويلة مثل اسم المادة داخل بطاقة الخصم). */
+function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight){
+  const words = (text||'').split(' ');
+  let line = '', curY = y;
+  words.forEach(word=>{
+    const test = line ? line + ' ' + word : word;
+    if(line && ctx.measureText(test).width > maxWidth){
+      ctx.fillText(line, x, curY);
+      line = word; curY += lineHeight;
+    } else {
+      line = test;
+    }
+  });
+  if(line) ctx.fillText(line, x, curY);
+  return curY;
+}
+
+/* يبني بطاقة الخصم كصورة PNG عبر canvas (اسم الطالب، رقمه، نسبة الخصم، اسم
+   المادة، شعار MEDORA أسفل يمين البطاقة، ونقش أمان قطري متكرر بشفافية خفيفة
+   جدًا في الخلفية) ويعيد رابط الصورة (data URL) بدل تحميلها مباشرة، حتى يقدر
+   الطالب يشوف البطاقة على الشاشة أولًا قبل تحميلها. الرقم التسلسلي المطبوع
+   على البطاقة (card.serial) محسوب مسبقًا في redeemCoupon من كود الكوبون +
+   رقم الهاتف + لحظة الاستخدام، ومخزَّن أيضًا في usedBy؛ فالمشرف يقارنه مع
+   القيمة المخزَّنة قبل قبول أي بطاقة، ما يمنع تزوير بطاقات مشابهة. */
+async function buildCouponCardDataUrl(card){
+  try{ if(document.fonts && document.fonts.ready) await document.fonts.ready; }catch(e){}
+  const W = 1000, H = 620;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const bgGrad = ctx.createLinearGradient(0,0,W,H);
+  bgGrad.addColorStop(0,'#0f2745');
+  bgGrad.addColorStop(1,'#177a8c');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0,0,W,H);
+
+  const pad = 30, radius = 24;
+  const px=pad, py=pad, pw=W-pad*2, ph=H-pad*2;
+  const roundRectPath = (x,y,w,h,r)=>{
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  };
+
+  ctx.save();
+  roundRectPath(px,py,pw,ph,radius);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.clip();
+
+  /* نقش أمان: كلمة MEDORA متكررة قطريًا بشفافية خفيفة جدًا فوق كامل البطاقة،
+     نفس فكرة الهلامة المائية المستخدمة في حماية بنك الأسئلة داخل المنصة. */
+  ctx.save();
+  ctx.translate(px+pw/2, py+ph/2);
+  ctx.rotate(-22*Math.PI/180);
+  ctx.fillStyle = 'rgba(15,39,69,0.045)';
+  ctx.font = '800 28px Cairo, sans-serif';
+  ctx.textAlign = 'center';
+  for(let yy=-ph; yy<=ph; yy+=58){
+    for(let xx=-pw; xx<=pw; xx+=210){
+      ctx.fillText('MEDORA', xx, yy);
+    }
+  }
+  ctx.restore();
+
+  ctx.fillStyle = '#177a8c';
+  ctx.fillRect(px, py, pw, 64);
+  ctx.direction = 'rtl'; ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 24px Cairo, sans-serif';
+  ctx.fillText('🏷️ بطاقة خصم', px+pw-26, py+40);
+  ctx.direction = 'ltr'; ctx.textAlign = 'left';
+  ctx.font = '700 15px monospace';
+  ctx.fillText(card.code, px+26, py+40);
+
+  ctx.direction='rtl'; ctx.textAlign='right';
+  ctx.fillStyle = '#0f2745';
+  ctx.font = '800 30px Cairo, sans-serif';
+  ctx.fillText(card.studentName || '—', px+pw-40, py+140);
+  ctx.fillStyle = '#5c7185';
+  ctx.font = '600 20px Cairo, sans-serif';
+  ctx.direction='ltr'; ctx.textAlign='right';
+  ctx.fillText(card.phone || '—', px+pw-40, py+175);
+
+  const circR = 65, circX = px+125, circY = py+270;
+  ctx.beginPath();
+  ctx.arc(circX, circY, circR, 0, Math.PI*2);
+  ctx.fillStyle = '#e6f4f6';
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#177a8c';
+  ctx.stroke();
+  ctx.fillStyle = '#177a8c';
+  ctx.textAlign = 'center'; ctx.direction='ltr';
+  ctx.font = '800 32px Cairo, sans-serif';
+  ctx.fillText(`${card.discountPercent}%`, circX, circY+2);
+  ctx.font = '700 15px Cairo, sans-serif';
+  ctx.direction='rtl';
+  ctx.fillText('خصم', circX, circY+28);
+
+  ctx.direction='rtl'; ctx.textAlign='right';
+  ctx.fillStyle = '#16232f';
+  ctx.font = '700 19px Cairo, sans-serif';
+  wrapCanvasText(ctx, card.targetLabel, px+pw-40, py+250, pw-280, 26);
+
+  ctx.fillStyle = '#5c7185';
+  ctx.font = '600 15px Cairo, sans-serif';
+  wrapCanvasText(ctx, 'حمّل هذه البطاقة وأرسلها إلى الدعم الفني لإتمام تفعيل اشتراكك بالخصم.', px+pw-40, py+400, pw-80, 22);
+
+  ctx.strokeStyle = '#e1e8ee';
+  ctx.beginPath();
+  ctx.moveTo(px+26, py+ph-90);
+  ctx.lineTo(px+pw-26, py+ph-90);
+  ctx.stroke();
+
+  ctx.direction='rtl'; ctx.textAlign='left';
+  ctx.fillStyle = '#5c7185';
+  ctx.font = '600 13px Cairo, sans-serif';
+  ctx.fillText('الرقم التسلسلي للتحقق:', px+26, py+ph-56);
+  ctx.fillStyle = '#0f2745';
+  ctx.font = '800 20px monospace';
+  ctx.direction='ltr'; ctx.textAlign='left';
+  ctx.fillText(card.serial, px+26, py+ph-28);
+
+  ctx.textAlign='right'; ctx.direction='ltr';
+  ctx.fillStyle = '#177a8c';
+  ctx.font = '800 24px "Playfair Display", serif';
+  ctx.fillText('MEDORA', px+pw-26, py+ph-32);
+  ctx.fillStyle = '#5c7185';
+  ctx.font = '600 12px Cairo, sans-serif';
+  ctx.direction='rtl';
+  ctx.fillText('منصتك نحو التفوق', px+pw-26, py+ph-12);
+
+  ctx.restore();
+
+  roundRectPath(px,py,pw,ph,radius);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.stroke();
+
+  return canvas.toDataURL('image/png');
+}
+
+/* يعرض بطاقة الخصم كصورة داخل صندوق الرسائل مباشرة بعد تفعيل الكوبون بنجاح،
+   مع رابط تحميل حقيقي (a[download]) تحت الصورة كي يحفظها الطالب ويرسلها
+   للدعم الفني. */
+async function renderCouponCardPreview(card, container){
+  if(!card || !container) return;
+  container.insertAdjacentHTML('beforeend', `<div id="couponCardPreviewWrap" style="margin-top:14px; text-align:center;"><span class="loading-dot"></span> جارِ تجهيز البطاقة...</div>`);
+  let dataUrl;
+  try{
+    dataUrl = await buildCouponCardDataUrl(card);
+  }catch(err){
+    const wrap = document.getElementById('couponCardPreviewWrap');
+    if(wrap) wrap.innerHTML = `<div class="form-msg error">تعذّر إنشاء بطاقة الخصم. جرّب مرة أخرى.</div>`;
+    return;
+  }
+  const wrap = document.getElementById('couponCardPreviewWrap');
+  if(!wrap) return;
+  wrap.innerHTML = `
+    <img src="${dataUrl}" alt="بطاقة الخصم" style="max-width:100%; width:520px; border-radius:16px; box-shadow:0 8px 24px rgba(15,39,69,0.25);">
+    <div style="margin-top:10px;">
+      <a href="${dataUrl}" download="MEDORA-discount-card-${card.serial}.png" class="btn teal solid small">${ICONS.download} تحميل البطاقة</a>
+    </div>`;
+}
+/* نسخة قديمة تبقى متاحة لأي استدعاء آخر يحتاج تحميلًا مباشرًا بدون معاينة. */
+async function downloadCouponCard(card){
+  if(!card) return;
+  const dataUrl = await buildCouponCardDataUrl(card);
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = `MEDORA-discount-card-${card.serial}.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 /* ---------------- My Notes (الأسئلة المحفوظة) ----------------
@@ -1376,6 +1649,7 @@ function renderNavState(){
   const bankLink = document.getElementById('navBankLink');
   const studentSpaceLink = document.getElementById('navStudentSpaceLink');
   const analyticsLink = document.getElementById('navAnalyticsLink');
+  const couponsLink = document.getElementById('navCouponsLink');
 
   if(state.session && state.session.type === 'student'){
     loginLink.classList.add('hidden');
@@ -1383,6 +1657,7 @@ function renderNavState(){
     bankLink.classList.add('hidden');
     studentSpaceLink.classList.remove('hidden');
     analyticsLink.classList.add('hidden');
+    couponsLink.classList.add('hidden');
     const uniSuffix = state.session.university ? ` — ${state.session.university}` : '';
     const avatarImg = state.session.avatar ? `<img src="${state.session.avatar}" class="user-pill-avatar" alt="">` : '👋';
     userArea.innerHTML = `<span class="user-pill">${avatarImg} <span>${escapeHtml(state.session.name + uniSuffix)}</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
@@ -1392,6 +1667,7 @@ function renderNavState(){
     bankLink.classList.remove('hidden');
     studentSpaceLink.classList.add('hidden');
     analyticsLink.classList.remove('hidden');
+    couponsLink.classList.remove('hidden');
     userArea.innerHTML = `<span class="user-pill"><span>🛡️ ${escapeHtml(state.session.name)}</span> <span class="admin-tag">مشرف</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
   } else {
     loginLink.classList.remove('hidden');
@@ -1399,6 +1675,7 @@ function renderNavState(){
     bankLink.classList.add('hidden');
     studentSpaceLink.classList.add('hidden');
     analyticsLink.classList.add('hidden');
+    couponsLink.classList.add('hidden');
     userArea.innerHTML = '';
   }
   const lb = document.getElementById('logoutBtn');
@@ -1421,6 +1698,7 @@ function renderNavState(){
     bannerWrap.innerHTML = `<div class="admin-banner">
         <span>🛡️ أنت الآن في وضع المشرف — يمكنك إضافة أو حذف الدورات والمحاضرات والأسئلة مباشرة من الصفحات.</span>
         <a href="#/admin-analytics" class="btn small" style="border-color:#fff;color:#fff;">📊 التحليلات</a>
+        <a href="#/admin-coupons" class="btn small" style="border-color:#fff;color:#fff;">🎟️ الكوبونات</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
       </div>`;
@@ -1899,6 +2177,16 @@ function pageStudentSpace(){
           <b>ملخصاتي</b>
           <span>أضف ملخصاتك الخاصة واحتفظ بها في حسابك</span>
         </a>
+      </div>
+
+      <div class="card-panel" style="margin-top:24px; padding:26px;">
+        <h3 style="font-size:17px; margin-bottom:6px;">🎟️ عندك كود كوبون؟</h3>
+        <p class="sub" style="margin-bottom:16px;">أدخل كود الكوبون هنا للحصول على فتح مجاني أو خصم على إحدى المواد.</p>
+        <form id="couponRedeemForm" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+          <input type="text" name="couponCode" required placeholder="مثال: ABC12345" style="flex:1; min-width:200px; direction:ltr; font-family:monospace; letter-spacing:1px; text-transform:uppercase; padding:12px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); color:var(--text); font-size:14px;">
+          <button type="submit" class="btn teal solid">تفعيل الكوبون</button>
+        </form>
+        <div id="couponRedeemMsg" style="margin-top:12px;"></div>
       </div>
     </div>
   </section>
@@ -2823,6 +3111,152 @@ function pageAdminAnalytics(){
     </div>
   </section>
   `;
+}
+
+/* =========================================================
+   PAGE: ADMIN COUPONS (كوبونات الفتح المجاني والخصم)
+   ========================================================= */
+function couponTargetLabel(coupon){
+  const course = state.courses.find(c=>c.id===coupon.courseId);
+  const courseTitle = course ? course.title : 'كورس محذوف';
+  return coupon.section ? `${courseTitle} — قسم ${SECTION_LABELS[coupon.section]}` : `${courseTitle} — كل الأقسام`;
+}
+function couponCardHtml(coupon){
+  const usesLeft = couponUsesLeft(coupon);
+  const usesText = coupon.maxUses==null ? `${(coupon.usedBy||[]).length} استخدام (بدون حد أقصى)` : `${(coupon.usedBy||[]).length} / ${coupon.maxUses} استخدام`;
+  const typeTag = coupon.type==='free' ? `<span class="lecture-tier-tag">🆓 فتح مجاني</span>` : `<span class="lecture-tier-tag locked">🏷️ خصم ${coupon.discountPercent}%</span>`;
+  const expired = isCouponExpired(coupon);
+  const expiryTag = coupon.expiresAt ? (expired
+      ? `<span class="lecture-tier-tag locked" style="background:var(--danger); color:#fff;">⏰ منتهي الصلاحية</span>`
+      : `<span class="lecture-tier-tag" style="margin-inline-start:6px;">⏳ ينتهي: ${new Date(coupon.expiresAt).toLocaleString('ar-JO',{dateStyle:'medium',timeStyle:'short'})}</span>`)
+    : '';
+  const serials = (coupon.usedBy||[]).filter(u=>u.serial);
+  const serialsHtml = serials.length ? `
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer; font-size:13px; color:var(--teal); font-weight:700;">🔎 عرض الأرقام التسلسلية للبطاقات الصادرة (${serials.length})</summary>
+        <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
+          ${serials.map(u=>`<div style="font-size:12.5px; color:var(--muted); direction:ltr; text-align:right;">${escapeHtml(u.serial)} — ${escapeHtml(u.phone)} — ${new Date(u.usedAt).toLocaleDateString('ar-JO')}</div>`).join('')}
+        </div>
+        <p class="hint" style="margin-top:6px; font-size:12px;">قارن هذا الرقم مع الرقم المكتوب على بطاقة الخصم التي أرسلها الطالب؛ إن لم يتطابق فالبطاقة مزوَّرة.</p>
+      </details>` : '';
+  return `
+    <div class="message-card">
+      <div class="m-head">
+        <b style="direction:ltr; font-family:monospace; letter-spacing:1px;">${escapeHtml(coupon.code)}</b>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn small ${coupon.active?'teal':''}" data-toggle-coupon="${coupon.id}">${coupon.active ? '✅ مفعّل' : '⏸️ متوقف'}</button>
+          <button class="btn danger small" data-del-coupon="${coupon.id}">${ICONS.trash} حذف</button>
+        </div>
+      </div>
+      <p style="margin-top:4px;">${typeTag}${expiryTag} <span class="m-email" style="margin-inline-start:8px;">${escapeHtml(couponTargetLabel(coupon))}</span></p>
+      <p style="margin-top:6px; font-size:13px; color:var(--muted);">الاستخدام: ${usesText}${coupon.note ? ` • ${escapeHtml(coupon.note)}` : ''}</p>
+      ${serialsHtml}
+    </div>`;
+}
+function pageAdminCoupons(){
+  if(!isAdminSession()){
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="#/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
+  }
+  const coupons = state.coupons.slice().sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+  return `
+  <section class="section">
+    <div class="container">
+      <div class="toolbar">
+        <h2>🎟️ كوبونات الخصم والفتح المجاني</h2>
+        <button class="btn teal solid" id="addCouponBtn">${ICONS.plus} إنشاء كوبون جديد</button>
+      </div>
+      <p class="hint" style="margin:-10px 0 20px;">كوبون "الفتح المجاني" يفعّل الوصول للطالب مباشرة عند إدخاله. كوبون "الخصم بنسبة" لا يخصم مبلغًا آليًا (لا يوجد دفع إلكتروني بالمنصة)، بل يولّد للطالب بطاقة خصم فيها اسمه ورقمه ونسبة الخصم ورقم تسلسلي فريد، ليحمّلها ويرسلها للدعم الفني فيتحقق المشرف من الرقم التسلسلي (من قائمة "الأرقام التسلسلية" أسفل كل كوبون) ويكمل التفعيل يدويًا. يمكن أيضًا ضبط تاريخ انتهاء صلاحية لأي كوبون.</p>
+      ${coupons.length ? coupons.map(couponCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>لا توجد كوبونات بعد.</p></div>`}
+    </div>
+  </section>`;
+}
+
+function modalCreateCoupon(){
+  const courseOptions = state.courses.map(c=>`<option value="${c.id}">${escapeHtml(c.title)}</option>`).join('');
+  const firstCourseId = state.courses[0] ? state.courses[0].id : '';
+  const sectionOptionsFor = (courseId)=>{
+    const secs = courseId ? courseSections(courseId) : SECTIONS;
+    return `<option value="">كل الأقسام</option>` + secs.map(s=>`<option value="${s}">${SECTION_LABELS[s]}</option>`).join('');
+  };
+  openModal(`
+    <h3>${ICONS.plus} إنشاء كوبون جديد</h3>
+    <form id="couponForm">
+      <div class="field">
+        <label>كود الكوبون</label>
+        <div style="display:flex; gap:8px;">
+          <input type="text" name="code" id="couponCodeInput" required value="${generateCouponCode()}" style="direction:ltr; font-family:monospace; letter-spacing:1px; text-transform:uppercase;">
+          <button type="button" class="btn small" id="regenCouponCodeBtn">🎲 توليد</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>نوع الكوبون</label>
+        <select name="type" id="couponTypeSelect">
+          <option value="free">🆓 فتح مجاني (يفتح مباشرة عند الاستخدام)</option>
+          <option value="discount">🏷️ خصم بنسبة (رسالة توضيحية فقط، التفعيل يدوي)</option>
+        </select>
+      </div>
+      <div class="field" id="couponDiscountField" style="display:none;">
+        <label>نسبة الخصم %</label>
+        <input type="number" name="discountPercent" min="1" max="100" value="20">
+      </div>
+      <div class="field">
+        <label>الكورس</label>
+        <select name="courseId" id="couponCourseSelect">${courseOptions}</select>
+      </div>
+      <div class="field">
+        <label>النطاق</label>
+        <select name="section" id="couponSectionSelect">${sectionOptionsFor(firstCourseId)}</select>
+      </div>
+      <div class="field">
+        <label>الحد الأقصى لعدد مرات الاستخدام (اتركه فارغًا لعدد غير محدود)</label>
+        <input type="number" name="maxUses" min="1" placeholder="بدون حد أقصى">
+      </div>
+      <div class="field">
+        <label>تاريخ ووقت انتهاء الصلاحية (اختياري — اتركه فارغًا لكوبون بدون تاريخ انتهاء)</label>
+        <input type="datetime-local" name="expiresAt">
+      </div>
+      <div class="field"><label>ملاحظة داخلية (اختياري)</label><input type="text" name="note" placeholder="مثال: كوبون حملة سناب شات"></div>
+      <div id="couponMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ الكوبون</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  const codeInput = document.getElementById('couponCodeInput');
+  document.getElementById('regenCouponCodeBtn').addEventListener('click', ()=>{ codeInput.value = generateCouponCode(); });
+  const typeSelect = document.getElementById('couponTypeSelect');
+  const discountField = document.getElementById('couponDiscountField');
+  typeSelect.addEventListener('change', ()=>{ discountField.style.display = typeSelect.value==='discount' ? '' : 'none'; });
+  const courseSelect = document.getElementById('couponCourseSelect');
+  const sectionSelect = document.getElementById('couponSectionSelect');
+  courseSelect.addEventListener('change', ()=>{ sectionSelect.innerHTML = sectionOptionsFor(courseSelect.value); });
+  document.getElementById('couponForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const msgBox = document.getElementById('couponMsg');
+    const code = (fd.get('code')||'').trim().toUpperCase();
+    if(!code){ msgBox.innerHTML = `<div class="form-msg error">أدخل كود الكوبون.</div>`; return; }
+    if(findCouponByCode(code)){ msgBox.innerHTML = `<div class="form-msg error">هذا الكود مستخدم مسبقًا لكوبون آخر، اختر كودًا مختلفًا.</div>`; return; }
+    const courseId = fd.get('courseId');
+    if(!courseId){ msgBox.innerHTML = `<div class="form-msg error">اختر الكورس المستهدف.</div>`; return; }
+    const type = fd.get('type');
+    const discountPercent = type==='discount' ? Number(fd.get('discountPercent')) : null;
+    if(type==='discount' && (!discountPercent || discountPercent<1 || discountPercent>100)){
+      msgBox.innerHTML = `<div class="form-msg error">أدخل نسبة خصم صحيحة بين 1 و100.</div>`; return;
+    }
+    const maxUsesRaw = fd.get('maxUses');
+    const maxUses = maxUsesRaw ? Number(maxUsesRaw) : null;
+    const section = fd.get('section') || null;
+    const expiresAtRaw = fd.get('expiresAt');
+    const expiresAt = expiresAtRaw ? new Date(expiresAtRaw).getTime() : null;
+    if(expiresAtRaw && expiresAt <= Date.now()){
+      msgBox.innerHTML = `<div class="form-msg error">تاريخ انتهاء الصلاحية يجب أن يكون في المستقبل.</div>`; return;
+    }
+    state.coupons.push({
+      id:'cp'+Date.now(), code, type, discountPercent, courseId, section,
+      maxUses, expiresAt, usedBy: [], active:true, note:(fd.get('note')||'').trim(), createdAt: Date.now(),
+    });
+    await setData('coupons', state.coupons, true);
+    closeModal(); navigate('admin-coupons'); render();
+  });
 }
 
 /* =========================================================
@@ -4344,6 +4778,7 @@ async function render(){
       case 'login': html = pageLogin(); break;
       case 'admin-login': html = pageAdminLogin(); break;
       case 'admin-analytics': html = pageAdminAnalytics(); break;
+      case 'admin-coupons': html = pageAdminCoupons(); break;
       default: html = pageHome();
     }
   }
@@ -4668,6 +5103,52 @@ function bindPageEvents(route){
         confirmDelete('سيتم حذف هذه الرسالة نهائيًا. هل أنت متأكد؟', async ()=>{
           state.messages = state.messages.filter(m=>m.id!==id);
           await setData('messages', state.messages, true);
+        });
+      });
+    });
+  }
+
+  if(route === 'student-space'){
+    const couponForm = document.getElementById('couponRedeemForm');
+    if(couponForm) couponForm.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      const result = await redeemCoupon(fd.get('couponCode'));
+      submitBtn.disabled = false;
+      if(result.ok){
+        await render(); // يعيد رسم الصفحة لتحديث عدّاد "دورة مفعّلة" والأقسام المفتوحة
+        const msgBox = document.getElementById('couponRedeemMsg');
+        if(msgBox){
+          msgBox.innerHTML = `<div class="form-msg ok">${result.msg}</div>`;
+          if(result.card) await renderCouponCardPreview(result.card, msgBox);
+        }
+      } else {
+        const msgBox = document.getElementById('couponRedeemMsg');
+        if(msgBox) msgBox.innerHTML = `<div class="form-msg error">${result.msg}</div>`;
+      }
+    });
+  }
+
+  if(route === 'admin-coupons'){
+    const addBtn = document.getElementById('addCouponBtn');
+    if(addBtn) addBtn.addEventListener('click', modalCreateCoupon);
+    document.querySelectorAll('[data-toggle-coupon]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const coupon = state.coupons.find(c=>c.id===btn.dataset.toggleCoupon);
+        if(!coupon) return;
+        coupon.active = !coupon.active;
+        await setData('coupons', state.coupons, true);
+        render();
+      });
+    });
+    document.querySelectorAll('[data-del-coupon]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.delCoupon;
+        confirmDelete('سيتم حذف هذا الكوبون نهائيًا. هل أنت متأكد؟', async ()=>{
+          state.coupons = state.coupons.filter(c=>c.id!==id);
+          await setData('coupons', state.coupons, true);
         });
       });
     });
