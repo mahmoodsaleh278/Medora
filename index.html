@@ -52,18 +52,6 @@
   body.dark .hero .btn:hover{ background:#132030; color:#eef5fb; }
   .icon-toggle{ display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:50%; border:1.5px solid var(--border); background:transparent; font-size:15px; color:var(--navy-2); flex-shrink:0; transition:.2s; }
   .icon-toggle:hover{ background:var(--teal-light); border-color:var(--teal); }
-  .notif-wrap{ position:relative; flex-shrink:0; }
-  .notif-badge{ position:absolute; top:-2px; left:-2px; width:9px; height:9px; border-radius:50%; background:var(--danger); border:1.5px solid var(--card); }
-  .notif-panel{ position:absolute; top:calc(100% + 10px); left:0; width:290px; max-width:86vw; background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:0 14px 34px rgba(15,39,69,0.16); padding:8px; z-index:200; opacity:0; visibility:hidden; transform:translateY(-6px); transition:.18s; }
-  .notif-panel.open{ opacity:1; visibility:visible; transform:translateY(0); }
-  .notif-panel-title{ font-size:13px; font-weight:800; color:var(--muted); padding:8px 10px 6px; }
-  .notif-item{ display:flex; align-items:flex-start; gap:10px; width:100%; text-align:right; background:transparent; border:none; border-radius:10px; padding:10px; cursor:pointer; font-family:inherit; transition:.15s; }
-  .notif-item:hover{ background:var(--teal-light); }
-  .notif-item-icon{ width:34px; height:34px; border-radius:50%; background:var(--teal-light); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
-  .notif-item-text{ display:flex; flex-direction:column; gap:2px; }
-  .notif-item-title{ font-size:14px; font-weight:700; color:var(--ink); }
-  .notif-item-desc{ font-size:12px; color:var(--muted); }
-  @media (max-width:640px){ .notif-panel{ left:auto; right:0; } }
   .content-edit-btn{ display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; border:1px dashed var(--teal); background:var(--teal-light); color:var(--teal); font-size:12px; margin-inline-start:8px; vertical-align:middle; padding:0; }
   .content-edit-btn:hover{ background:var(--teal); color:#fff; }
   /* ===== هلامة مائية متحركة (اسم الطالب + رقم الهاتف): وحدة بالمنتصف واثنتان بالأطراف + حماية بنك الأسئلة من النسخ ===== */
@@ -717,20 +705,7 @@
       <a href="#/login" data-route="login" id="navLoginLink">تسجيل الدخول</a>
     </nav>
     <div class="nav-actions">
-      <div class="notif-wrap">
-        <button class="icon-toggle" id="notifBtn" aria-label="مركز الإشعارات" title="مركز الإشعارات">🔔<span class="notif-badge" id="notifBadge"></span></button>
-        <div class="notif-panel" id="notifPanel">
-          <div class="notif-panel-title">الإشعارات</div>
-          <div id="notifDynamicList"></div>
-          <button class="notif-item" id="notifDownloadAppItem">
-            <span class="notif-item-icon">📱</span>
-            <span class="notif-item-text">
-              <span class="notif-item-title">تحميل التطبيق</span>
-              <span class="notif-item-desc">حمّل تطبيق MEDORA على جهازك</span>
-            </span>
-          </button>
-        </div>
-      </div>
+      <button class="icon-toggle" id="downloadAppBtn" aria-label="تحميل التطبيق" title="تحميل التطبيق">📱</button>
       <button class="icon-toggle" id="themeToggleBtn" aria-label="تبديل الوضع الليلي" title="الوضع الليلي">🌙</button>
       <div class="nav-cta" id="navUserArea"></div>
     </div>
@@ -988,7 +963,7 @@ function watchDeviceLock(phone){
 
 /* ---------------- App state ---------------- */
 let state = {
-  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [],
+  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', bankAdminView: false, bankNotesView: false, content: {},
 };
 
@@ -1226,7 +1201,7 @@ function courseSections(courseId){
 }
 
 async function initData(){
-  const [courses, lectures, questions, students, messages, enrollments, summaries, lectureProgress, savedContent, savedQuestions, savedDesign, savedCoupons, savedNotifications] = await Promise.all([
+  const [courses, lectures, questions, students, messages, enrollments, summaries, lectureProgress, savedContent, savedQuestions, savedDesign, savedCoupons] = await Promise.all([
     getData('courses', SEED_COURSES, true),
     getData('lectures', SEED_LECTURES, true),
     getData('questions', SEED_QUESTIONS, true),
@@ -1239,7 +1214,6 @@ async function initData(){
     getData('savedQuestions', [], true),
     getData('design', DESIGN_DEFAULTS, true),
     getData('coupons', [], true),
-    getData('notifications', [], true),
     syncSessionFromAuth(),
   ]);
   state.courses = courses.map(normalizeCourse); state.lectures = lectures.map(normalizeLecture); state.questions = questions;
@@ -1247,91 +1221,10 @@ async function initData(){
   state.lectureProgress = lectureProgress;
   state.savedQuestions = Array.isArray(savedQuestions) ? savedQuestions : [];
   state.coupons = Array.isArray(savedCoupons) ? savedCoupons : [];
-  state.notifications = Array.isArray(savedNotifications) ? savedNotifications : [];
   state.content = Object.assign({}, CONTENT_DEFAULTS, savedContent);
   state.design = Object.assign({}, DESIGN_DEFAULTS, savedDesign);
   state.loaded = true;
 }
-
-/* =========================================================
-   إشعارات المشرف للطلاب — تُخزَّن مشتركة (shared=true) في مفتاح 'notifications'.
-   كل إشعار له هدف (target): all (كل الطلاب) / university / major / phones (أرقام محددة).
-   حالة "مقروء" شخصية بحتة، فتُخزَّن محليًا على جهاز كل طالب فقط (shared=false). ========================================================= */
-function notificationAppliesToStudent(n, session){
-  if(!session || session.type !== 'student') return false;
-  if(n.target === 'all') return true;
-  if(n.target === 'university') return session.university && session.university === n.targetValue;
-  if(n.target === 'major') return session.major && session.major === n.targetValue;
-  if(n.target === 'phones') return Array.isArray(n.targetValue) && n.targetValue.includes(session.phone);
-  return false;
-}
-function studentNotifications(){
-  if(!state.session || state.session.type !== 'student') return [];
-  return state.notifications
-    .filter(n=> notificationAppliesToStudent(n, state.session))
-    .slice().sort((a,b)=> b.createdAt - a.createdAt);
-}
-function readNotifIds(){
-  if(!state.session || state.session.type !== 'student') return new Set();
-  try{
-    const raw = localStorage.getItem('medora_local_readNotifs_'+state.session.phone);
-    return new Set(raw ? JSON.parse(raw) : []);
-  }catch(e){ return new Set(); }
-}
-function markAllNotifsRead(ids){
-  if(!state.session || state.session.type !== 'student' || !ids.length) return;
-  const set = readNotifIds();
-  ids.forEach(id=> set.add(id));
-  localStorage.setItem('medora_local_readNotifs_'+state.session.phone, JSON.stringify([...set]));
-}
-function notifTargetLabel(n){
-  if(n.target === 'all') return 'كل الطلاب';
-  if(n.target === 'university') return `جامعة: ${n.targetValue}`;
-  if(n.target === 'major') return `تخصص: ${n.targetValue}`;
-  if(n.target === 'phones') return `${(n.targetValue||[]).length} رقم محدد`;
-  return '';
-}
-function renderNotifPanel(){
-  const listEl = document.getElementById('notifDynamicList');
-  const badgeEl = document.getElementById('notifBadge');
-  if(!listEl) return;
-  const isStudent = state.session && state.session.type === 'student';
-  if(!isStudent){
-    listEl.innerHTML = '';
-    return;
-  }
-  const items = studentNotifications();
-  const readSet = readNotifIds();
-  const unread = items.filter(n=> !readSet.has(n.id));
-  if(badgeEl) badgeEl.style.display = unread.length ? '' : 'none';
-  listEl.innerHTML = items.length ? items.slice(0,20).map(n=> `
-    <button class="notif-item" data-notif-id="${escapeHtml(n.id)}">
-      <span class="notif-item-icon">${readSet.has(n.id) ? '🔔' : '🔴'}</span>
-      <span class="notif-item-text">
-        <span class="notif-item-title">${escapeHtml(n.title)}</span>
-        <span class="notif-item-desc">${escapeHtml((n.body||'').slice(0,70))}${(n.body||'').length>70?'…':''}</span>
-      </span>
-    </button>`).join('') : '';
-}
-function openNotifItem(id){
-  const n = state.notifications.find(x=>x.id===id);
-  if(!n) return;
-  markAllNotifsRead([id]);
-  renderNotifPanel();
-  openModal(`
-    <h3>🔔 ${escapeHtml(n.title)}</h3>
-    <p style="white-space:pre-wrap; color:var(--text); font-size:14.5px; margin:10px 0;">${escapeHtml(n.body)}</p>
-    <p class="hint" style="font-size:12px;">${new Date(n.createdAt).toLocaleString('ar-JO',{dateStyle:'medium',timeStyle:'short'})}</p>
-    <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إغلاق</button></div>`);
-  document.getElementById('cancelModal').addEventListener('click', closeModal);
-}
-(function bindNotifDelegation(){
-  const listEl = document.getElementById('notifDynamicList');
-  if(listEl) listEl.addEventListener('click', (e)=>{
-    const btn = e.target.closest('[data-notif-id]');
-    if(btn) openNotifItem(btn.dataset.notifId);
-  });
-})();
 
 /* ---------------- Enrollment helpers ----------------
    كل تفعيل (enrollment) مرتبط بكورس + قسم (section) محدد، بحيث يقدر الطالب
@@ -3215,22 +3108,6 @@ function pageAdminAnalytics(){
           ${totalQuestions ? barRow('أسئلة سنوات سابقة', pastQuestions, totalQuestions) : ''}
         </div>
       </div>
-
-      <div class="toolbar" style="margin-top:30px;">
-        <h2>🔔 إشعارات الطلاب</h2>
-        <button class="btn teal solid small" id="sendNotifBtn">${ICONS.plus} إرسال إشعار جديد</button>
-      </div>
-      <div class="messages-list">
-        ${state.notifications.length ? state.notifications.slice().sort((a,b)=>b.createdAt-a.createdAt).map(n=>`
-          <div class="message-card">
-            <div class="m-head">
-              <b>${escapeHtml(n.title)}</b>
-              <button class="btn danger small" data-del-notif="${escapeHtml(n.id)}">${ICONS.trash} حذف</button>
-            </div>
-            <p style="margin-top:4px;">${escapeHtml(n.body)}</p>
-            <p style="margin-top:6px; font-size:13px; color:var(--muted);">🎯 ${escapeHtml(notifTargetLabel(n))} • ${new Date(n.createdAt).toLocaleString('ar-JO',{dateStyle:'medium',timeStyle:'short'})}</p>
-          </div>`).join('') : `<p style="color:var(--muted); font-size:13.5px;">لم تُرسَل أي إشعارات بعد.</p>`}
-      </div>
     </div>
   </section>
   `;
@@ -3886,66 +3763,6 @@ function modalResetStudentDevice(){
     if(failed.length) html += `<div class="form-msg error">❌ فشلت العملية لـ ${failed.length} رقم: ${failed.map(escapeHtml).join('، ')}</div>`;
     if(invalid.length) html += `<div class="form-msg error">⚠️ مقاطع ما قدرت تُقرأ كأرقام صحيحة: ${invalid.map(escapeHtml).join('، ')}</div>`;
     msgBox.innerHTML = html;
-  });
-}
-
-function modalSendNotification(){
-  const uniOptions = UNIVERSITIES.map(u=>`<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)}</option>`).join('');
-  const majorOptions = MAJORS.map(m=>`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
-  openModal(`
-    <h3>${ICONS.plus} إرسال إشعار للطلاب</h3>
-    <form id="notifForm">
-      <div class="field"><label>عنوان الإشعار</label><input type="text" name="title" required placeholder="مثال: تحديث جديد في بنك الأسئلة"></div>
-      <div class="field"><label>نص الإشعار</label><textarea name="body" required rows="4" placeholder="اكتب تفاصيل الإشعار هنا"></textarea></div>
-      <div class="field">
-        <label>الفئة المستهدفة</label>
-        <select name="targetType" id="notifTargetType">
-          <option value="all">كل الطلاب</option>
-          <option value="university">طلاب جامعة معينة</option>
-          <option value="major">طلاب تخصص معين</option>
-          <option value="phones">أرقام هواتف محددة</option>
-        </select>
-      </div>
-      <div class="field" id="notifUniField" style="display:none;"><label>الجامعة</label><select name="university">${uniOptions}</select></div>
-      <div class="field" id="notifMajorField" style="display:none;"><label>التخصص</label><select name="major">${majorOptions}</select></div>
-      <div class="field" id="notifPhonesField" style="display:none;">
-        <label>أرقام هواتف الطلاب</label>
-        <textarea name="phones" rows="5" style="direction:ltr; font-family:monospace; resize:vertical;" placeholder="0791234567
-0781234567
-...أو الصقهم متسلسلين بدون فواصل، بيتم فصلهم تلقائيًا كل 10 أرقام"></textarea>
-      </div>
-      <div id="notifMsg"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">إرسال الإشعار</button></div>
-    </form>`);
-  document.getElementById('cancelModal').addEventListener('click', closeModal);
-  const targetSel = document.getElementById('notifTargetType');
-  const uniField = document.getElementById('notifUniField');
-  const majorField = document.getElementById('notifMajorField');
-  const phonesField = document.getElementById('notifPhonesField');
-  targetSel.addEventListener('change', ()=>{
-    uniField.style.display = targetSel.value==='university' ? '' : 'none';
-    majorField.style.display = targetSel.value==='major' ? '' : 'none';
-    phonesField.style.display = targetSel.value==='phones' ? '' : 'none';
-  });
-  document.getElementById('notifForm').addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const msgBox = document.getElementById('notifMsg');
-    const title = fd.get('title').trim();
-    const body = fd.get('body').trim();
-    const targetType = fd.get('targetType');
-    let targetValue = null;
-    if(targetType === 'university') targetValue = fd.get('university');
-    else if(targetType === 'major') targetValue = fd.get('major');
-    else if(targetType === 'phones'){
-      const { valid: phones, invalid } = parsePhoneBatch(fd.get('phones'));
-      if(!phones.length){ msgBox.innerHTML = `<div class="form-msg error">ما لقيت أي رقم هاتف صحيح (لازم يكون 10 خانات ويبدأ بـ 07).</div>`; return; }
-      if(invalid.length){ msgBox.innerHTML = `<div class="form-msg error">⚠️ مقاطع ما قدرت تُقرأ كأرقام صحيحة: ${invalid.map(escapeHtml).join('، ')}</div>`; return; }
-      targetValue = phones;
-    }
-    state.notifications.push({ id:'n'+Date.now(), title, body, target: targetType, targetValue, createdAt: Date.now() });
-    await setData('notifications', state.notifications, true);
-    closeModal(); render();
   });
 }
 
@@ -4969,7 +4786,6 @@ async function render(){
   const scrollBefore = window.scrollY;
   document.getElementById('app').innerHTML = html;
   renderNavState();
-  renderNotifPanel();
   bindPageEvents(route);
   translateSubtree(document.body);
   if(isNewRoute){
@@ -5338,20 +5154,6 @@ function bindPageEvents(route){
     });
   }
 
-  if(route === 'admin-analytics'){
-    const sendNotifBtn = document.getElementById('sendNotifBtn');
-    if(sendNotifBtn) sendNotifBtn.addEventListener('click', modalSendNotification);
-    document.querySelectorAll('[data-del-notif]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const id = btn.dataset.delNotif;
-        confirmDelete('سيتم حذف هذا الإشعار نهائيًا. هل أنت متأكد؟', async ()=>{
-          state.notifications = state.notifications.filter(n=>n.id!==id);
-          await setData('notifications', state.notifications, true);
-        });
-      });
-    });
-  }
-
   if(route === 'student-settings'){
     const fileInput = document.getElementById('avatarInput');
     const chooseBtn = document.getElementById('chooseAvatarBtn');
@@ -5523,26 +5325,7 @@ document.body.addEventListener('click', (e)=>{
   if(editBtnEl){ modalEditContent(editBtnEl.dataset.editContent); }
 });
 
-(function(){
-  const notifBtn = document.getElementById('notifBtn');
-  const notifPanel = document.getElementById('notifPanel');
-  const notifBadge = document.getElementById('notifBadge');
-  const notifDownloadAppItem = document.getElementById('notifDownloadAppItem');
-  notifBtn.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    notifPanel.classList.toggle('open');
-    notifBadge.style.display = 'none';
-  });
-  notifDownloadAppItem.addEventListener('click', ()=>{
-    notifPanel.classList.remove('open');
-    modalDownloadApp();
-  });
-  document.addEventListener('click', (e)=>{
-    if(!notifPanel.contains(e.target) && e.target!==notifBtn){
-      notifPanel.classList.remove('open');
-    }
-  });
-})();
+document.getElementById('downloadAppBtn').addEventListener('click', modalDownloadApp);
 
 /* Interactive glass tilt + spotlight effect for course cards */
 (function(){
