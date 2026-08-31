@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /admin-login
+Disallow: /admin-analytics
+Disallow: /admin-coupons
+Disallow: /my-courses
+Disallow: /my-summaries
+Disallow: /ai-summary
+Disallow: /student-space
+Disallow: /student-settings
+Disallow: /bank
+
+Sitemap: https://www.medora-academy.com/sitemap.xml
