@@ -19,6 +19,18 @@
 <meta name="google" content="notranslate">
 <meta http-equiv="Content-Language" content="ar">
 <title>MEDORA | منصة طلاب التمريض وطب الأسنان</title>
+<!-- ====== وسوم SEO/Meta الأساسية — يتم تحديثها ديناميكيًا عند كل تنقّل عبر updateSeoMeta() بدل React Helmet ====== -->
+<meta id="metaDescription" name="description" content="منصة MEDORA لطلاب التمريض وطب الأسنان: دورات، محاضرات، ملخصات، وبنك أسئلة تفاعلي لكل الجامعات.">
+<meta id="metaRobots" name="robots" content="index,follow">
+<link id="metaCanonical" rel="canonical" href="">
+<meta id="metaOgTitle" property="og:title" content="MEDORA | منصة طلاب التمريض وطب الأسنان">
+<meta id="metaOgDescription" property="og:description" content="منصة MEDORA لطلاب التمريض وطب الأسنان: دورات، محاضرات، ملخصات، وبنك أسئلة تفاعلي لكل الجامعات.">
+<meta id="metaOgUrl" property="og:url" content="">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ar_AR">
+<meta id="metaTwitterTitle" name="twitter:title" content="MEDORA | منصة طلاب التمريض وطب الأسنان">
+<meta id="metaTwitterDescription" name="twitter:description" content="منصة MEDORA لطلاب التمريض وطب الأسنان: دورات، محاضرات، ملخصات، وبنك أسئلة تفاعلي لكل الجامعات.">
+<meta name="twitter:card" content="summary">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -5760,6 +5772,131 @@ function confirmDeleteAccount(){
    حتى لا يرجّع المستخدم لأعلى الصفحة بعد كل ضغطة داخل نفس الصفحة
    (مثل الإجابة على سؤال في بنك الأسئلة أو تعديل بيانات من نفس الصفحة). */
 let lastRenderedRoute = null;
+/* ================== إدارة العناوين ووصف الـ Meta برمجيًا ==================
+   بديل React Helmet / @vueuse/head لمشروع بدون framework: بما إنه ما في
+   Virtual DOM ولا مكتبة head-management، بنحدّث وسوم <head> يدويًا بأنفسنا
+   بكل مرة يتغيّر فيها المسار (بدل ما تبقى العناوين ثابتة زي أي SPA بدائي). */
+
+const SITE_NAME = 'MEDORA';
+const DEFAULT_DESCRIPTION = 'منصة MEDORA لطلاب التمريض وطب الأسنان: دورات، محاضرات، ملخصات، وبنك أسئلة تفاعلي لكل الجامعات.';
+
+/* يحدّث <title> ووسوم <meta> (description / robots / canonical / og / twitter)
+   دفعة وحدة. أي وسم غير موجود بالـ head (مشروع قديم مثلًا) يتم تجاهله بأمان. */
+function setPageMeta({ title, description, noindex } = {}){
+  const fullTitle = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME} | منصة طلاب التمريض وطب الأسنان`;
+  const desc = description || DEFAULT_DESCRIPTION;
+  const url = window.location.origin + window.location.pathname;
+
+  document.title = fullTitle;
+
+  const setContent = (id, value) => { const el = document.getElementById(id); if(el) el.setAttribute('content', value); };
+  setContent('metaDescription', desc);
+  setContent('metaRobots', noindex ? 'noindex,nofollow' : 'index,follow');
+  setContent('metaOgTitle', fullTitle);
+  setContent('metaOgDescription', desc);
+  setContent('metaOgUrl', url);
+  setContent('metaTwitterTitle', fullTitle);
+  setContent('metaTwitterDescription', desc);
+
+  const canonical = document.getElementById('metaCanonical');
+  if(canonical) canonical.setAttribute('href', url);
+}
+
+/* يبني العنوان والوصف المناسبين حسب المسار الحالي (وأحيانًا حسب فلاتر
+   الصفحة نفسها، متل جامعة/تخصص محددين بصفحة الدورات أو بنك الأسئلة)،
+   ثم يستدعي setPageMeta(). صفحات لوحة التحكم والحساب الشخصي تتعلّم
+   noindex عشان ما تنفهرس بمحركات البحث. */
+function updateSeoMeta(route){
+  if(route.startsWith('course/')){
+    const course = state.courses.find(c => c.id === route.slice(7));
+    if(course){
+      setPageMeta({
+        title: `${course.title} - ${course.university}`,
+        description: (course.description && course.description.trim())
+          ? course.description.trim().slice(0, 155)
+          : `دورة ${course.title} لطلاب ${course.major || 'التمريض'} في ${course.university} على منصة MEDORA: محاضرات، ملخصات، وبنك أسئلة.`,
+      });
+    } else {
+      setPageMeta({ title: 'الكورس غير موجود', noindex: true });
+    }
+    return;
+  }
+
+  switch(route){
+    case 'home':
+      setPageMeta({ description: DEFAULT_DESCRIPTION });
+      break;
+
+    case 'courses': {
+      const uni = state.courseFilter && state.courseFilter !== 'الكل' ? state.courseFilter : '';
+      const major = state.majorFilter && state.majorFilter !== 'الكل' ? state.majorFilter : '';
+      const title = (major || uni) ? `دورات ${[major, uni].filter(Boolean).join(' ')}` : 'الدورات';
+      const description = (major || uni)
+        ? `تصفح دورات ${[major, uni].filter(Boolean).join(' في ')} على منصة MEDORA: محاضرات، ملخصات، وبنك أسئلة تفاعلي.`
+        : 'تصفح جميع دورات التمريض وطب الأسنان لكل الجامعات على منصة MEDORA.';
+      setPageMeta({ title, description });
+      break;
+    }
+
+    case 'bank': {
+      const uni = quiz.university && quiz.university !== 'عام' ? quiz.university : '';
+      const major = quiz.major || '';
+      const title = (major && uni) ? `بنك أسئلة ${major} - ${uni}` : 'بنك الأسئلة';
+      const description = (major && uni)
+        ? `تدرّب على بنك أسئلة ${major} لجامعة ${uni} بشكل تفاعلي على منصة MEDORA.`
+        : 'بنك أسئلة تفاعلي لطلاب التمريض وطب الأسنان على منصة MEDORA.';
+      /* بنك الأسئلة محمي بتسجيل دخول، فما في داعي يتفهرس بمحركات البحث */
+      setPageMeta({ title, description, noindex: true });
+      break;
+    }
+
+    case 'about':
+      setPageMeta({ title: 'من نحن', description: 'تعرّف على منصة MEDORA ورسالتها بخدمة طلاب التمريض وطب الأسنان.' });
+      break;
+    case 'contact':
+      setPageMeta({ title: 'تواصل معنا', description: 'تواصل مع فريق MEDORA لأي استفسار أو دعم فني.' });
+      break;
+    case 'privacy':
+      setPageMeta({ title: 'سياسة الخصوصية', description: 'سياسة الخصوصية الخاصة بمنصة MEDORA وكيفية التعامل مع بياناتك.' });
+      break;
+    case 'terms':
+      setPageMeta({ title: 'الشروط والأحكام', description: 'الشروط والأحكام الخاصة باستخدام منصة MEDORA.' });
+      break;
+
+    /* صفحات شخصية/إدارية: تحتاج تسجيل دخول أو خاصة بمستخدم واحد، فلا داعي لفهرستها */
+    case 'login':
+      setPageMeta({ title: 'تسجيل الدخول', noindex: true });
+      break;
+    case 'admin-login':
+      setPageMeta({ title: 'دخول الإدارة', noindex: true });
+      break;
+    case 'my-courses':
+      setPageMeta({ title: 'دوراتي', noindex: true });
+      break;
+    case 'my-summaries':
+      setPageMeta({ title: 'ملخصاتي', noindex: true });
+      break;
+    case 'ai-summary':
+      setPageMeta({ title: 'الملخص الذكي', noindex: true });
+      break;
+    case 'student-space':
+      setPageMeta({ title: 'مساحة الطالب', noindex: true });
+      break;
+    case 'student-settings':
+      setPageMeta({ title: 'إعدادات الحساب', noindex: true });
+      break;
+    case 'admin-analytics':
+      setPageMeta({ title: 'إحصائيات الإدارة', noindex: true });
+      break;
+    case 'admin-coupons':
+      setPageMeta({ title: 'كوبونات الإدارة', noindex: true });
+      break;
+
+    default:
+      setPageMeta({ description: DEFAULT_DESCRIPTION });
+  }
+}
+
 async function render(){
   if(!state.loaded){
     document.getElementById('app').innerHTML = `<div style="min-height:80vh; display:flex; align-items:center; justify-content:center; text-align:center; padding:20px;"><span class="loading-dot"></span> جارِ التحميل...</div>`;
@@ -5793,6 +5930,7 @@ async function render(){
   const isNewRoute = (route !== lastRenderedRoute);
   const scrollBefore = window.scrollY;
   document.getElementById('app').innerHTML = html;
+  updateSeoMeta(route);
   renderNavState();
   renderNotifPanel();
   bindPageEvents(route);
