@@ -5125,6 +5125,8 @@ ${qContext}
 - أخرج HTML فقط بدون أي markdown وبدون علامات \`\`\`، مستخدمًا فقط الوسوم التالية: <h3> لعنوان القسم الرئيسي، <h4> لعنوان فرعي، <p> للفقرات، <b> أو <strong> للتوكيد، <ul>/<ol>/<li> للنقاط، <table>/<tr>/<td>/<th> للجداول عند الحاجة.
 - ابدأ الملخص بقسم بعنوان "🔥 High Yield" يجمع النقاط التي تتكرر في أسئلة الامتحانات السابقة أعلاه.
 - بعده أضف بقية محتوى المحاضرة مبوّبًا ومختصرًا بالإنجليزية، وليس نسخًا حرفيًا من الملف.
+- إذا كان الملف المرفق يحتوي على جداول (تصنيفات، مقارنات، جرعات، قيم...)، أعد إنتاجها كجداول HTML كاملة (<table>/<tr>/<td>/<th>) بنفس مكانها ضمن الملخص، ولا تحوّلها إلى نقاط نصية عادية.
+- إذا كان الملف يحتوي على صور أو رسوم توضيحية أو مخططات أو أشكال تشريحية مهمة لفهم المحتوى، أضف لها إشارة ضمن قسم فرعي بعنوان "📊 Figures & Diagrams" يوضح ماذا تمثل هذه الصورة/الرسم ولماذا هي مهمة (بما أنه لا يمكن تضمين الصورة نفسها داخل الملخص، فقط وصفها ونقاطها الأساسية).
 - لا تخترع معلومات غير موجودة في الملف المرفق أو في أسئلة الامتحانات السابقة.`;
 }
 
@@ -5156,48 +5158,107 @@ async function generateAiSummary({ fileBase64, mimeType, prompt }){
    تحميل الملخص كملف PDF (دائمًا بالإنجليزية: اتجاه LTR وخط لاتيني،
    بصرف النظر عن لغة واجهة الموقع الحالية)
    ========================================================= */
-async function downloadSummaryAsPdf(title, htmlContent){
+async function downloadSummaryAsPdf(title, htmlContent, meta){
   if(typeof html2pdf === 'undefined'){
     alert('PDF export is not available right now. Please check your internet connection and try again.');
     return;
   }
+  meta = meta || {};
+  // العنوان المخزّن بيجي غالبًا بصيغة "اسم المحاضرة — Highyield Summary"،
+  // فبنشيل هاي الزيادة من العنوان الرئيسي ونعرض "High Yield" كعنصر تصميم مستقل
+  const cleanTitle = (title || 'Lecture Summary').replace(/\s*[—-]\s*High\s*[- ]?\s*yield\s*summary\s*$/i, '').trim();
+  const courseTitle = meta.courseTitle || cleanTitle || 'Lecture Summary';
+  const lectureTitle = meta.lectureTitle && meta.lectureTitle !== courseTitle ? meta.lectureTitle : '';
+
+  // ملاحظة مهمة: html2canvas معروف أنه ما بيتعامل صح مع عناصر position:fixed
+  // (ولا مع absolute مع ألاعيب opacity/z-index لإخفاء العنصر) — بيطلع التقاط
+  // فاضي أو ناقص بدون أي خطأ ظاهر. الحل الموثوق: نضيف العنصر بشكل طبيعي 100%
+  // ضمن تدفق المستند (بدون أي position خاص به إطلاقًا)، ونغطّي الشاشة بعنصر
+  // تحميل منفصل تمامًا (overlay مستقل) فوقه لأجل شكل المستخدم بس، ثم نلتقط
+  // العنصر الأصلي بعد اكتمال رسمه، ونشيل الاثنين بعدين.
   const wrap = document.createElement('div');
   wrap.setAttribute('dir','ltr');
-  // ملاحظة: html2canvas يحسب موضع اللقطة اعتمادًا على "سكرول" الصفحة الحالي.
-  // لو العنصر موضوع بـ position:absolute عند top:0/left:0 من المستند، وكان
-  // المستخدم قد سكرول لتحت الصفحة وقت الضغط على "تحميل PDF"، بيصير في عدم
-  // تطابق بين إحداثيات العنصر الحقيقية وإحداثيات اللقطة، فتطلع الصفحة فاضية
-  // بدون أي خطأ. الحل: نستخدم position:fixed (ثابت بالنسبة للشاشة دائمًا عند
-  // top:0/left:0 بصرف النظر عن السكرول)، ونمرر scrollX/scrollY = 0 صراحةً
-  // لـ html2canvas بالأسفل، ونتأكد كمان من إعادة الصفحة لأعلى قبل اللقطة.
-  // كذلك لا نستخدم opacity قريبة من الصفر لإخفاء العنصر (كانت تجعل الالتقاط
-  // شبه فارغ)؛ الإخفاء عن المستخدم يتم فقط عبر z-index السالب.
-  wrap.style.cssText = 'position:fixed; top:0; left:0; z-index:-9999; width:760px; background:#ffffff; padding:28px; font-family:Arial, Helvetica, sans-serif; color:#16232f; direction:ltr; text-align:left; opacity:1; pointer-events:none;';
-  wrap.innerHTML = `
-    <div style="display:flex; align-items:center; gap:10px; border-bottom:2px solid #177a8c; padding-bottom:12px; margin-bottom:16px;">
-      <img src="${MEDORA_LOGO_SM}" alt="MEDORA" style="width:32px; height:32px; object-fit:contain;">
-      <div style="font-family:'Playfair Display', Georgia, serif; font-weight:800; font-size:20px; letter-spacing:1px; color:#0f2745;">MEDORA</div>
+  // box-sizing:border-box حتى الـ padding يدخل ضمن الـ 760px نفسها ولا يخلي
+  // أي جزء من الهيدر (خصوصًا الطرف اليمين) يطلع خارج عرض الصفحة فيختفي من اللقطة
+  wrap.style.cssText = 'box-sizing:border-box; width:760px; max-width:760px; background:#ffffff; padding:32px; font-family:Arial, Helvetica, sans-serif; color:#16232f; direction:ltr; text-align:left; position:relative; overflow:hidden;';
+
+  const content = document.createElement('div');
+  content.style.cssText = 'position:relative; z-index:1;';
+  content.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:nowrap; gap:18px; border-bottom:2px solid #177a8c; padding-bottom:20px; margin-bottom:26px;">
+      <div style="display:flex; align-items:center; gap:16px; min-width:0; flex-shrink:0;">
+        <div style="width:78px; height:78px; flex-shrink:0; border-radius:50%; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle, rgba(23,122,140,0.22) 0%, rgba(23,122,140,0.10) 55%, rgba(23,122,140,0) 78%);">
+          <img src="${MEDORA_LOGO_SM}" alt="MEDORA" style="width:58px; height:58px; object-fit:contain; border-radius:50%;">
+        </div>
+        <div style="font-family:'Playfair Display', Georgia, serif; font-weight:800; font-size:32px; letter-spacing:1.5px; color:#0f2745; white-space:nowrap;">MEDORA</div>
+      </div>
+      <div style="text-align:right; min-width:0; flex-shrink:1;">
+        <div style="font-size:12px; font-weight:800; letter-spacing:2px; color:#177a8c; text-transform:uppercase; white-space:nowrap;">🔥 High Yield</div>
+        <div style="font-size:18px; font-weight:800; color:#0f2745; margin-top:7px; line-height:1.4; word-break:break-word;">${escapeHtml(courseTitle)}</div>
+        ${lectureTitle ? `<div style="font-size:12.5px; color:#5c7185; margin-top:5px; line-height:1.4; word-break:break-word;">${escapeHtml(lectureTitle)}</div>` : ''}
+      </div>
     </div>
-    <h1 style="font-size:19px; color:#0f2745; margin:0 0 14px;">${escapeHtml(title || 'Lecture Summary')}</h1>
-    <div style="font-size:13.5px; line-height:1.7;">${htmlContent}</div>
-    <div style="margin-top:22px; padding-top:10px; border-top:1px dashed #e1e8ee; font-size:11px; color:#5c7185;">Generated with MEDORA</div>
+    <div class="pdf-body-content" style="font-size:13.5px; line-height:1.9;">${htmlContent}</div>
+    <div style="margin-top:28px; padding-top:12px; border-top:1px dashed #e1e8ee; font-size:11px; color:#5c7185;">Generated with MEDORA</div>
   `;
+  // مسافات أوسع بين الفقرات/العناوين/عناصر القوائم داخل محتوى الملخص نفسه
+  const spacingStyle = document.createElement('style');
+  spacingStyle.textContent = `
+    .pdf-body-content p{ margin:0 0 14px; }
+    .pdf-body-content ul, .pdf-body-content ol{ margin:0 0 14px; padding-inline-start:20px; }
+    .pdf-body-content li{ margin-bottom:8px; }
+    .pdf-body-content h1, .pdf-body-content h2, .pdf-body-content h3, .pdf-body-content h4{ margin:22px 0 12px; }
+    .pdf-body-content table{ width:100%; border-collapse:collapse; margin:6px 0 14px; font-size:12.5px; }
+    .pdf-body-content table th{ background:#0f2745; color:#ffffff; font-weight:700; }
+    .pdf-body-content table td, .pdf-body-content table th{ border:1px solid #d7dee5; padding:6px 9px; text-align:left; }
+    .pdf-body-content table tr:nth-child(even) td{ background:#f2f7f8; }
+  `;
+  wrap.appendChild(spacingStyle);
   // إجبار كل النصوص والجداول داخل الملخص على الاتجاه الإنجليزي عند التصدير
-  wrap.querySelectorAll('*').forEach(el=>{ el.style.direction='ltr'; el.style.textAlign='left'; });
+  content.querySelectorAll('*').forEach(el=>{ el.style.direction='ltr'; el.style.textAlign='left'; });
+  wrap.appendChild(content);
+
+  // شاشة تحميل منفصلة تمامًا عن العنصر المُلتقط — همّها الوحيد إخفاء "الوميض"
+  // عن المستخدم بصريًا، وما إلها أي علاقة بمنطق html2canvas أو مكان العنصر
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:99999; background:#ffffff; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; font-family:Arial, Helvetica, sans-serif; color:#16232f;';
+  overlay.innerHTML = `
+    <img src="${MEDORA_LOGO_SM}" alt="MEDORA" style="width:44px; height:44px; object-fit:contain;">
+    <div style="font-size:14px; color:#5c7185;">Preparing your PDF…</div>
+  `;
+
+  // نضيف الاثنين: overlay فوق كل شيء (يمنع المستخدم من رؤية أي شيء تحته)،
+  // ثم wrap بشكل طبيعي في نهاية المستند (بدون أي إخفاء عبره نفسه)
+  document.body.appendChild(overlay);
   document.body.appendChild(wrap);
   try{
     // ننتظر تحميل كل الصور (الشعار وأي صور داخل الملخص) قبل التقاط الصفحة،
-    // وإلا يلتقط html2canvas الصفحة قبل اكتمال الرسم فتظهر فارغة/ناقصة
+    // وإلا يلتقط html2canvas العنصر قبل اكتمال الرسم فيطلع فارغ/ناقص
     const imgs = Array.from(wrap.querySelectorAll('img'));
     await Promise.all(imgs.map(img=> img.complete ? Promise.resolve() : new Promise(res=>{ img.onload = img.onerror = res; })));
-    // نضمن إن الصفحة بأعلى سكرول (0,0) قبل اللقطة، ونمرر scrollX/scrollY=0
-    // صراحةً لـ html2canvas حتى ما تتأثر اللقطة بموضع سكرول المستخدم الحالي
-    window.scrollTo(0, 0);
     await new Promise(res=> requestAnimationFrame(()=> requestAnimationFrame(res)));
+
+    // العلامة المائية: نص "MEDORA" باهت وكبير، مكرر كل ~420px طول الصفحة كلها
+    // حتى يظهر على كل صفحة من صفحات الـ PDF مش بس بمكان واحد بأول الملف
+    const totalHeight = wrap.scrollHeight;
+    const spacing = 420;
+    for(let y = spacing/2; y < totalHeight; y += spacing){
+      const wm = document.createElement('div');
+      wm.style.cssText = `position:absolute; top:${y}px; left:50%; transform:translate(-50%,-50%) rotate(-28deg); font-family:'Playfair Display', Georgia, serif; font-weight:800; font-size:120px; color:#0f2745; opacity:0.045; white-space:nowrap; pointer-events:none; z-index:0;`;
+      wm.textContent = 'MEDORA';
+      wrap.appendChild(wm);
+    }
+    await new Promise(res=> requestAnimationFrame(res));
+
     await html2pdf().set({
       margin: 10,
       filename: (title || 'lecture-summary').replace(/[^\w\-]+/g,'-').slice(0,60) + '.pdf',
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: wrap.scrollWidth || 760, scrollX: 0, scrollY: 0 },
+      // ملاحظة: الصفحة كلها dir="rtl"، وهذا يخلي بعض المتصفحات تحسب
+      // window.scrollX بشكل مختلف (بيبدأ من اليمين مش من الصفر)، فبيلتقط
+      // html2canvas الصورة بإزاحة خاطئة وبيقص شوي من الطرف الأيسر. تثبيت
+      // x/y/scrollX/scrollY على صفر صراحة، مع windowWidth مطابق لعرض العنصر
+      // نفسه، بيمنع هالإزاحة ويضمن التقاط العنصر كامل من الطرفين.
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', x: 0, y: 0, scrollX: 0, scrollY: 0, windowWidth: wrap.scrollWidth, windowHeight: wrap.scrollHeight },
       jsPDF: { unit:'mm', format:'a4', orientation:'portrait' }
     }).from(wrap).save();
   }catch(err){
@@ -5205,6 +5266,7 @@ async function downloadSummaryAsPdf(title, htmlContent){
     alert('Could not generate the PDF. Please try again.');
   }finally{
     wrap.remove();
+    overlay.remove();
   }
 }
 
@@ -5290,7 +5352,7 @@ function wireAiSummaryPage(){
         downloadPdfBtn.addEventListener('click', ()=>{
           const t = document.getElementById('aiResultTitle').value.trim();
           const c = document.getElementById('aiResultEditor').innerHTML;
-          downloadSummaryAsPdf(t, c);
+          downloadSummaryAsPdf(t, c, { courseTitle: course.title, lectureTitle: lecture?.title });
         });
       }
 
@@ -5802,7 +5864,11 @@ function bindPageEvents(route){
     document.querySelectorAll('[data-pdf-summary]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const s = state.summaries.find(x=>x.id===btn.dataset.pdfSummary);
-        if(s) downloadSummaryAsPdf(s.title, s.content);
+        if(s){
+          const sCourse = s.courseId ? state.courses.find(c=>c.id===s.courseId) : null;
+          const sLecture = s.lectureId ? state.lectures.find(l=>l.id===s.lectureId) : null;
+          downloadSummaryAsPdf(s.title, s.content, { courseTitle: sCourse?.title, lectureTitle: sLecture?.title });
+        }
       });
     });
     document.querySelectorAll('[data-edit-summary]').forEach(btn=>{
