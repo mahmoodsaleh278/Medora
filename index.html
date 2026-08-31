@@ -5075,11 +5075,11 @@ async function handleImportSave(){
    - نجمع أسئلة الامتحانات السابقة (nature:'past') من بنك الأسئلة الخاصة
      بالمادة/المحاضرة المختارة لنبني منها سياق "الأولويات" للطلب.
    - نحوّل ملف المحاضرة إلى base64 ونرسله مع النص لدالة Supabase Edge
-     Function (AI_SUMMARY_ENDPOINT) والتي تستدعي Anthropic API بأمان
+     Function (AI_SUMMARY_ENDPOINT) والتي تستدعي Gemini API بأمان
      (المفتاح السري محفوظ على الخادم وليس هنا). راجع ملف
-     supabase-ai-summarize-function.ts المرفق لطريقة النشر.
+     generate-summary/index.ts المرفق لطريقة النشر.
    ========================================================= */
-const AI_SUMMARY_ENDPOINT = SUPABASE_URL.startsWith('http') ? (SUPABASE_URL + '/functions/v1/ai-summarize') : '';
+const AI_SUMMARY_ENDPOINT = SUPABASE_URL.startsWith('http') ? (SUPABASE_URL + '/functions/v1/generate-summary') : '';
 
 function fileToBase64(file){
   return new Promise((resolve, reject)=>{
