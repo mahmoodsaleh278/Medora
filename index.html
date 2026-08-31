@@ -5167,7 +5167,11 @@ async function downloadSummaryAsPdf(title, htmlContent){
   // موضوعة خارج الشاشة بإحداثيات سالبة (position:fixed; left:-9999px)، فينتج
   // عن ذلك صفحة PDF بيضاء فارغة. لذلك نضع العنصر داخل حدود الصفحة (top:0; left:0)
   // لكن خلف كل شي وبشفافية شبه معدومة حتى لا يظهر للمستخدم أثناء التصدير.
-  wrap.style.cssText = 'position:absolute; top:0; left:0; z-index:-9999; width:760px; background:#ffffff; padding:28px; font-family:Arial, Helvetica, sans-serif; color:#16232f; direction:ltr; text-align:left; opacity:0.001; pointer-events:none;';
+  // ملاحظة إضافية: لا نستخدم opacity قريبة من الصفر لإخفاء العنصر، لأن
+  // html2canvas يرسم العنصر فعليًا بالشفافية المحسوبة (opacity) فيصدر
+  // محتوى شبه غير مرئي (صفحة PDF بيضاء تقريبًا). العنصر مخفي عن المستخدم
+  // بشكل كافٍ عبر z-index السالب فقط (يظهر خلف محتوى الصفحة العادي).
+  wrap.style.cssText = 'position:absolute; top:0; left:0; z-index:-9999; width:760px; background:#ffffff; padding:28px; font-family:Arial, Helvetica, sans-serif; color:#16232f; direction:ltr; text-align:left; opacity:1; pointer-events:none;';
   wrap.innerHTML = `
     <div style="display:flex; align-items:center; gap:10px; border-bottom:2px solid #177a8c; padding-bottom:12px; margin-bottom:16px;">
       <img src="${MEDORA_LOGO_SM}" alt="MEDORA" style="width:32px; height:32px; object-fit:contain;">
