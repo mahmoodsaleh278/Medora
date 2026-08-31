@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl" translate="no" class="notranslate">
 <head>
+<script>
+/* ====== GitHub Pages SPA redirect decoder ======
+   404.html بيحوّل أي رابط مباشر مثل /courses إلى:
+   /?/courses  (لأن GitHub Pages ما بيقدر يعمل rewrite على مستوى السيرفر).
+   هالسكربت لازم يشتغل قبل أي راوتر آخر: يقرأ الشكل /?/courses ويرجّعه
+   لمساره الطبيعي /courses عبر history.replaceState بدون أي فلاش أو تحميل صفحة إضافية. */
+(function(l){
+  if(l.search && l.search[1] === '/'){
+    var decoded = l.search.slice(1).split('&').map(function(s){ return s.replace(/~and~/g, '&'); }).join('?');
+    window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
+  }
+})(window.location);
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google" content="notranslate">
@@ -784,16 +797,16 @@
     </div>
     <button class="mobile-toggle" id="mobileToggle" aria-label="فتح القائمة">☰</button>
     <nav class="links" id="navLinks">
-      <a href="#/home" data-route="home">الصفحة الرئيسية</a>
-      <a href="#/courses" data-route="courses">الدورات</a>
-      <a href="#/bank" data-route="bank" id="navBankLink">بنك الأسئلة</a>
-      <a href="#/about" data-route="about">من نحن</a>
-      <a href="#/contact" data-route="contact">تواصل معنا</a>
-      <a href="#/my-courses" data-route="my-courses" id="navMyCoursesLink" class="hidden">دوراتي</a>
-      <a href="#/student-space" data-route="student-space" id="navStudentSpaceLink" class="hidden">مساحة الطالب</a>
-      <a href="#/admin-analytics" data-route="admin-analytics" id="navAnalyticsLink" class="hidden">📊 التحليلات</a>
-      <a href="#/admin-coupons" data-route="admin-coupons" id="navCouponsLink" class="hidden">🎟️ الكوبونات</a>
-      <a href="#/login" data-route="login" id="navLoginLink">تسجيل الدخول</a>
+      <a href="/home" data-route="home">الصفحة الرئيسية</a>
+      <a href="/courses" data-route="courses">الدورات</a>
+      <a href="/bank" data-route="bank" id="navBankLink">بنك الأسئلة</a>
+      <a href="/about" data-route="about">من نحن</a>
+      <a href="/contact" data-route="contact">تواصل معنا</a>
+      <a href="/my-courses" data-route="my-courses" id="navMyCoursesLink" class="hidden">دوراتي</a>
+      <a href="/student-space" data-route="student-space" id="navStudentSpaceLink" class="hidden">مساحة الطالب</a>
+      <a href="/admin-analytics" data-route="admin-analytics" id="navAnalyticsLink" class="hidden">📊 التحليلات</a>
+      <a href="/admin-coupons" data-route="admin-coupons" id="navCouponsLink" class="hidden">🎟️ الكوبونات</a>
+      <a href="/login" data-route="login" id="navLoginLink">تسجيل الدخول</a>
     </nav>
     <div class="nav-actions">
       <div class="notif-wrap">
@@ -830,12 +843,12 @@
     <div class="footer-cols">
       <div class="footer-col">
         <h5>روابط سريعة</h5>
-        <a href="#/courses">الدورات</a>
-        <a href="#/bank" id="footerBankLink">بنك الأسئلة</a>
-        <a href="#/about">من نحن</a>
-        <a href="#/contact">تواصل معنا</a>
-        <a href="#/privacy">سياسة الخصوصية</a>
-        <a href="#/terms">الشروط والأحكام</a>
+        <a href="/courses">الدورات</a>
+        <a href="/bank" id="footerBankLink">بنك الأسئلة</a>
+        <a href="/about">من نحن</a>
+        <a href="/contact">تواصل معنا</a>
+        <a href="/privacy">سياسة الخصوصية</a>
+        <a href="/terms">الشروط والأحكام</a>
       </div>
       <div class="footer-col">
         <h5>التخصصات</h5>
@@ -1836,7 +1849,7 @@ function courseSubscribeActionHtml(c, isAdmin){
   if(isAdmin) return '';
   if(courseFullyUnlocked(c.id)) return '';
   if(!state.session || state.session.type !== 'student'){
-    return `<a href="#/login" class="btn small">سجّل الدخول للاشتراك</a>`;
+    return `<a href="/login" class="btn small">سجّل الدخول للاشتراك</a>`;
   }
   return '';
 }
@@ -1846,8 +1859,36 @@ let quiz = { step:'setup', university:null, major:null, courseId:null, selectedL
 function resetQuiz(){ quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{}, revealedWritten:{} }; }
 
 /* ---------------- Router ---------------- */
-function currentRoute(){ return location.hash.replace('#/', '') || 'home'; }
-function navigate(route){ location.hash = '#/' + route; }
+function currentRoute(){
+  const path = location.pathname.replace(/^\/+/, '');
+  return path || 'home';
+}
+function navigate(route){
+  const target = '/' + route;
+  if(location.pathname !== target){
+    history.pushState(null, '', target);
+  }
+  render();
+}
+/* اعتراض كل نقرات الروابط الداخلية (href="/...") ومنع تحميل الصفحة بالكامل،
+   لتبقى التنقلات سريعة عبر History API بدل ريلود من السيرفر في كل مرة.
+   الروابط الخارجية، وروابط mailto/tel، والروابط التي فيها target="_blank"
+   أو data-external أو Ctrl/Cmd/Shift/middle-click تُترك لسلوكها الطبيعي. */
+document.addEventListener('click', function(e){
+  const a = e.target.closest('a[href]');
+  if(!a) return;
+  if(e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  if(a.target && a.target !== '' && a.target !== '_self') return;
+  if(a.hasAttribute('download') || a.hasAttribute('data-external')) return;
+  const href = a.getAttribute('href') || '';
+  if(!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) return;
+  let url;
+  try{ url = new URL(href, location.href); }catch(err){ return; }
+  if(url.origin !== location.origin) return;
+  e.preventDefault();
+  navigate(url.pathname.replace(/^\/+/, '') + url.search);
+});
+window.addEventListener('popstate', render);
 function scrollToCourseCanvas(){
   const el = document.getElementById('courseCanvas') || document.querySelector('.courses-hero');
   if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -1921,8 +1962,8 @@ function renderNavState(){
   if(state.session && state.session.type === 'admin'){
     bannerWrap.innerHTML = `<div class="admin-banner">
         <span>🛡️ أنت الآن في وضع المشرف — يمكنك إضافة أو حذف الدورات والمحاضرات والأسئلة مباشرة من الصفحات.</span>
-        <a href="#/admin-analytics" class="btn small" style="border-color:#fff;color:#fff;">📊 التحليلات</a>
-        <a href="#/admin-coupons" class="btn small" style="border-color:#fff;color:#fff;">🎟️ الكوبونات</a>
+        <a href="/admin-analytics" class="btn small" style="border-color:#fff;color:#fff;">📊 التحليلات</a>
+        <a href="/admin-coupons" class="btn small" style="border-color:#fff;color:#fff;">🎟️ الكوبونات</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
       </div>`;
@@ -2234,8 +2275,8 @@ function pageHome(){
         <h1>${cval('hero_title')}${editBtn('hero_title')}</h1>
         <p class="lead">${cval('hero_lead')}${editBtn('hero_lead')}</p>
         <div class="hero-actions">
-          <a href="#/courses" class="btn solid">تصفّح الدورات</a>
-          <a href="#/bank" class="btn" id="heroBankLink">بنك الأسئلة</a>
+          <a href="/courses" class="btn solid">تصفّح الدورات</a>
+          <a href="/bank" class="btn" id="heroBankLink">بنك الأسئلة</a>
         </div>
       </div>
       <div class="hero-card"><h3>${cval('hero_card_title')}${editBtn('hero_card_title')}</h3>${uniRows}</div>
@@ -2305,7 +2346,7 @@ function pageHome(){
         <h2>${cval('cta_title')}${editBtn('cta_title')}</h2>
         <p>${cval('cta_desc')}${editBtn('cta_desc')}</p>
       </div>
-      <div style="text-align:center;"><a href="#/login" class="btn teal solid">إنشاء حساب / تسجيل الدخول</a></div>
+      <div style="text-align:center;"><a href="/login" class="btn teal solid">إنشاء حساب / تسجيل الدخول</a></div>
     </div>
   </section>
   `;
@@ -2352,7 +2393,7 @@ function pageCourses(){
           <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
         </div>
         <div class="course-actions">
-          <a href="#/course/${c.id}" class="btn teal small">الانتقال للدورة</a>
+          <a href="/course/${c.id}" class="btn teal small">الانتقال للدورة</a>
           ${courseSubscribeActionHtml(c, isAdmin)}
           ${isAdmin ? `<button class="btn edit small" data-edit-course="${c.id}">${ICONS.edit} تعديل</button>` : ''}
           ${isAdmin ? `<button class="btn danger small" data-del-course="${c.id}">${ICONS.trash} حذف</button>` : ''}
@@ -2409,7 +2450,7 @@ function pageCourses(){
    ========================================================= */
 function pageStudentSpace(){
   if(!state.session || state.session.type !== 'student'){
-    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>مساحة الطالب متاحة فقط للطلاب المسجّلين. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>مساحة الطالب متاحة فقط للطلاب المسجّلين. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
   const uni = state.session.university || '—';
   const major = state.session.major || '—';
@@ -2420,7 +2461,7 @@ function pageStudentSpace(){
   <section class="section">
     <div class="container">
       <div class="course-hero-banner">
-        <a href="#/student-settings" class="hero-settings-btn">${ICONS.gear} الإعدادات</a>
+        <a href="/student-settings" class="hero-settings-btn">${ICONS.gear} الإعدادات</a>
         <div class="course-hero-banner-inner">
           <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
             ${state.session.avatar
@@ -2440,22 +2481,22 @@ function pageStudentSpace(){
       </div>
 
       <div class="option-cards" style="margin-top:6px;">
-        <a href="#/my-courses" class="option-card" style="text-decoration:none; display:block;">
+        <a href="/my-courses" class="option-card" style="text-decoration:none; display:block;">
           <div style="font-size:30px; margin-bottom:10px;">📘</div>
           <b>دوراتي</b>
           <span>تصفّح الدورات والمحاضرات المفعّلة لديك</span>
         </a>
-        <a href="#/bank" class="option-card" style="text-decoration:none; display:block;">
+        <a href="/bank" class="option-card" style="text-decoration:none; display:block;">
           <div style="font-size:30px; margin-bottom:10px;">❓</div>
           <b>بنك الأسئلة</b>
           <span>ابدأ اختبارًا من بنك الأسئلة حسب دوراتك</span>
         </a>
-        <a href="#/my-summaries" class="option-card" style="text-decoration:none; display:block;">
+        <a href="/my-summaries" class="option-card" style="text-decoration:none; display:block;">
           <div style="font-size:30px; margin-bottom:10px;">${ICONS.note}</div>
           <b>ملخصاتي</b>
           <span>أضف ملخصاتك الخاصة واحتفظ بها في حسابك</span>
         </a>
-        <a href="#/ai-summary" class="option-card" style="text-decoration:none; display:block; position:relative;">
+        <a href="/ai-summary" class="option-card" style="text-decoration:none; display:block; position:relative;">
           <span class="ai-summary-badge" style="position:absolute; top:14px; left:14px;">${ICONS.magic} AI</span>
           <div style="font-size:30px; margin-bottom:10px;">🎯</div>
           <b>تلخيص محاضرة Highyield</b>
@@ -2482,7 +2523,7 @@ function pageStudentSpace(){
    ========================================================= */
 function pageStudentSettings(){
   if(!state.session || state.session.type !== 'student'){
-    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>الإعدادات متاحة فقط للطلاب المسجّلين. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>الإعدادات متاحة فقط للطلاب المسجّلين. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
   const avatar = state.session.avatar || '';
   const uni = state.session.university || '—';
@@ -2556,7 +2597,7 @@ function pageStudentSettings(){
 
 function pageMyCourses(){
   if(!state.session || state.session.type !== 'student'){
-    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لعرض الدورات المفعّلة لديهم. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لعرض الدورات المفعّلة لديهم. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
   const myEnrollments = state.enrollments.filter(e=>e.phone===state.session.phone);
   const myCourseIds = myEnrollments.map(e=>e.courseId);
@@ -2567,7 +2608,7 @@ function pageMyCourses(){
     const sectionsLabel = myEntries.some(e=>!e.section) ? 'الكورس بالكامل' : myEntries.map(e=>SECTION_LABELS[e.section]).join(' + ');
     const { watched, total, pct } = courseProgress(c.id);
     return `
-    <a href="#/course/${c.id}" class="my-course-row">
+    <a href="/course/${c.id}" class="my-course-row">
       <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
       <div class="my-course-info">
         <div class="my-course-row-top">
@@ -2595,7 +2636,7 @@ function pageMyCourses(){
   return `
   <section class="section">
     <div class="container">
-      <div style="margin-bottom:18px;"><a href="#/student-space" class="btn small">→ العودة إلى مساحة الطالب</a></div>
+      <div style="margin-bottom:18px;"><a href="/student-space" class="btn small">→ العودة إلى مساحة الطالب</a></div>
       <div class="toolbar"><h2>دوراتي</h2></div>
       ${courses.length ? `<div class="my-course-list">${rows}</div>` : `<div class="empty-state"><h3>لا توجد كورسات مفعّلة بعد</h3><p>تواصل مع الإدارة لتفعيل الدورات التي تحتاجها.</p></div>`}
     </div>
@@ -2608,7 +2649,7 @@ function pageMyCourses(){
    ========================================================= */
 function pageMySummaries(){
   if(!state.session || state.session.type !== 'student'){
-    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لإضافة ملخصاتهم الخاصة. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لإضافة ملخصاتهم الخاصة. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
   const phone = state.session.phone;
   const mySummaries = state.summaries.filter(s=>s.phone===phone).sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
@@ -2633,7 +2674,7 @@ function pageMySummaries(){
       <div class="toolbar">
         <h2>${ICONS.note} ملخصاتي</h2>
         <div class="toolbar-actions">
-          <a href="#/ai-summary" class="btn small" style="background:linear-gradient(135deg, var(--teal), var(--navy)); color:#fff; border-color:transparent;">${ICONS.magic} تلخيص محاضرة بالذكاء الاصطناعي</a>
+          <a href="/ai-summary" class="btn small" style="background:linear-gradient(135deg, var(--teal), var(--navy)); color:#fff; border-color:transparent;">${ICONS.magic} تلخيص محاضرة بالذكاء الاصطناعي</a>
           <button type="button" class="btn teal solid small" id="addSummaryBtn">${ICONS.plus} إضافة ملخص</button>
         </div>
       </div>
@@ -2653,7 +2694,7 @@ function pageMySummaries(){
    ========================================================= */
 function pageAiSummary(){
   if(!state.session || state.session.type !== 'student'){
-    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الميزة متاحة فقط للطلاب المسجّلين. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الميزة متاحة فقط للطلاب المسجّلين. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
   const myEnrollments = state.enrollments.filter(e=>e.phone===state.session.phone);
   const myCourseIds = [...new Set(myEnrollments.map(e=>e.courseId))];
@@ -2735,7 +2776,7 @@ function pageCourseDetail(courseId){
   const course = state.courses.find(c=>c.id===courseId);
   const isAdmin = state.session && state.session.type === 'admin';
   if(!course){
-    return `<section class="section"><div class="container"><div class="empty-state"><h3>الكورس غير موجود</h3><p>ربما تم حذفه. <a href="#/courses" style="color:var(--teal); font-weight:800;">عودة إلى الدورات</a></p></div></div></section>`;
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>الكورس غير موجود</h3><p>ربما تم حذفه. <a href="/courses" style="color:var(--teal); font-weight:800;">عودة إلى الدورات</a></p></div></div></section>`;
   }
   const lectures = state.lectures.filter(l=>l.courseId===courseId);
   /* الأدمن يشوف الأقسام المفعّلة لهذه المادة تحديدًا (بعض المواد فيها ميد وفاينال بس مثلًا)،
@@ -2800,7 +2841,7 @@ function pageCourseDetail(courseId){
       statusBadge = `<span class="lecture-tier-tag">🆓 مجاني</span>`;
       actionHtml = state.session && state.session.type==='student'
         ? `<div class="lecture-lock-msg">${ICONS.lock} اشترك مجانًا لفتح محاضرات ${SECTION_LABELS[section]} <button class="btn teal solid small" data-self-enroll-section="${courseId}|${section}" style="margin-inline-start:8px;">${ICONS.plus} اشترك الآن</button></div>`
-        : `<div class="lecture-lock-msg">${ICONS.lock} سجّل الدخول للاشتراك المجاني بهذا القسم — <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></div>`;
+        : `<div class="lecture-lock-msg">${ICONS.lock} سجّل الدخول للاشتراك المجاني بهذا القسم — <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></div>`;
     } else {
       statusBadge = `<span class="lecture-tier-tag locked">💳 مدفوع</span>`;
       actionHtml = `<div class="lecture-lock-msg">${ICONS.lock} قسم ${SECTION_LABELS[section]} مدفوع، يتم التفعيل من قبل الإدارة</div>`;
@@ -2862,7 +2903,7 @@ function pageCourseDetail(courseId){
   return `
   <section class="section">
     <div class="container">
-      <div class="breadcrumb"><a href="#/courses">الدورات</a> / <span class="i18n-skip">${escapeHtml(course.title)}</span></div>
+      <div class="breadcrumb"><a href="/courses">الدورات</a> / <span class="i18n-skip">${escapeHtml(course.title)}</span></div>
 
       <div class="course-hero-banner">
         <div class="course-hero-banner-inner">
@@ -3184,7 +3225,7 @@ function pageBankSetup(){
   return adminToggle + notesToggle + `
   <section class="section">
     <div class="wizard-wrap">
-      ${isStudent ? `<div style="margin-bottom:18px;"><a href="#/student-space" class="btn small">→ العودة إلى مساحة الطالب</a></div>` : ''}
+      ${isStudent ? `<div style="margin-bottom:18px;"><a href="/student-space" class="btn small">→ العودة إلى مساحة الطالب</a></div>` : ''}
       <div class="wizard-card">
         <h3>ابدأ اختبارًا من بنك الأسئلة</h3>
         <p class="hint">حدد ${(isAdmin || (state.session && state.session.type==='student' && state.session.university && state.session.major)) ? '' : 'الجامعة والتخصص ثم '}المادة، ثم طبيعة الأسئلة والمحاضرات، ونمط الاختبار، ثم ابدأ — كل ذلك في هذه الصفحة</p>
@@ -3422,7 +3463,7 @@ function pageBank(){
   const isAdmin = state.session && state.session.type === 'admin';
   if(isAdmin && state.bankAdminView) return pageBankManage();
   if(!state.session){
-    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>بنك الأسئلة متاح فقط للطلاب المسجّلين. <a href="#/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>بنك الأسئلة متاح فقط للطلاب المسجّلين. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
   if(state.session.type === 'student' && state.bankNotesView) return pageMyNotes();
   switch(quiz.step){
@@ -3440,7 +3481,7 @@ function pageBank(){
    ========================================================= */
 function pageAdminAnalytics(){
   if(!isAdminSession()){
-    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="#/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
   }
 
   const totalStudents = state.students.length;
@@ -3597,7 +3638,7 @@ function couponCardHtml(coupon){
 }
 function pageAdminCoupons(){
   if(!isAdminSession()){
-    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="#/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
   }
   const coupons = state.coupons.slice().sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
   return `
@@ -3953,9 +3994,9 @@ function pageLogin(){
           <div class="field"><label>كلمة المرور</label><input type="password" name="password" placeholder="••••••••" required></div>
           <button type="submit" class="btn solid" style="width:100%; justify-content:center;">${authMode==='login' ? 'دخول' : 'إنشاء الحساب'}</button>
         </form>
-        ${authMode==='register' ? `<p style="font-size:12px; color:var(--muted); text-align:center; margin-top:12px;">بإنشائك حسابًا فإنك توافق على <a href="#/privacy" style="color:var(--teal); font-weight:700;">سياسة الخصوصية</a> و<a href="#/terms" style="color:var(--teal); font-weight:700;">الشروط والأحكام</a> الخاصة بمنصة MEDORA.</p>` : ''}
+        ${authMode==='register' ? `<p style="font-size:12px; color:var(--muted); text-align:center; margin-top:12px;">بإنشائك حسابًا فإنك توافق على <a href="/privacy" style="color:var(--teal); font-weight:700;">سياسة الخصوصية</a> و<a href="/terms" style="color:var(--teal); font-weight:700;">الشروط والأحكام</a> الخاصة بمنصة MEDORA.</p>` : ''}
         <div class="switch-row">${authMode==='login' ? `ليس لديك حساب؟ <button id="switchAuth">أنشئ حسابًا جديدًا</button>` : `لديك حساب بالفعل؟ <button id="switchAuth">سجّل الدخول</button>`}</div>
-        <div style="text-align:center; margin-top:16px;"><a href="#/admin-login" style="font-size:12.5px; color:var(--muted);">${ICONS.shield} دخول المشرفين</a></div>
+        <div style="text-align:center; margin-top:16px;"><a href="/admin-login" style="font-size:12.5px; color:var(--muted);">${ICONS.shield} دخول المشرفين</a></div>
       </div>
     </div>
   </section>`;
@@ -6462,7 +6503,14 @@ function applyFontScale(size){
 }
 
 (async function boot(){
-  if(!location.hash) location.hash = '#/home';
+  /* دعم الروابط القديمة من نوع #/route (مفضّلات محفوظة، روابط قديمة متداولة):
+     إذا وصل المستخدم برابط فيه هاش، نحوّله لمسار عادي عبر History API فورًا. */
+  if(location.hash && location.hash.startsWith('#/')){
+    const legacyRoute = location.hash.replace('#/', '');
+    history.replaceState(null, '', '/' + legacyRoute);
+  } else if(!location.pathname || location.pathname === '' ){
+    history.replaceState(null, '', '/home');
+  }
   const savedLang = await getData('language', 'ar', false);
   LANG = (savedLang === 'en') ? 'en' : 'ar';
   applyLangAttrs();
