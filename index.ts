@@ -1,109 +1,72 @@
-// supabase/functions/generate-summary/index.ts
-//
-// بتستقبل من الموقع: { fileBase64, mimeType, prompt }
-// بترجع: { html: "..." }
-//
-// بتقرأ مفتاح Gemini من متغيّر بيئة اسمه GEMINI_API_KEY
-// (يُضاف عبر: supabase secrets set GEMINI_API_KEY=xxxx)
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-const GEMINI_MODEL = "gemini-2.5-flash"; // بديل أرخص: gemini-2.5-flash-lite / أدق: gemini-2.5-pro
-const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-
-// عدّل هون دومين موقعك الحقيقي بدل * لتقييد من فيه يستدعي الدالة
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-Deno.serve(async (req: Request) => {
-  // متصفحات بترسل طلب OPTIONS (preflight) قبل الطلب الفعلي
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: CORS_HEADERS });
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
-
-  if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
-  }
-
-  if (!GEMINI_API_KEY) {
-    return json({ error: "لم يتم إعداد مفتاح Gemini على الخادم بعد." }, 500);
-  }
-
-  let body: { fileBase64?: string; mimeType?: string; prompt?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: "طلب غير صالح (JSON خاطئ)." }, 400);
-  }
-
-  const { fileBase64, mimeType, prompt } = body;
-  if (!fileBase64 || !mimeType || !prompt) {
-    return json({ error: "بيانات ناقصة: fileBase64 / mimeType / prompt مطلوبة." }, 400);
-  }
-
-  // Gemini بيدعم مباشرة PDF وصور كـ inlineData بدون استخراج نص مسبق
-  const allowed = mimeType === "application/pdf" || mimeType.startsWith("image/");
-  if (!allowed) {
-    return json({ error: "نوع الملف غير مدعوم، الرجاء رفع PDF أو صورة." }, 400);
-  }
-
-  const geminiPayload = {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: prompt },
-          { inlineData: { mimeType, data: fileBase64 } },
-        ],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.4,
-      maxOutputTokens: 8192,
-    },
-  };
 
   try {
-    const geminiRes = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+    const { lectureText, pastQuestions } = await req.json();
+
+    if (!lectureText) {
+      return new Response(
+        JSON.stringify({ error: "لم يتم إرسال نص المحاضرة" }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!apiKey) {
+      throw new Error("مفتاح GEMINI_API_KEY غير معرّف في الـ Secrets");
+    }
+
+    const prompt = `
+أنت مساعد أكاديمي ذكي لمنصة MEDORA التعليمية.
+قم بتحليل نص المحاضرة التالي وتوليد ملخص شامل ومنظم بنقاط واضحة.
+${pastQuestions ? `\nمع مراعاة أسئلة السنوات السابقة التالية والتركيز على مفاهيمها:\n${pastQuestions}` : ''}
+
+نص المحاضرة:
+${lectureText}
+`;
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+    const geminiResponse = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiPayload),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
     });
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      console.error("Gemini error:", errText);
-      return json({ error: "فشل الاتصال بخدمة الذكاء الاصطناعي." }, 502);
+    const geminiData = await geminiResponse.json();
+
+    if (!geminiResponse.ok) {
+      throw new Error(geminiData.error?.message || "فشل الاتصال بـ Gemini");
     }
 
-    const data = await geminiRes.json();
-    const rawText: string | undefined =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const outputText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "لم يتم توليد رد.";
 
-    if (!rawText) {
-      return json({ error: "لم يرجع النموذج أي محتوى، حاول مرة أخرى." }, 502);
-    }
+    return new Response(
+      JSON.stringify({ summary: outputText }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    );
 
-    // تنظيف احتياطي لو النموذج حط الرد جوا ```html ... ```
-    const html = rawText
-      .replace(/^```html\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-
-    return json({ html });
-  } catch (err) {
-    console.error(err);
-    return json({ error: "حدث خطأ غير متوقع أثناء توليد الملخص." }, 500);
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: (error as Error).message }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
+      }
+    );
   }
 });
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-  });
-}
