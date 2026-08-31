@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { GoogleGenAI } from "npm:@google/genai";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,18 +15,16 @@ serve(async (req) => {
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: "Missing GEMINI_API_KEY in Supabase secrets." }),
+        JSON.stringify({ error: "مفتاح GEMINI_API_KEY غير موجود في Supabase Secrets" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
     const body = await req.json();
-
     let rawBase64 = body.fileBase64 || body.file || body.pdfBase64 || body.base64;
     const mimeType = body.mimeType || body.fileType || body.type || "application/pdf";
     const textContent = body.textContent || body.text || body.lectureText || body.content || "";
-    const prompt = body.prompt || "قم بتلخيص هذا المحتوى بدقة مع التركيز على المفاهيم الأساسية، المصطلحات، والنقاط المهمة باللغة العربية.";
+    const prompt = body.prompt;
 
     if (!rawBase64 && !textContent) {
       return new Response(
@@ -36,33 +33,60 @@ serve(async (req) => {
       );
     }
 
-    const contents: any[] = [];
+    const parts: any[] = [];
 
-    // إضافة الملف المرفوع إن وجد بعد تنظيف الـ Base64
+    // تنظيف وإضافة ملف المحاضرة
     if (rawBase64) {
       const cleanBase64 = rawBase64.replace(/^data:[^;]+;base64,/, "").trim();
-      contents.push({
-        inlineData: {
-          mimeType: mimeType,
+      parts.push({
+        inline_data: {
+          mime_type: mimeType,
           data: cleanBase64,
         },
       });
     }
 
-    // إضافة النص والموجه
-    contents.push({
-      text: `${prompt}\n\n${textContent}`.trim(),
+    // إضافة نص الموجه والمحاضرة
+    const userPrompt = prompt || "قم بتلخيص هذه المحاضرة بدقة واحترافية باللغة العربية مع إبراز المفاهيم الأساسية، العناوين، والتفاصيل المهمة بتنسيق HTML واضح ومميز.";
+    parts.push({
+      text: `${userPrompt}\n\n${textContent}`.trim(),
     });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: contents,
-      config: {
-        systemInstruction: "You are an expert academic summarizer. Generate a clean, highly structured, well-formatted HTML output using tags like <h2>, <h3>, <p>, <ul>, <li>, <strong>, <table>, <blockquote>. Do NOT include <html>, <head>, or <body> tags. Do NOT wrap output in markdown code blocks like ```html. Return pure HTML only.",
+    const systemPrompt = "You are an expert academic summarizer. Generate structured, clean HTML output with tags (<h2>, <h3>, <p>, <ul>, <li>, <strong>, <table>, <blockquote>). Do NOT include <html>, <head>, or <body> tags. Do NOT wrap output in markdown code fences like ```html. Return HTML only.";
+
+    const payload = {
+      system_instruction: {
+        parts: [{ text: systemPrompt }],
       },
+      contents: [
+        {
+          role: "user",
+          parts: parts,
+        },
+      ],
+    };
+
+    // استدعاء الموديل الرسمي
+    const apiUrl = `[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$){apiKey.trim()}`;
+
+    const geminiResponse = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     });
 
-    let resultText = response.text || "";
+    const data = await geminiResponse.json();
+
+    if (!geminiResponse.ok) {
+      const detailedErr = data?.error?.message || JSON.stringify(data);
+      console.error("Gemini Error:", detailedErr);
+      return new Response(
+        JSON.stringify({ error: `Gemini API Error: ${detailedErr}` }),
+        { status: geminiResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     resultText = resultText.replace(/^```html\s*/i, "").replace(/\s*```$/i, "").trim();
 
     return new Response(
@@ -70,9 +94,9 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
-    console.error("Server Error:", error);
+    console.error("Server catch:", error);
     return new Response(
-      JSON.stringify({ error: error?.message || "Internal Server Error" }),
+      JSON.stringify({ error: error.message || "Internal Server Error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
