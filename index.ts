@@ -15,7 +15,7 @@ serve(async (req) => {
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: "Missing GEMINI_API_KEY secret in Supabase" }),
+        JSON.stringify({ error: "مفتاح GEMINI_API_KEY غير موجود في إعدادات Supabase Secrets" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -33,55 +33,59 @@ serve(async (req) => {
       );
     }
 
-    // تنظيف الـ Base64 في حال أرسلت الواجهة البادئة Data-URL
+    // إزالة أي بادئة Data URL
     let cleanBase64 = null;
     if (rawBase64) {
       cleanBase64 = rawBase64.replace(/^data:[^;]+;base64,/, "").trim();
     }
 
-    const systemInstruction = `
-      You are an expert academic summarizer. 
-      Generate a clean, highly structured, well-formatted HTML output (using tags like <h2>, <h3>, <p>, <ul>, <li>, <strong>, <table>, <blockquote>).
-      Do NOT include <html>, <head>, or <body> tags. Do NOT wrap output in markdown code blocks like \`\`\`html. Return pure HTML only.
-    `;
+    const systemText = "You are an expert academic summarizer. Generate a clean, highly structured, well-formatted HTML output using tags like <h2>, <h3>, <p>, <ul>, <li>, <strong>, <table>, <blockquote>. Do NOT include <html>, <head>, or <body> tags. Do NOT wrap output in markdown code blocks like ```html. Return pure HTML only.";
 
     const parts: any[] = [];
 
-    // إرسال الملف بالهيكل القياسي لـ Gemini REST API
+    // إضافة الملف
     if (cleanBase64) {
       parts.push({
-        inlineData: {
-          mimeType: mimeType,
+        inline_data: {
+          mime_type: mimeType,
           data: cleanBase64,
         },
       });
     }
 
-    const userPrompt = prompt || "قم بتلخيص هذا المحتوى بدقة مع التركيز على المفاهيم الأساسية، المصطلحات، والنقاط المهمة.";
+    // إضافة النص والموجه
+    const userPrompt = prompt || "قم بتلخيص هذا المحتوى بدقة مع التركيز على المفاهيم الأساسية، المصطلحات، والنقاط المهمة باللغة العربية.";
     parts.push({ text: `${userPrompt}\n\n${textContent}` });
 
-    // استخدام موديل مستقر مع إرسال المفتاح عبر الـ Headers
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
+    const apiUrl = `[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$){apiKey.trim()}`;
+
+    const payload = {
+      system_instruction: {
+        parts: [{ text: systemText }]
+      },
+      contents: [
+        {
+          role: "user",
+          parts: parts
+        }
+      ]
+    };
 
     const geminiResponse = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-goog-api-key": apiKey.trim(),
       },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: [{ role: "user", parts }],
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!geminiResponse.ok) {
       const errData = await geminiResponse.json();
-      console.error("Gemini API Detailed Error:", JSON.stringify(errData));
+      console.error("Gemini Error Details:", JSON.stringify(errData));
       
-      const errorMessage = errData?.error?.message || "خطأ غير معروف من Google Gemini API";
+      const detailedMessage = errData?.error?.message || "خطأ غير معروف من خادم Gemini";
       return new Response(
-        JSON.stringify({ error: `Gemini API Error: ${errorMessage}` }),
+        JSON.stringify({ error: `خطأ Gemini API: ${detailedMessage}` }),
         { status: geminiResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -95,9 +99,9 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Handler error:", error);
+    console.error("Internal Server Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
+      JSON.stringify({ error: error.message || "حدث خطأ داخلي في الخادم" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
