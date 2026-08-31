@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 <style>
   :root{
     --navy:#0f2745;
@@ -2616,6 +2617,7 @@ function pageMySummaries(){
       <div class="summary-card-head">
         <h4><img class="summary-brand-mark" src="${MEDORA_LOGO_SM}" alt="MEDORA">${s.aiGenerated ? `<span class="ai-summary-badge" style="margin-inline-end:6px; vertical-align:middle;">${ICONS.magic} AI</span>` : ''}${escapeHtml(s.title)}</h4>
         <div class="summary-card-actions">
+          <button type="button" class="content-edit-btn" data-pdf-summary="${s.id}" title="Download PDF">${ICONS.download}</button>
           <button type="button" class="content-edit-btn" data-edit-summary="${s.id}" title="تعديل">${ICONS.edit}</button>
           <button type="button" class="content-edit-btn" data-del-summary="${s.id}" title="حذف" style="border-color:var(--danger); background:transparent; color:var(--danger);">${ICONS.trash}</button>
         </div>
@@ -2715,6 +2717,7 @@ function pageAiSummary(){
             <div id="aiSaveMsg"></div>
             <div class="modal-actions" style="justify-content:flex-start;">
               <button type="submit" class="btn teal solid">حفظ في ملخصاتي</button>
+              <button type="button" class="btn" id="aiDownloadPdfBtn">${ICONS.download} Download PDF</button>
             </div>
           </form>
         </div>
@@ -5113,14 +5116,15 @@ function buildHighYieldPrompt({ courseTitle, lectureTitle, university, major, pa
   return `أنت مساعد أكاديمي متخصص بإعداد ملخصات "High-Yield" لطلاب ${major || 'التمريض/طب الأسنان'}${university ? ' في ' + university : ''}.
 المادة: ${courseTitle}.${lectureTitle ? ' المحاضرة: ' + lectureTitle + '.' : ''}
 
-حلّل ملف المحاضرة المرفق (شرائح/PDF/صورة) واستخرج أهم المعلومات فيه، ثم أنتج ملخصًا مركّزًا بصيغة High-Yield باللغة العربية.
+حلّل ملف المحاضرة المرفق (شرائح/PDF/صورة) واستخرج أهم المعلومات فيه، ثم أنتج ملخصًا مركّزًا بصيغة High-Yield.
 
 ${qContext}
 
 قواعد صارمة للمخرجات:
+- اكتب الملخص بالكامل باللغة الإنجليزية (English) فقط، بصرف النظر عن لغة الملف المرفق أو لغة أسئلة الامتحانات السابقة أعلاه — ترجم أي مصطلح أو نقطة من العربية إلى الإنجليزية قبل إدراجها في الملخص. لا تستخدم أي كلمة عربية في المخرجات.
 - أخرج HTML فقط بدون أي markdown وبدون علامات \`\`\`، مستخدمًا فقط الوسوم التالية: <h3> لعنوان القسم الرئيسي، <h4> لعنوان فرعي، <p> للفقرات، <b> أو <strong> للتوكيد، <ul>/<ol>/<li> للنقاط، <table>/<tr>/<td>/<th> للجداول عند الحاجة.
-- ابدأ الملخص بقسم بعنوان "🔥 الأعلى أهمية (High Yield)" يجمع النقاط التي تتكرر في أسئلة الامتحانات السابقة أعلاه.
-- بعده أضف بقية محتوى المحاضرة مبوّبًا ومختصرًا، وليس نسخًا حرفيًا من الملف.
+- ابدأ الملخص بقسم بعنوان "🔥 High Yield" يجمع النقاط التي تتكرر في أسئلة الامتحانات السابقة أعلاه.
+- بعده أضف بقية محتوى المحاضرة مبوّبًا ومختصرًا بالإنجليزية، وليس نسخًا حرفيًا من الملف.
 - لا تخترع معلومات غير موجودة في الملف المرفق أو في أسئلة الامتحانات السابقة.`;
 }
 
@@ -5133,12 +5137,66 @@ async function generateAiSummary({ fileBase64, mimeType, prompt }){
   });
   if(!res.ok){
     let detail = '';
-    try{ detail = (await res.json()).error || ''; }catch(e){}
+    try{
+      const errJson = await res.json();
+      const nested = errJson.details?.error?.message
+        || errJson.details?.message
+        || (typeof errJson.details === 'string' ? errJson.details : '')
+        || (errJson.details ? JSON.stringify(errJson.details) : '');
+      detail = [errJson.error, nested].filter(Boolean).join(' — ');
+    }catch(e){}
     throw new Error(detail || ('فشل الطلب (رمز ' + res.status + ')'));
   }
   const data = await res.json();
   if(!data.html) throw new Error('لم يتم استلام محتوى من الخدمة.');
   return data.html;
+}
+
+/* =========================================================
+   تحميل الملخص كملف PDF (دائمًا بالإنجليزية: اتجاه LTR وخط لاتيني،
+   بصرف النظر عن لغة واجهة الموقع الحالية)
+   ========================================================= */
+async function downloadSummaryAsPdf(title, htmlContent){
+  if(typeof html2pdf === 'undefined'){
+    alert('PDF export is not available right now. Please check your internet connection and try again.');
+    return;
+  }
+  const wrap = document.createElement('div');
+  wrap.setAttribute('dir','ltr');
+  // ملاحظة: html2canvas (المستخدم داخل html2pdf) لا يلتقط بشكل صحيح عناصر
+  // موضوعة خارج الشاشة بإحداثيات سالبة (position:fixed; left:-9999px)، فينتج
+  // عن ذلك صفحة PDF بيضاء فارغة. لذلك نضع العنصر داخل حدود الصفحة (top:0; left:0)
+  // لكن خلف كل شي وبشفافية شبه معدومة حتى لا يظهر للمستخدم أثناء التصدير.
+  wrap.style.cssText = 'position:absolute; top:0; left:0; z-index:-9999; width:760px; background:#ffffff; padding:28px; font-family:Arial, Helvetica, sans-serif; color:#16232f; direction:ltr; text-align:left; opacity:0.001; pointer-events:none;';
+  wrap.innerHTML = `
+    <div style="display:flex; align-items:center; gap:10px; border-bottom:2px solid #177a8c; padding-bottom:12px; margin-bottom:16px;">
+      <img src="${MEDORA_LOGO_SM}" alt="MEDORA" style="width:32px; height:32px; object-fit:contain;">
+      <div style="font-family:'Playfair Display', Georgia, serif; font-weight:800; font-size:20px; letter-spacing:1px; color:#0f2745;">MEDORA</div>
+    </div>
+    <h1 style="font-size:19px; color:#0f2745; margin:0 0 14px;">${escapeHtml(title || 'Lecture Summary')}</h1>
+    <div style="font-size:13.5px; line-height:1.7;">${htmlContent}</div>
+    <div style="margin-top:22px; padding-top:10px; border-top:1px dashed #e1e8ee; font-size:11px; color:#5c7185;">Generated with MEDORA</div>
+  `;
+  // إجبار كل النصوص والجداول داخل الملخص على الاتجاه الإنجليزي عند التصدير
+  wrap.querySelectorAll('*').forEach(el=>{ el.style.direction='ltr'; el.style.textAlign='left'; });
+  document.body.appendChild(wrap);
+  try{
+    // ننتظر تحميل كل الصور (الشعار وأي صور داخل الملخص) قبل التقاط الصفحة،
+    // وإلا يلتقط html2canvas الصفحة قبل اكتمال الرسم فتظهر فارغة/ناقصة
+    const imgs = Array.from(wrap.querySelectorAll('img'));
+    await Promise.all(imgs.map(img=> img.complete ? Promise.resolve() : new Promise(res=>{ img.onload = img.onerror = res; })));
+    await html2pdf().set({
+      margin: 10,
+      filename: (title || 'lecture-summary').replace(/[^\w\-]+/g,'-').slice(0,60) + '.pdf',
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', windowWidth: wrap.scrollWidth || 760 },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' }
+    }).from(wrap).save();
+  }catch(err){
+    console.error('PDF export failed', err);
+    alert('Could not generate the PDF. Please try again.');
+  }finally{
+    wrap.remove();
+  }
 }
 
 function wireAiSummaryPage(){
@@ -5212,11 +5270,20 @@ function wireAiSummaryPage(){
       const html = await generateAiSummary({ fileBase64, mimeType, prompt });
       const clean = sanitizeSummaryHtml(html);
 
-      document.getElementById('aiResultTitle').value = (lecture?.title || course.title) + ' — ملخص Highyield';
+      document.getElementById('aiResultTitle').value = (lecture?.title || course.title) + ' — Highyield Summary';
       document.getElementById('aiResultEditor').innerHTML = clean;
       wireRteToolbar(document.getElementById('aiSaveForm'));
       loadingBox.style.display = 'none';
       resultBox.style.display = 'block';
+
+      const downloadPdfBtn = document.getElementById('aiDownloadPdfBtn');
+      if(downloadPdfBtn){
+        downloadPdfBtn.addEventListener('click', ()=>{
+          const t = document.getElementById('aiResultTitle').value.trim();
+          const c = document.getElementById('aiResultEditor').innerHTML;
+          downloadSummaryAsPdf(t, c);
+        });
+      }
 
       document.getElementById('aiSaveForm').addEventListener('submit', async (ev)=>{
         ev.preventDefault();
@@ -5723,6 +5790,12 @@ function bindPageEvents(route){
   if(route === 'my-summaries'){
     const addSummaryBtn = document.getElementById('addSummaryBtn');
     if(addSummaryBtn) addSummaryBtn.addEventListener('click', modalAddSummary);
+    document.querySelectorAll('[data-pdf-summary]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const s = state.summaries.find(x=>x.id===btn.dataset.pdfSummary);
+        if(s) downloadSummaryAsPdf(s.title, s.content);
+      });
+    });
     document.querySelectorAll('[data-edit-summary]').forEach(btn=>{
       btn.addEventListener('click', ()=> modalEditSummary(btn.dataset.editSummary));
     });
