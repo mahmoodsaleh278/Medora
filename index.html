@@ -271,6 +271,7 @@
   .courses-hero-inner{ position:relative; z-index:2; }
   .courses-hero h2{ font-size:30px; font-weight:800; color:#fff; margin-bottom:8px; }
   .courses-hero p{ color:#d7e6ee; font-size:15px; margin-bottom:22px; }
+  .courses-coverage-line{ color:#eef5fb; font-size:14px; opacity:0.9; margin:-14px 0 18px; text-align:center; }
   .courses-search{ max-width:440px; margin:0 auto; position:relative; }
   .courses-search input{ width:100%; padding:13px 46px 13px 18px; border-radius:999px; border:none; font-size:14.5px; font-family:inherit; color:var(--ink); background:#fff; }
   .courses-search input:focus{ outline:2px solid #8be0e8; }
@@ -416,6 +417,7 @@
   .course-hero-banner .course-uni{ color:#bfe4ea; margin-bottom:10px; }
   .course-hero-banner h1{ font-size:26px; color:#fff; font-weight:800; margin-bottom:10px; }
   .course-hero-banner p{ color:#d7e6ee; font-size:14.5px; max-width:720px; margin-bottom:14px; }
+  .course-hero-banner .course-coverage-line{ color:#bfe4ea; font-size:13.5px; opacity:0.9; margin-top:-6px; max-width:720px; }
   .course-hero-banner .course-detail-meta{ color:#d7e6ee; }
   .course-hero-banner .course-detail-meta b{ color:#fff; }
   .course-hero-banner .chip{ background:rgba(255,255,255,0.15); border-color:rgba(255,255,255,0.35); color:#fff; }
@@ -2424,6 +2426,15 @@ function pageCourses(){
     </div>
   ` : '';
 
+  const activeUni = state.courseFilter !== 'الكل' ? state.courseFilter : '';
+  const activeMajor = state.majorFilter !== 'الكل' ? state.majorFilter : '';
+  /* سطر سياقي يظهر بس لما يكون في فلتر جامعة/تخصص فعّال: مفيد للزائر (بيأكد له
+     شو عم يتصفح) وبنفس الوقت بيحتوي عبارات بحث طويلة (long-tail) بمنافسة أقل
+     زي "دورات تمريض جامعة مؤتة" بدل الاكتفاء بعبارة عامة "دورات". */
+  const coverageLine = (activeUni || activeMajor)
+    ? `<p class="courses-coverage-line">تغطية شاملة لدورات ${[activeMajor, activeUni].filter(Boolean).join(' في ')} على منصة MEDORA: محاضرات، ملخصات، وبنك أسئلة سنوات سابقة.</p>`
+    : '';
+
   return `
   <section class="section">
     <div class="container">
@@ -2437,6 +2448,7 @@ function pageCourses(){
           </div>
         </div>
       </div>
+      ${coverageLine}
       ${isAdmin ? `<div class="toolbar" style="justify-content:flex-end;"><button class="btn teal solid" id="addCourseBtn">${ICONS.plus} إضافة كورس جديد</button></div>` : ''}
       <div class="filter-dropdown-bar">
         <div class="filter-dropdown">
@@ -2925,6 +2937,7 @@ function pageCourseDetail(courseId){
           </div>
           <h1 class="i18n-skip">${escapeHtml(course.title)}</h1>
           <p class="i18n-skip">${escapeHtml(course.description)}</p>
+          <p class="course-coverage-line i18n-skip">تغطية شاملة لمادة ${escapeHtml(course.title)} لطلاب ${escapeHtml(course.major || 'التمريض')} في ${escapeHtml(course.university)}: محاضرات، ملخصات، وأسئلة سنوات سابقة على منصة MEDORA.</p>
           <div class="course-detail-meta">
             <span>⏱ <b>${course.hours}</b> ساعات معتمدة</span>
             <span>🎬 <b>${lectures.length}</b> محاضرة</span>
