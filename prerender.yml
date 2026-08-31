@@ -1,0 +1,38 @@
+name: Prerender public pages
+
+on:
+  # شغّلها يدويًا من تبويب Actions بالريبو
+  workflow_dispatch:
+  # وكمان تلقائيًا كل يوم عشان تلحق أي كورسات جديدة تضاف بـ Supabase
+  schedule:
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  prerender:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install prerender deps
+        run: npm install
+
+      - name: Run prerender
+        run: npm run prerender
+
+      - name: Copy snapshots into repo root
+        run: cp -r dist/. .
+
+      - name: Commit changes if any
+        run: |
+          git config user.name "prerender-bot"
+          git config user.email "prerender-bot@users.noreply.github.com"
+          git add -A -- . ':!dist'
+          git diff --cached --quiet || git commit -m "chore: refresh prerendered pages"
+          git push
