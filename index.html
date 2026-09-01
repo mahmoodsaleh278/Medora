@@ -2865,11 +2865,27 @@ function pageCourseDetail(courseId){
   function lectureRowHtml(l, i, unlocked, lockMsg){
     const videos = l.videos || [];
     const files = l.files || [];
-    const videoRowsHtml = videos.map((v,idx)=>`
-      <a class="lecture-action-btn watch" href="${escapeHtml(v.url)}" target="_blank" rel="noopener">
-        <span class="action-icon">${ICONS.play}</span>
-        <span><span class="label-main">${v.label ? escapeHtml(v.label) : ('مشاهدة الفيديو' + (videos.length>1 ? ' '+(idx+1) : ''))}</span><span class="label-sub">تشغيل الفيديو</span></span>
-      </a>`).join('');
+    const videoRowsHtml = videos.map((v,idx)=>{
+      const label = v.label ? escapeHtml(v.label) : ('مشاهدة الفيديو' + (videos.length>1 ? ' '+(idx+1) : ''));
+      if(v.bunnyGuid){
+        // فيديو مرفوع على Bunny: يحتاج توكن مشاهدة، فبيفتح جوا الصفحة بدل رابط مباشر
+        const libMatch = v.url.match(/\/embed\/(\d+)\//);
+        const libraryId = libMatch ? libMatch[1] : '';
+        return `
+          <button type="button" class="lecture-action-btn watch watch-secure"
+            data-library-id="${escapeHtml(libraryId)}" data-video-guid="${escapeHtml(v.bunnyGuid)}">
+            <span class="action-icon">${ICONS.play}</span>
+            <span><span class="label-main">${label}</span><span class="label-sub">تشغيل الفيديو</span></span>
+          </button>
+          <div class="video-player-slot" data-player-for="${escapeHtml(v.bunnyGuid)}"></div>`;
+      }
+      // رابط فيديو خارجي (مش Bunny): يفتح بنافذة جديدة زي ما كان
+      return `
+        <a class="lecture-action-btn watch" href="${escapeHtml(v.url)}" target="_blank" rel="noopener">
+          <span class="action-icon">${ICONS.play}</span>
+          <span><span class="label-main">${label}</span><span class="label-sub">تشغيل الفيديو</span></span>
+        </a>`;
+    }).join('');
     const fileRowsHtml = files.map((f,idx)=>`
       <a class="lecture-action-btn download" href="${escapeHtml(f.url)}" target="_blank" rel="noopener">
         <span class="action-icon">${ICONS.download}</span>
@@ -4687,6 +4703,44 @@ async function callBunnyFunction(action, payload){
     throw new Error(detail || ('فشل الطلب (رمز ' + res.status + ')'));
   }
   return res.json();
+}
+
+/* يجيب توكن مشاهدة صالح لمدة قصيرة (Embed View Token Authentication) ويبني رابط الـ embed الآمن.
+   لازم يُستدعى من جديد كل مرة الطالب بدو يشاهد، لأن التوكن له صلاحية محدودة بالوقت. */
+async function getSecureEmbedUrl(libraryId, videoGuid){
+  const result = await callBunnyFunction('get-play-token', { videoGuid });
+  return `https://iframe.mediadelivery.net/embed/${result.libraryId}/${result.videoGuid}?token=${result.token}&expires=${result.expires}`;
+}
+
+/* يفتح/يقفل مشغّل الفيديو جوا الصفحة عند الضغط على زر "مشاهدة" (بدل فتح رابط بنافذة جديدة) */
+async function toggleSecurePlayer(btn){
+  const libraryId = btn.dataset.libraryId;
+  const videoGuid = btn.dataset.videoGuid;
+  const slot = document.querySelector(`.video-player-slot[data-player-for="${CSS.escape(videoGuid)}"]`);
+  if(!slot) return;
+
+  // إذا مفتوح أصلًا، اقفله
+  if(slot.dataset.open === '1'){
+    slot.innerHTML = '';
+    slot.dataset.open = '0';
+    return;
+  }
+
+  slot.innerHTML = `<div class="video-player-loading">جاري تجهيز الفيديو...</div>`;
+  try{
+    const secureUrl = await getSecureEmbedUrl(libraryId, videoGuid);
+    slot.innerHTML = `
+      <div class="video-player-wrap">
+        <iframe src="${secureUrl}" loading="lazy"
+          allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+          allowfullscreen webkitallowfullscreen mozallowfullscreen
+          style="width:100%; aspect-ratio:16/9; border:none; border-radius:12px;"></iframe>
+      </div>`;
+    slot.dataset.open = '1';
+  }catch(err){
+    console.error('فشل تجهيز رابط المشاهدة', err);
+    slot.innerHTML = `<div class="video-player-loading" style="color:var(--danger);">تعذّر تحميل الفيديو، حاول مرة أخرى.</div>`;
+  }
 }
 
 /* ينشئ Collection في Bunny خاص بهذه المادة أول مرة فقط، ويحفظ رقمه على المادة نفسها */
@@ -6936,6 +6990,11 @@ document.getElementById('navLinks').addEventListener('click', (e)=>{ if(e.target
 document.body.addEventListener('click', (e)=>{
   const editBtnEl = e.target.closest('[data-edit-content]');
   if(editBtnEl){ modalEditContent(editBtnEl.dataset.editContent); }
+});
+
+document.body.addEventListener('click', (e)=>{
+  const watchBtn = e.target.closest('.watch-secure');
+  if(watchBtn){ toggleSecurePlayer(watchBtn); }
 });
 
 (function(){
