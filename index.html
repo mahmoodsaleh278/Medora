@@ -4671,7 +4671,7 @@ async function callBunnyFunction(action, payload){
   if(!BUNNY_FUNCTION_ENDPOINT) throw new Error('لم يتم إعداد الاتصال بخدمة رفع الفيديو بعد.');
   const res = await fetch(BUNNY_FUNCTION_ENDPOINT, {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_ANON_KEY },
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_ANON_KEY, 'apikey':SUPABASE_ANON_KEY },
     body: JSON.stringify(Object.assign({ action }, payload))
   });
   if(!res.ok){
@@ -5536,7 +5536,7 @@ async function generateAiSummary({ fileBase64, mimeType, prompt }){
   if(!AI_SUMMARY_ENDPOINT) throw new Error('لم يتم إعداد الاتصال بخدمة الذكاء الاصطناعي بعد.');
   const res = await fetch(AI_SUMMARY_ENDPOINT, {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_ANON_KEY },
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_ANON_KEY, 'apikey':SUPABASE_ANON_KEY },
     body: JSON.stringify({ fileBase64, mimeType, prompt })
   });
   if(!res.ok){
