@@ -1099,7 +1099,7 @@ function watchDeviceLock(phone){
 /* ---------------- App state ---------------- */
 let state = {
   courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [],
-  session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', coursePage: 1, bankAdminView: false, bankNotesView: false, content: {},
+  session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', coursePage: 1, bankAdminView: false, bankNotesView: false, content: {}, teachers: [],
   bankManageCourseId: null, bankManageLectureId: '',
 };
 
@@ -1294,6 +1294,13 @@ async function syncSessionFromAuth(){
         username: meta.username || (authUser.email||'').split('@')[0],
         name: meta.fullName || 'مشرف المنصة',
       };
+    } else if(meta.role === 'teacher'){
+      state.session = {
+        type: 'teacher',
+        teacherId: authUser.id,
+        username: meta.username || (authUser.email||'').split('@')[0],
+        name: meta.fullName || 'مدرّس',
+      };
     } else {
       const phone = meta.phone || (authUser.email||'').split('@')[0];
       const allowed = await enforceDeviceLock(phone, authUser.id);
@@ -1349,7 +1356,7 @@ function courseSections(courseId){
 }
 
 async function initData(){
-  const [courses, lectures, questions, students, messages, enrollments, summaries, lectureProgress, savedContent, savedQuestions, savedDesign, savedCoupons, savedNotifications] = await Promise.all([
+  const [courses, lectures, questions, students, messages, enrollments, summaries, lectureProgress, savedContent, savedQuestions, savedDesign, savedCoupons, savedNotifications, teachers] = await Promise.all([
     getData('courses', SEED_COURSES, true),
     getData('lectures', SEED_LECTURES, true),
     getData('questions', SEED_QUESTIONS, true),
@@ -1363,10 +1370,12 @@ async function initData(){
     getData('design', DESIGN_DEFAULTS, true),
     getData('coupons', [], true),
     getData('notifications', [], true),
+    getData('teachers', [], true),
     syncSessionFromAuth(),
   ]);
   state.courses = courses.map(normalizeCourse); state.lectures = lectures.map(normalizeLecture); state.questions = questions;
   state.students = students; state.messages = messages; state.enrollments = enrollments; state.summaries = summaries;
+  state.teachers = Array.isArray(teachers) ? teachers : [];
   state.lectureProgress = lectureProgress;
   state.savedQuestions = Array.isArray(savedQuestions) ? savedQuestions : [];
   state.coupons = Array.isArray(savedCoupons) ? savedCoupons : [];
@@ -1956,6 +1965,14 @@ function renderNavState(){
     analyticsLink.classList.remove('hidden');
     couponsLink.classList.remove('hidden');
     userArea.innerHTML = `<span class="user-pill"><span>🛡️ ${escapeHtml(state.session.name)}</span> <span class="admin-tag">مشرف</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
+  } else if(state.session && state.session.type === 'teacher'){
+    loginLink.classList.add('hidden');
+    myCoursesLink.classList.add('hidden');
+    bankLink.classList.remove('hidden');
+    studentSpaceLink.classList.add('hidden');
+    analyticsLink.classList.add('hidden');
+    couponsLink.classList.add('hidden');
+    userArea.innerHTML = `<span class="user-pill"><span>👨‍🏫 ${escapeHtml(state.session.name)}</span> <span class="admin-tag">مدرّس</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
   } else {
     loginLink.classList.remove('hidden');
     myCoursesLink.classList.add('hidden');
@@ -2097,6 +2114,10 @@ const CONTENT_LABELS = {
 };
 function cval(key){ return (state.content && state.content[key] !== undefined) ? state.content[key] : CONTENT_DEFAULTS[key]; }
 function isAdminSession(){ return !!(state.session && state.session.type === 'admin'); }
+/* حساب "مدرّس": صلاحيات محدودة بكورسه هو بس — إدارة واجهة فقط (متل الأدمن تمامًا)،
+   وليست حماية حقيقية على مستوى قاعدة البيانات. */
+function isTeacherSession(){ return !!(state.session && state.session.type === 'teacher'); }
+function isCourseOwnerTeacher(course){ return isTeacherSession() && !!course && course.teacherId === state.session.teacherId; }
 function editBtn(key){
   if(!isAdminSession()) return '';
   return `<button type="button" class="content-edit-btn" data-edit-content="${key}" title="تعديل هذا النص">${ICONS.edit}</button>`;
@@ -2807,6 +2828,8 @@ function pageAiSummary(){
 function pageCourseDetail(courseId){
   const course = state.courses.find(c=>c.id===courseId);
   const isAdmin = state.session && state.session.type === 'admin';
+  const isOwnerTeacher = isCourseOwnerTeacher(course);
+  const canManageLectures = isAdmin || isOwnerTeacher;
   if(!course){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>الكورس غير موجود</h3><p>ربما تم حذفه. <a href="/courses" style="color:var(--teal); font-weight:800;">عودة إلى الدورات</a></p></div></div></section>`;
   }
@@ -2814,7 +2837,7 @@ function pageCourseDetail(courseId){
   /* الأدمن يشوف الأقسام المفعّلة لهذه المادة تحديدًا (بعض المواد فيها ميد وفاينال بس مثلًا)،
      والطالب يشوف بس الأقسام اللي فيها محاضرات فعليًا من ضمنها */
   const courseSecs = courseSections(courseId);
-  const sectionsToShow = isAdmin ? courseSecs : courseSecs.filter(s => lectures.some(l=>l.section===s));
+  const sectionsToShow = canManageLectures ? courseSecs : courseSecs.filter(s => lectures.some(l=>l.section===s));
 
   function lectureRowHtml(l, i, unlocked, lockMsg){
     const videos = l.videos || [];
@@ -2853,7 +2876,7 @@ function pageCourseDetail(courseId){
           ${hasMedia ? (videoRowsHtml + fileRowsHtml) : `<div class="lecture-lock-msg">${ICONS.play} لم تتم إضافة فيديو أو ملف لهذه المحاضرة بعد</div>`}
         </div>` : `
         <div class="lecture-lock-msg">${ICONS.lock} ${lockMsg}</div>`}
-        ${isAdmin ? `<div class="lecture-row-admin"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
+        ${canManageLectures ? `<div class="lecture-row-admin"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
       </div>
     </details>
   `;
@@ -2865,7 +2888,7 @@ function pageCourseDetail(courseId){
     const isFree = !!course.pricing[section];
 
     let statusBadge, actionHtml = '';
-    if(isAdmin){
+    if(canManageLectures){
       statusBadge = `<span class="lecture-tier-tag ${isFree?'':'locked'}">${isFree ? '🆓 مجاني' : '💳 مدفوع'}</span>`;
     } else if(unlocked){
       statusBadge = `<span class="lecture-tier-tag">✅ مفعّل</span>`;
@@ -2881,8 +2904,8 @@ function pageCourseDetail(courseId){
 
     const lockMsg = unlocked ? '' : (isFree ? `اشترك مجانًا بقسم ${SECTION_LABELS[section]} لفتح هذه المحاضرة` : 'قسم مدفوع');
     const rowsHtml = secLectures.length
-      ? `${!isAdmin && actionHtml ? actionHtml : ''}<div class="lecture-list">${secLectures.map((l,i)=>lectureRowHtml(l,i,unlocked,lockMsg)).join('')}</div>`
-      : `<div class="section-group-empty">${isAdmin ? 'لا توجد محاضرات بهذا القسم بعد.' : 'سيتم إضافة محاضرات هذا القسم قريبًا.'}</div>`;
+      ? `${!canManageLectures && actionHtml ? actionHtml : ''}<div class="lecture-list">${secLectures.map((l,i)=>lectureRowHtml(l,i,unlocked,lockMsg)).join('')}</div>`
+      : `<div class="section-group-empty">${canManageLectures ? 'لا توجد محاضرات بهذا القسم بعد.' : 'سيتم إضافة محاضرات هذا القسم قريبًا.'}</div>`;
 
     return `
     <details class="section-group">
@@ -2912,6 +2935,10 @@ function pageCourseDetail(courseId){
       <button class="btn small" id="importEnrollBtn">📥 استيراد / مزامنة من ملف إكسيل</button>
       <button class="btn danger small" id="resetDeviceBtn">${ICONS.lock} إعادة تعيين أجهزة الطالب</button>
     `;
+  } else if(isOwnerTeacher){
+    const teacherEnrolledCount = enrollmentsFor(courseId).length;
+    sideStatus = `<span class="lecture-tier-tag">👨‍🏫 أنت مدرّس هذه المادة</span>`;
+    sideAction = `<div class="hint" style="margin-top:2px;">عدد الطلاب المشتركين بهذه المادة: <b>${teacherEnrolledCount}</b></div>`;
   } else if(courseFullyUnlocked(courseId)){
     sideStatus = `<span class="lecture-tier-tag">✅ الكورس مفعّل بالكامل لديك</span>`;
   } else if(courseUnlocked(courseId)){
@@ -2957,9 +2984,9 @@ function pageCourseDetail(courseId){
         <div class="course-detail-main">
           <div class="toolbar">
             <h2 style="font-size:22px;">محاضرات الكورس</h2>
-            ${isAdmin ? `<button class="btn teal solid" id="addLectureBtn">${ICONS.plus} إضافة محاضرة</button>` : ''}
+            ${canManageLectures ? `<button class="btn teal solid" id="addLectureBtn">${ICONS.plus} إضافة محاضرة</button>` : ''}
           </div>
-          ${sectionsToShow.length ? `<div class="section-group-list">${sectionGroupsHtml}</div>` : `<div class="empty-state"><h3>لا توجد محاضرات بعد</h3><p>${isAdmin ? 'أضف أول محاضرة لهذا الكورس.' : 'سيتم إضافة المحاضرات قريبًا.'}</p></div>`}
+          ${sectionsToShow.length ? `<div class="section-group-list">${sectionGroupsHtml}</div>` : `<div class="empty-state"><h3>لا توجد محاضرات بعد</h3><p>${canManageLectures ? 'أضف أول محاضرة لهذا الكورس.' : 'سيتم إضافة المحاضرات قريبًا.'}</p></div>`}
         </div>
 
         <div class="course-detail-side">
@@ -3044,11 +3071,15 @@ function bankManageFilteredQuestions(){
 }
 
 function pageBankManage(){
-  if(!state.bankManageCourseId || !state.courses.some(c=>c.id===state.bankManageCourseId)){
-    state.bankManageCourseId = state.courses[0] ? state.courses[0].id : null;
+  /* المدرّس يدير بنك أسئلة كورسه هو فقط — حماية واجهة، لا فرق DB بين الكورسات فعليًا */
+  const manageableCourses = isTeacherSession()
+    ? state.courses.filter(c=>c.teacherId===state.session.teacherId)
+    : state.courses;
+  if(!state.bankManageCourseId || !manageableCourses.some(c=>c.id===state.bankManageCourseId)){
+    state.bankManageCourseId = manageableCourses[0] ? manageableCourses[0].id : null;
     state.bankManageLectureId = '';
   }
-  const courseOptions = state.courses.map(c=>`<option class="i18n-skip" value="${c.id}" ${state.bankManageCourseId===c.id?'selected':''}>${escapeHtml(c.title)}</option>`).join('');
+  const courseOptions = manageableCourses.map(c=>`<option class="i18n-skip" value="${c.id}" ${state.bankManageCourseId===c.id?'selected':''}>${escapeHtml(c.title)}</option>`).join('');
   const courseLectures = state.lectures.filter(l=>l.courseId===state.bankManageCourseId);
   const lectureOptions = `<option value="" ${!state.bankManageLectureId?'selected':''}>كل المحاضرات</option>`
     + `<option value="__none__" ${state.bankManageLectureId==='__none__'?'selected':''}>أسئلة عامة (غير مرتبطة بمحاضرة)</option>`
@@ -3069,8 +3100,10 @@ function pageBankManage(){
     </div>`;
 
   let body;
-  if(!state.courses.length){
-    body = `<div class="empty-state"><h3>لا يوجد كورسات بعد</h3><p>أضف كورسات أولًا من صفحة الدورات.</p></div>`;
+  if(!manageableCourses.length){
+    body = isTeacherSession()
+      ? `<div class="empty-state"><h3>لا يوجد كورس مرتبط بحسابك بعد</h3><p>تواصل مع إدارة المنصة لربط حسابك بالمادة التي تدرّسها.</p></div>`
+      : `<div class="empty-state"><h3>لا يوجد كورسات بعد</h3><p>أضف كورسات أولًا من صفحة الدورات.</p></div>`;
   } else {
     const qs = bankManageFilteredQuestions();
     const title = state.bankManageLectureId === '__none__' ? 'الأسئلة العامة'
@@ -3090,7 +3123,7 @@ function pageBankManage(){
           <button class="btn teal solid" id="addQuestionBtn">${ICONS.plus} إضافة سؤال جديد</button>
         </div>
       </div>
-      ${state.courses.length ? filterBar : ''}
+      ${manageableCourses.length ? filterBar : ''}
       ${body}
     </div>
   </section>
@@ -3114,7 +3147,8 @@ function isLectureAccessibleForBank(lid){
 
 function pageBankSetup(){
   const isAdmin = state.session && state.session.type === 'admin';
-  const adminToggle = isAdmin ? `<div style="text-align:center; margin-bottom:22px;"><button class="btn small" id="toManageBtn">🛠 إدارة بنك الأسئلة (إضافة / تعديل / حذف)</button></div>` : '';
+  const canManageBank = isAdmin || isTeacherSession();
+  const adminToggle = canManageBank ? `<div style="text-align:center; margin-bottom:22px;"><button class="btn small" id="toManageBtn">🛠 إدارة بنك الأسئلة (إضافة / تعديل / حذف)</button></div>` : '';
   const isStudent = state.session && state.session.type === 'student';
   const notesCount = isStudent ? mySavedQuestions().length : 0;
   const notesToggle = isStudent ? `<div style="text-align:center; margin-bottom:22px;"><button class="btn teal small" id="toMyNotesBtn" dir="ltr">📌 My Notes${notesCount ? ` <span class="count" style="background:rgba(255,255,255,0.25); color:inherit; padding:2px 8px; border-radius:999px; margin-inline-start:4px;">${notesCount}</span>` : ''}</button></div>` : '';
@@ -3494,7 +3528,7 @@ function pageBankResults(){
 
 function pageBank(){
   const isAdmin = state.session && state.session.type === 'admin';
-  if(isAdmin && state.bankAdminView) return pageBankManage();
+  if((isAdmin || isTeacherSession()) && state.bankAdminView) return pageBankManage();
   if(!state.session){
     return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>بنك الأسئلة متاح فقط للطلاب المسجّلين. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
@@ -3561,7 +3595,21 @@ function pageAdminAnalytics(){
     <div class="container">
       <div class="toolbar">
         <h2>لوحة التحليلات</h2>
+        <button class="btn small" id="addTeacherBtn">👨‍🏫 إنشاء حساب مدرّس</button>
       </div>
+      ${state.teachers && state.teachers.length ? `
+      <div class="card-panel" style="padding:18px 20px; margin-bottom:24px;">
+        <h3 style="margin-bottom:10px;">المدرّسون المسجّلون</h3>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          ${state.teachers.map(t=>{
+            const c = state.courses.find(c=>c.teacherId===t.id);
+            return `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; font-size:13.5px;">
+              <span>👨‍🏫 <b>${escapeHtml(t.fullName||t.username)}</b> <span style="color:var(--muted);">(${escapeHtml(t.username)})</span></span>
+              <span style="color:var(--muted);">${c ? '📚 '+escapeHtml(c.title) : 'غير مرتبط بأي كورس حاليًا'}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>` : ''}
 
       <div class="analytics-grid">
         <div class="analytics-kpi"><b>${totalStudents}</b><span>طالب مسجّل</span></div>
@@ -3795,6 +3843,64 @@ function modalCreateCoupon(){
     });
     await setData('coupons', state.coupons, true);
     closeModal(); navigate('admin-coupons'); render();
+  });
+}
+
+/* عميل Supabase مؤقّت ومستقل (بدون حفظ جلسة) لإنشاء حساب المدرّس دون التأثير على
+   جلسة تسجيل دخول الأدمن الحالية — إنشاء مستخدم جديد عبر signUp بالعميل الرئيسي
+   كان سيستبدل جلسة الأدمن بجلسة المدرّس الجديد، لذلك نستخدم عميلًا منفصلًا. */
+function getTempAuthClient(){
+  return supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession:false, autoRefreshToken:false } });
+}
+
+/* إنشاء حساب مدرّس جديد وربطه مباشرة بكورس محدد. صلاحيات المدرّس بعدها محدودة
+   واجهيًا فقط (إضافة/تعديل/حذف محاضرات وبنك أسئلة كورسه، ورؤية عدد المشتركين)،
+   دون أي حماية فعلية على مستوى قاعدة البيانات (نفس أسلوب حساب الأدمن الحالي). */
+function modalCreateTeacher(){
+  const courseOptions = state.courses.map(c=>`<option class="i18n-skip" value="${c.id}">${escapeHtml(c.title)} — ${escapeHtml(c.university)}</option>`).join('');
+  openModal(`
+    <h3>${ICONS.plus} إنشاء حساب مدرّس</h3>
+    <form id="teacherForm">
+      <div class="field"><label>الاسم الكامل</label><input type="text" name="fullName" required></div>
+      <div class="field"><label>اسم المستخدم (للدخول)</label><input type="text" name="username" required style="direction:ltr;"></div>
+      <div class="field"><label>كلمة المرور</label><input type="password" name="password" required minlength="6" style="direction:ltr;"></div>
+      <div class="field">
+        <label>الكورس المرتبط بهذا المدرّس</label>
+        <select name="courseId" required>${courseOptions}</select>
+        <p class="hint" style="margin-top:6px;">سيقدر المدرّس إدارة محاضرات وبنك أسئلة هذا الكورس بس، ويشوف عدد المشتركين فيه.</p>
+      </div>
+      <div id="teacherMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">إنشاء الحساب والربط</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('teacherForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const msgBox = document.getElementById('teacherMsg');
+    const fullName = (fd.get('fullName')||'').trim();
+    const username = (fd.get('username')||'').trim();
+    const password = fd.get('password');
+    const courseId = fd.get('courseId');
+    if(!fullName || !username || !password || !courseId){
+      msgBox.innerHTML = `<div class="form-msg error">عبّي كل الحقول أولًا.</div>`; return;
+    }
+    if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
+    const pseudoEmail = username.toLowerCase()+'@medora.app';
+    const tempClient = getTempAuthClient();
+    const { data, error } = await tempClient.auth.signUp({
+      email: pseudoEmail, password,
+      options: { data: { role:'teacher', username, fullName } }
+    });
+    if(error){ msgBox.innerHTML = `<div class="form-msg error">تعذّر إنشاء الحساب: ${escapeHtml(error.message||'')}</div>`; return; }
+    if(!data.user){ msgBox.innerHTML = `<div class="form-msg error">تعذّر إنشاء الحساب.</div>`; return; }
+    state.teachers.push({ id: data.user.id, username, fullName });
+    await setData('teachers', state.teachers, true);
+    const course = state.courses.find(c=>c.id===courseId);
+    if(course){
+      course.teacherId = data.user.id;
+      await setData('courses', state.courses, true);
+    }
+    closeModal(); navigate('admin-analytics'); render();
   });
 }
 
@@ -4040,6 +4146,10 @@ function pageLogin(){
    ========================================================= */
 function pageAdminLogin(){
   if(state.session && state.session.type === 'admin') return `<section class="section"><div class="container"><div class="empty-state"><h3>أنت مسجّل الدخول كمشرف</h3><p>يمكنك إدارة الدورات والمحاضرات وبنك الأسئلة من صفحاتها مباشرة.</p></div></div></section>`;
+  if(state.session && state.session.type === 'teacher'){
+    const myCourse = state.courses.find(c=>c.teacherId===state.session.teacherId);
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>أهلًا ${escapeHtml(state.session.name)} 👨‍🏫</h3><p>${myCourse ? `يمكنك إدارة محاضرات وبنك أسئلة مادة "${escapeHtml(myCourse.title)}" من <a href="/course/${myCourse.id}" style="color:var(--teal); font-weight:800;">صفحة الكورس</a> أو <a href="/bank" style="color:var(--teal); font-weight:800;">بنك الأسئلة</a>.` : 'لم تُربط بأي كورس بعد، تواصل مع إدارة المنصة.'}</p></div></div></section>`;
+  }
   return `
   <section class="section">
     <div class="auth-wrap">
@@ -6133,7 +6243,7 @@ function bindPageEvents(route){
 
   if(route === 'bank'){
     const isAdmin = state.session && state.session.type === 'admin';
-    if(isAdmin && state.bankAdminView){
+    if((isAdmin || isTeacherSession()) && state.bankAdminView){
       const toExam = document.getElementById('toExamModeBtn');
       if(toExam) toExam.addEventListener('click', ()=>{ state.bankAdminView = false; resetQuiz(); render(); });
       const addBtn = document.getElementById('addQuestionBtn');
@@ -6416,6 +6526,8 @@ function bindPageEvents(route){
   }
 
   if(route === 'admin-analytics'){
+    const addTeacherBtn = document.getElementById('addTeacherBtn');
+    if(addTeacherBtn) addTeacherBtn.addEventListener('click', modalCreateTeacher);
     const sendNotifBtn = document.getElementById('sendNotifBtn');
     if(sendNotifBtn) sendNotifBtn.addEventListener('click', modalSendNotification);
     document.querySelectorAll('[data-del-notif]').forEach(btn=>{
@@ -6584,11 +6696,15 @@ async function handleAdminSubmit(e){
   const { data, error } = await supabaseClient.auth.signInWithPassword({ email: pseudoEmail, password });
   if(error){ msgBox.innerHTML = `<div class="form-msg error">بيانات دخول المشرف غير صحيحة.</div>`; return; }
   const meta = data.user.user_metadata || {};
-  if(meta.role !== 'admin'){
+  if(meta.role !== 'admin' && meta.role !== 'teacher'){
     await supabaseClient.auth.signOut();
     msgBox.innerHTML = `<div class="form-msg error">هذا الحساب لا يملك صلاحية دخول لوحة التحكم.</div>`; return;
   }
-  state.session = { type:'admin', username: meta.username||username, name: meta.fullName || 'مشرف المنصة' };
+  if(meta.role === 'teacher'){
+    state.session = { type:'teacher', teacherId: data.user.id, username: meta.username||username, name: meta.fullName || 'مدرّس' };
+  } else {
+    state.session = { type:'admin', username: meta.username||username, name: meta.fullName || 'مشرف المنصة' };
+  }
   navigate('home'); render();
 }
 
