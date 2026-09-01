@@ -44,6 +44,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<!-- مكتبة tus لرفع الفيديوهات مباشرة من المتصفح إلى Bunny Stream عبر بروتوكول رفع متجزّئ قابل للاستئناف -->
+<script src="https://cdn.jsdelivr.net/npm/tus-js-client@3/dist/tus.min.js"></script>
 <style>
   :root{
     --navy:#0f2745;
@@ -568,6 +570,23 @@
   .link-row .link-url{ flex:1; min-width:0; direction:ltr; }
   .link-row .link-remove{ flex-shrink:0; width:32px; height:32px; border-radius:8px; border:1.5px solid var(--danger); color:var(--danger); background:transparent; font-size:14px; }
   .link-row .link-remove:hover{ background:var(--danger); color:#fff; }
+  /* ===== صفوف رفع الفيديو مباشرة إلى Bunny Stream ===== */
+  .video-row{ display:flex; flex-direction:column; gap:6px; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; background:#fbfdfe; margin-bottom:8px; position:relative; }
+  body.dark .video-row{ background:#0c1723; }
+  .video-row-main{ display:flex; gap:8px; align-items:center; }
+  .video-row-main .link-label{ flex:0 0 36%; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:13.5px; color:var(--text); background:transparent; }
+  .video-row .link-url{ flex:1; min-width:0; direction:ltr; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:13.5px; color:var(--text); background:transparent; }
+  .video-file-input{ flex:1; min-width:0; font-size:12.5px; color:var(--muted); }
+  .video-row-remove{ position:absolute; left:8px; top:8px; width:26px; height:26px; border-radius:8px; border:1.5px solid var(--danger); color:var(--danger); background:transparent; font-size:12px; }
+  .video-row-remove:hover{ background:var(--danger); color:#fff; }
+  .video-row-badge{ font-size:12.5px; font-weight:700; color:var(--good); background:var(--good-light); padding:4px 10px; border-radius:20px; white-space:nowrap; }
+  .upload-progress{ width:100%; height:7px; border-radius:5px; background:var(--border); overflow:hidden; }
+  .upload-progress-fill{ height:100%; width:0%; background:var(--teal); transition:width .2s ease; }
+  .upload-status{ font-size:12px; color:var(--muted); }
+  .video-row-uploading .upload-status{ color:var(--teal-2); font-weight:700; }
+  details.manual-link-details{ margin-top:10px; }
+  details.manual-link-details summary{ cursor:pointer; font-size:13px; font-weight:700; color:var(--muted); padding:6px 0; }
+  details.manual-link-details .link-rows{ margin-top:8px; }
   .form-msg{ font-size:13.5px; padding:10px 14px; border-radius:10px; margin-bottom:14px; }
   .form-msg.error{ background:#fdeceb; color:var(--danger-dark); }
   .form-msg.success{ background:var(--good-light); color:var(--good); }
@@ -4637,6 +4656,178 @@ function collectLinkRows(containerId){
   })).filter(r=>r.url);
 }
 
+/* =========================================================
+   رفع فيديوهات المحاضرات مباشرة إلى Bunny Stream:
+   - كل مادة (course) مرتبطة بـ Collection في مكتبة Bunny (course.collectionId)،
+     تُنشأ تلقائيًا أول مرة يُرفع فيها فيديو لهذه المادة.
+   - الرفع يتم من المتصفح مباشرة إلى Bunny عبر بروتوكول tus (قابل لاستئناف
+     الرفع)، بدون ما يمرّ الفيديو عبر خادمنا — فقط "توقيع" رفع قصير الصلاحية
+     نطلبه من Supabase Edge Function (bunny-upload) التي تحفظ مفتاح Bunny
+     السري بأمان على الخادم. راجع ملف bunny-upload/index.ts المرفق للنشر.
+   ========================================================= */
+const BUNNY_FUNCTION_ENDPOINT = SUPABASE_URL.startsWith('http') ? (SUPABASE_URL + '/functions/v1/bunny-upload') : '';
+
+async function callBunnyFunction(action, payload){
+  if(!BUNNY_FUNCTION_ENDPOINT) throw new Error('لم يتم إعداد الاتصال بخدمة رفع الفيديو بعد.');
+  const res = await fetch(BUNNY_FUNCTION_ENDPOINT, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_ANON_KEY },
+    body: JSON.stringify(Object.assign({ action }, payload))
+  });
+  if(!res.ok){
+    let detail = '';
+    try{
+      const errJson = await res.json();
+      detail = errJson.error || (errJson.details ? JSON.stringify(errJson.details) : '');
+    }catch(e){}
+    throw new Error(detail || ('فشل الطلب (رمز ' + res.status + ')'));
+  }
+  return res.json();
+}
+
+/* ينشئ Collection في Bunny خاص بهذه المادة أول مرة فقط، ويحفظ رقمه على المادة نفسها */
+async function ensureCourseCollection(course){
+  if(course.collectionId) return course.collectionId;
+  const result = await callBunnyFunction('create-collection', { title: course.title });
+  if(!result || !result.collectionId) throw new Error('تعذّر إنشاء مجلد الفيديو الخاص بهذه المادة على Bunny.');
+  course.collectionId = result.collectionId;
+  await setData('courses', state.courses, true);
+  return course.collectionId;
+}
+
+/* يرفع ملف فيديو من جهاز المستخدم مباشرة إلى Bunny Stream عبر tus، ويرجّع رابط
+   المشاهدة (embed) بعد اكتمال الرفع. onProgress(percent) يُستدعى أثناء الرفع. */
+function uploadVideoToBunny(file, { courseId, title }, onProgress){
+  return new Promise((resolve, reject)=>{
+    (async ()=>{
+      try{
+        if(typeof tus === 'undefined') throw new Error('مكتبة الرفع لم يتم تحميلها، تحقق من الاتصال بالإنترنت وأعد المحاولة.');
+        const course = state.courses.find(c=>c.id===courseId);
+        if(!course) throw new Error('لم يتم العثور على المادة المرتبطة بهذه المحاضرة.');
+        const collectionId = await ensureCourseCollection(course);
+        const created = await callBunnyFunction('create-video', { title: title || file.name, collectionId });
+        const { videoGuid, libraryId, expire, signature } = created || {};
+        if(!videoGuid || !libraryId || !expire || !signature) throw new Error('تعذّر تجهيز رفع الفيديو، حاول مرة أخرى.');
+        const upload = new tus.Upload(file, {
+          endpoint: 'https://video.bunnycdn.com/tusupload',
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: {
+            AuthorizationSignature: signature,
+            AuthorizationExpire: String(expire),
+            VideoId: videoGuid,
+            LibraryId: String(libraryId),
+          },
+          metadata: { filetype: file.type, title: title || file.name, collection: collectionId },
+          onError: (err)=> reject(err),
+          onProgress: (uploadedBytes, totalBytes)=>{
+            if(onProgress) onProgress(Math.round((uploadedBytes/totalBytes)*100));
+          },
+          onSuccess: ()=>{
+            resolve({ embedUrl: `https://iframe.mediadelivery.net/embed/${libraryId}/${videoGuid}`, videoGuid, libraryId });
+          },
+        });
+        upload.start();
+      }catch(e){ reject(e); }
+    })();
+  });
+}
+
+/* ===== صفوف الفيديو داخل نموذج المحاضرة: صف رفع من الجهاز / صف فيديو مرفوع مسبقًا / صف رابط يدوي (أدمن فقط) ===== */
+function videoUploadRowHtml(){
+  return `<div class="video-row video-row-uploading">
+    <div class="video-row-main">
+      <input type="text" class="link-label" placeholder="اسم الفيديو (اختياري)" value="">
+      <input type="file" class="video-file-input" accept="video/*">
+    </div>
+    <div class="upload-progress"><div class="upload-progress-fill"></div></div>
+    <div class="upload-status">اختر ملف الفيديو من جهازك لبدء الرفع</div>
+    <button type="button" class="video-row-remove" title="حذف">✕</button>
+  </div>`;
+}
+function videoExistingRowHtml(label, url, bunnyGuid){
+  return `<div class="video-row video-row-done" data-url="${escapeHtml(url)}" ${bunnyGuid ? `data-bunny-guid="${escapeHtml(bunnyGuid)}"` : ''}>
+    <div class="video-row-main">
+      <input type="text" class="link-label" placeholder="اسم الفيديو (اختياري)" value="${escapeHtml(label||'')}">
+      <span class="video-row-badge">${bunnyGuid ? (ICONS.play+' فيديو مرفوع على Bunny') : (ICONS.play+' رابط فيديو خارجي')}</span>
+    </div>
+    <button type="button" class="video-row-remove" title="حذف">✕</button>
+  </div>`;
+}
+function videoManualRowHtml(label, url){
+  return `<div class="video-row video-row-manual">
+    <div class="video-row-main">
+      <input type="text" class="link-label" placeholder="اسم (اختياري)" value="${escapeHtml(label||'')}">
+      <input type="url" class="link-url" placeholder="https://..." value="${escapeHtml(url||'')}">
+    </div>
+    <button type="button" class="video-row-remove" title="حذف">✕</button>
+  </div>`;
+}
+function bindVideoRowsContainer(containerId){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  container.addEventListener('click', (e)=>{
+    const rm = e.target.closest('.video-row-remove');
+    if(rm) rm.closest('.video-row').remove();
+  });
+}
+/* يضيف صف "رفع فيديو من الجهاز" جديد ويربط رفعه التلقائي فور اختيار الملف */
+function addVideoUploadRow(containerId, courseId){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  container.insertAdjacentHTML('beforeend', videoUploadRowHtml());
+  const row = container.lastElementChild;
+  const fileInput = row.querySelector('.video-file-input');
+  const labelInput = row.querySelector('.link-label');
+  const statusEl = row.querySelector('.upload-status');
+  const fillEl = row.querySelector('.upload-progress-fill');
+  fileInput.addEventListener('change', async ()=>{
+    const file = fileInput.files[0];
+    if(!file) return;
+    fileInput.disabled = true;
+    labelInput.disabled = true;
+    statusEl.textContent = 'جاري التحضير للرفع...';
+    try{
+      const titleVal = labelInput.value.trim() || file.name;
+      const result = await uploadVideoToBunny(file, { courseId, title: titleVal }, (pct)=>{
+        fillEl.style.width = pct + '%';
+        statusEl.textContent = 'جاري الرفع... ' + pct + '%';
+      });
+      statusEl.textContent = '✔ تم رفع الفيديو بنجاح';
+      row.classList.remove('video-row-uploading');
+      row.classList.add('video-row-done');
+      row.dataset.url = result.embedUrl;
+      row.dataset.bunnyGuid = result.videoGuid;
+      fileInput.remove();
+      const progressEl = row.querySelector('.upload-progress');
+      if(progressEl) progressEl.remove();
+      labelInput.disabled = false;
+    }catch(err){
+      console.error('Bunny upload failed', err);
+      statusEl.textContent = '✕ فشل الرفع: ' + (err.message || 'خطأ غير معروف، حاول مرة أخرى');
+      fileInput.disabled = false;
+      labelInput.disabled = false;
+    }
+  });
+}
+/* يجمع كل صفوف الفيديو (مرفوعة + منتهية + روابط يدوية للأدمن) من الحاوية، ويتجاهل الرفوعات غير المكتملة */
+function collectVideoRows(containerId){
+  const rows = Array.from(document.querySelectorAll('#'+containerId+' .video-row'));
+  const result = [];
+  rows.forEach(row=>{
+    const labelInput = row.querySelector('.link-label');
+    const label = labelInput ? labelInput.value.trim() : '';
+    if(row.classList.contains('video-row-manual')){
+      const url = row.querySelector('.link-url').value.trim();
+      if(url) result.push({ label, url });
+    } else if(row.dataset.url){
+      const item = { label, url: row.dataset.url };
+      if(row.dataset.bunnyGuid) item.bunnyGuid = row.dataset.bunnyGuid;
+      result.push(item);
+    }
+  });
+  return result;
+}
+
 function sectionOptionsHtml(selected, allowed){
   const list = (allowed && allowed.length) ? allowed : SECTIONS;
   const opts = list.map(s=>`<option value="${s}" ${selected===s?'selected':''}>${SECTION_LABELS[s]}</option>`);
@@ -4646,6 +4837,7 @@ function sectionOptionsHtml(selected, allowed){
 }
 
 function modalAddLecture(courseId){
+  const admin = isAdminSession();
   openModal(`
     <h3>${ICONS.plus} إضافة محاضرة جديدة</h3>
     <form id="lectureForm">
@@ -4653,9 +4845,15 @@ function modalAddLecture(courseId){
       <div class="field"><label>القسم</label><select name="section">${sectionOptionsHtml(courseSections(courseId)[0], courseSections(courseId))}</select></div>
       <div class="field"><label>وصف مختصر (اختياري)</label><textarea name="description" placeholder="وصف مختصر لمحتوى المحاضرة"></textarea></div>
       <div class="field">
-        <label>فيديوهات المحاضرة (اختياري — يمكن إضافة أكثر من فيديو)</label>
+        <label>فيديو المحاضرة (يمكن رفع أكثر من فيديو لنفس المحاضرة)</label>
         <div class="link-rows" id="videoRows"></div>
-        <button type="button" class="btn small" id="addVideoRow">${ICONS.plus} إضافة فيديو</button>
+        <button type="button" class="btn small teal solid" id="addVideoUploadRow">${ICONS.plus} رفع فيديو من الجهاز</button>
+        ${admin ? `
+        <details class="manual-link-details">
+          <summary>إلصاق رابط فيديو يدويًا (اختياري)</summary>
+          <div class="link-rows" id="videoManualRows"></div>
+          <button type="button" class="btn small" id="addVideoManualRow">${ICONS.plus} إضافة رابط فيديو</button>
+        </details>` : ''}
       </div>
       <div class="field">
         <label>ملفات المحاضرة (اختياري — يمكن إضافة أكثر من ملف)</label>
@@ -4665,19 +4863,25 @@ function modalAddLecture(courseId){
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ المحاضرة</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
-  bindLinkRows('videoRows', 'addVideoRow');
+  bindVideoRowsContainer('videoRows');
+  document.getElementById('addVideoUploadRow').addEventListener('click', ()=> addVideoUploadRow('videoRows', courseId));
   bindLinkRows('fileRows', 'addFileRow');
-  document.getElementById('addVideoRow').click();
   document.getElementById('addFileRow').click();
+  if(admin){
+    bindLinkRows('videoManualRows', 'addVideoManualRow');
+  }
   document.getElementById('lectureForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
+    const stillUploading = document.querySelector('#videoRows .video-row-uploading');
+    if(stillUploading){ alert('في فيديو لسا قيد الرفع، انتظر يخلص أو احذفه قبل الحفظ.'); return; }
     const fd = new FormData(e.target);
+    const manualVideos = admin ? collectLinkRows('videoManualRows') : [];
     state.lectures.push({
       id:'l'+Date.now(), courseId,
       title:fd.get('title').trim(),
       section: SECTIONS.includes(fd.get('section')) ? fd.get('section') : 'first',
       description:(fd.get('description')||'').trim(),
-      videos: collectLinkRows('videoRows'),
+      videos: [...collectVideoRows('videoRows'), ...manualVideos],
       files: collectLinkRows('fileRows'),
     });
     await setData('lectures', state.lectures, true);
@@ -4688,7 +4892,8 @@ function modalAddLecture(courseId){
 function modalEditLecture(lectureId){
   const lecture = state.lectures.find(l=>l.id===lectureId);
   if(!lecture) return;
-  const videos = (lecture.videos && lecture.videos.length) ? lecture.videos : [{label:'',url:''}];
+  const admin = isAdminSession();
+  const existingVideos = lecture.videos || [];
   const files = (lecture.files && lecture.files.length) ? lecture.files : [{label:'',url:''}];
   openModal(`
     <h3>${ICONS.edit} تعديل المحاضرة</h3>
@@ -4697,9 +4902,15 @@ function modalEditLecture(lectureId){
       <div class="field"><label>القسم</label><select name="section">${sectionOptionsHtml(lecture.section, courseSections(lecture.courseId))}</select></div>
       <div class="field"><label>وصف مختصر (اختياري)</label><textarea name="description">${escapeHtml(lecture.description||'')}</textarea></div>
       <div class="field">
-        <label>فيديوهات المحاضرة (اختياري — يمكن إضافة أكثر من فيديو)</label>
-        <div class="link-rows" id="videoRows">${videos.map(v=>linkRowHtml(v.label,v.url)).join('')}</div>
-        <button type="button" class="btn small" id="addVideoRow">${ICONS.plus} إضافة فيديو</button>
+        <label>فيديو المحاضرة (يمكن رفع أكثر من فيديو لنفس المحاضرة)</label>
+        <div class="link-rows" id="videoRows">${existingVideos.map(v=>videoExistingRowHtml(v.label, v.url, v.bunnyGuid)).join('')}</div>
+        <button type="button" class="btn small teal solid" id="addVideoUploadRow">${ICONS.plus} رفع فيديو من الجهاز</button>
+        ${admin ? `
+        <details class="manual-link-details">
+          <summary>إلصاق رابط فيديو يدويًا (اختياري)</summary>
+          <div class="link-rows" id="videoManualRows"></div>
+          <button type="button" class="btn small" id="addVideoManualRow">${ICONS.plus} إضافة رابط فيديو</button>
+        </details>` : ''}
       </div>
       <div class="field">
         <label>ملفات المحاضرة (اختياري — يمكن إضافة أكثر من ملف)</label>
@@ -4709,14 +4920,21 @@ function modalEditLecture(lectureId){
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
-  bindLinkRows('videoRows', 'addVideoRow');
+  bindVideoRowsContainer('videoRows');
+  document.getElementById('addVideoUploadRow').addEventListener('click', ()=> addVideoUploadRow('videoRows', lecture.courseId));
   bindLinkRows('fileRows', 'addFileRow');
+  if(admin){
+    bindLinkRows('videoManualRows', 'addVideoManualRow');
+  }
   document.getElementById('lectureEditForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
+    const stillUploading = document.querySelector('#videoRows .video-row-uploading');
+    if(stillUploading){ alert('في فيديو لسا قيد الرفع، انتظر يخلص أو احذفه قبل الحفظ.'); return; }
     const fd = new FormData(e.target);
+    const manualVideos = admin ? collectLinkRows('videoManualRows') : [];
     lecture.title = fd.get('title').trim(); lecture.description = (fd.get('description')||'').trim();
     lecture.section = SECTIONS.includes(fd.get('section')) ? fd.get('section') : 'first';
-    lecture.videos = collectLinkRows('videoRows');
+    lecture.videos = [...collectVideoRows('videoRows'), ...manualVideos];
     lecture.files = collectLinkRows('fileRows');
     delete lecture.videoUrl; delete lecture.fileUrl;
     await setData('lectures', state.lectures, true);
