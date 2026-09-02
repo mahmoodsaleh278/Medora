@@ -479,8 +479,17 @@
   .lecture-action-btn span.label-main{ display:block; }
   .lecture-action-btn span.label-sub{ display:block; font-size:11.5px; font-weight:600; opacity:.8; margin-top:1px; }
   .lecture-row-admin{ width:100%; display:flex; justify-content:flex-end; border-top:1px dashed var(--border); padding-top:10px; margin-top:10px; }
-  .video-player-slot{ width:100%; }
-  .video-player-wrap{ position:relative; width:100%; padding-top:56.25%; height:0; border-radius:12px; overflow:hidden; background:#000; margin-top:10px; }
+  .video-player-slot{ width:100%; display:flex; justify-content:center; }
+  /* الفيديو بياخد أقصى عرض ممكن، بس بدون ما يتعدى ارتفاع الشاشة المرئية (منحسب أقصى ارتفاع مسموح بالـ vh، وعلى أساسه أقصى عرض يحافظ على نسبة 16:9، وناخد الأصغر بينه وبين عرض الحاوية) */
+  .video-player-wrap{
+    position:relative;
+    aspect-ratio:16/9;
+    width:min(100%, calc(72vh * 16 / 9));
+    width:min(100%, calc(72dvh * 16 / 9));
+    max-height:72vh;
+    max-height:72dvh;
+    border-radius:12px; overflow:hidden; background:#000; margin-top:10px;
+  }
   .video-player-wrap iframe{ position:absolute; inset:0; width:100%; height:100%; border:none; }
   .video-player-loading{ padding:14px; text-align:center; font-size:13.5px; font-weight:700; color:var(--muted); background:var(--bg); border:1px dashed var(--border); border-radius:10px; margin-top:10px; }
 
