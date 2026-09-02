@@ -857,6 +857,7 @@
       <a href="/about" data-route="about">من نحن</a>
       <a href="/contact" data-route="contact">تواصل معنا</a>
       <a href="/my-courses" data-route="my-courses" id="navMyCoursesLink" class="hidden">دوراتي</a>
+      <a href="/my-courses" data-route="my-courses" id="navMyTeachCoursesLink" class="hidden">موادي</a>
       <a href="/student-space" data-route="student-space" id="navStudentSpaceLink" class="hidden">مساحة الطالب</a>
       <a href="/admin-analytics" data-route="admin-analytics" id="navAnalyticsLink" class="hidden">📊 التحليلات</a>
       <a href="/admin-coupons" data-route="admin-coupons" id="navCouponsLink" class="hidden">🎟️ الكوبونات</a>
@@ -1513,6 +1514,7 @@ function isEnrolledSection(courseId, section){
 function sectionUnlocked(courseId, section){
   const isAdmin = state.session && state.session.type === 'admin';
   if(isAdmin) return true;
+  if(isTeacherSession() && isCourseOwnerTeacher(state.courses.find(c=>c.id===courseId))) return true;
   return isEnrolledSection(courseId, section);
 }
 function enrollmentsForSection(courseId, section){
@@ -1849,6 +1851,7 @@ function isEnrolled(courseId){
 function courseUnlocked(courseId){
   const isAdmin = state.session && state.session.type === 'admin';
   if(isAdmin) return true;
+  if(isTeacherSession() && isCourseOwnerTeacher(state.courses.find(c=>c.id===courseId))) return true;
   return isEnrolled(courseId);
 }
 function courseFullyUnlocked(courseId){
@@ -1978,6 +1981,7 @@ function renderNavState(){
   const userArea = document.getElementById('navUserArea');
   const loginLink = document.getElementById('navLoginLink');
   const myCoursesLink = document.getElementById('navMyCoursesLink');
+  const myTeachCoursesLink = document.getElementById('navMyTeachCoursesLink');
   const bankLink = document.getElementById('navBankLink');
   const studentSpaceLink = document.getElementById('navStudentSpaceLink');
   const analyticsLink = document.getElementById('navAnalyticsLink');
@@ -1986,6 +1990,7 @@ function renderNavState(){
   if(state.session && state.session.type === 'student'){
     loginLink.classList.add('hidden');
     myCoursesLink.classList.add('hidden');
+    myTeachCoursesLink.classList.add('hidden');
     bankLink.classList.add('hidden');
     studentSpaceLink.classList.remove('hidden');
     analyticsLink.classList.add('hidden');
@@ -1996,6 +2001,7 @@ function renderNavState(){
   } else if(state.session && state.session.type === 'admin'){
     loginLink.classList.add('hidden');
     myCoursesLink.classList.add('hidden');
+    myTeachCoursesLink.classList.add('hidden');
     bankLink.classList.remove('hidden');
     studentSpaceLink.classList.add('hidden');
     analyticsLink.classList.remove('hidden');
@@ -2004,6 +2010,7 @@ function renderNavState(){
   } else if(state.session && state.session.type === 'teacher'){
     loginLink.classList.add('hidden');
     myCoursesLink.classList.add('hidden');
+    myTeachCoursesLink.classList.remove('hidden');
     bankLink.classList.remove('hidden');
     studentSpaceLink.classList.add('hidden');
     analyticsLink.classList.add('hidden');
@@ -2012,6 +2019,7 @@ function renderNavState(){
   } else {
     loginLink.classList.remove('hidden');
     myCoursesLink.classList.add('hidden');
+    myTeachCoursesLink.classList.add('hidden');
     bankLink.classList.add('hidden');
     studentSpaceLink.classList.add('hidden');
     analyticsLink.classList.add('hidden');
@@ -2684,7 +2692,50 @@ function pageStudentSettings(){
   </section>`;
 }
 
+/* صفحة "موادي" لحساب المدرّس: تعرض فقط المواد التي هو مدرّسها (teacherId مطابق)،
+   وكل بطاقة مادة تفتح على صفحة تفاصيل الكورس حيث يملك صلاحيات كاملة للتحكم بها
+   (إضافة/تعديل/حذف محاضرات) ويشاهد جميع المحاضرات كأنه مشترك بالمادة كاملة. */
+function pageMyTeachCourses(){
+  if(!isTeacherSession()){
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة لحسابات المدرّسين. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+  }
+  const myCourses = state.courses.filter(c=>c.teacherId===state.session.teacherId);
+  const rows = myCourses.map(c => {
+    const lectureCount = state.lectures.filter(l=>l.courseId===c.id).length;
+    const studentCount = enrollmentsFor(c.id).length;
+    return `
+    <a href="/course/${c.id}" class="my-course-row">
+      <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
+      <div class="my-course-info">
+        <div class="my-course-row-top">
+          <h3>${escapeHtml(c.title)}</h3>
+          <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
+        </div>
+        <div class="course-uni">${escapeHtml(c.university)}</div>
+        <div class="course-stats-row" style="margin-bottom:0;">
+          <span class="course-stat-chip">⏱ ${c.hours} ساعات</span>
+          <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
+          <span class="course-stat-chip">🎓 ${studentCount} طالب مشترك</span>
+        </div>
+      </div>
+      <div class="my-course-actions">
+        <span class="btn teal small">${ICONS.edit} إدارة المادة</span>
+      </div>
+    </a>`;
+  }).join('');
+
+  return `
+  <section class="section">
+    <div class="container">
+      <div class="toolbar"><h2>👨‍🏫 موادي</h2></div>
+      ${myCourses.length ? `<div class="my-course-list">${rows}</div>` : `<div class="empty-state"><h3>لا يوجد كورس مرتبط بحسابك بعد</h3><p>تواصل مع إدارة المنصة لربط حسابك بالمادة التي تدرّسها.</p></div>`}
+    </div>
+  </section>
+  `;
+}
+
 function pageMyCourses(){
+  if(isTeacherSession()) return pageMyTeachCourses();
   if(!state.session || state.session.type !== 'student'){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة للطلاب لعرض الدورات المفعّلة لديهم. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
@@ -6294,7 +6345,7 @@ function updateSeoMeta(route){
       setPageMeta({ title: 'دخول الإدارة', noindex: true });
       break;
     case 'my-courses':
-      setPageMeta({ title: 'دوراتي', noindex: true });
+      setPageMeta({ title: isTeacherSession() ? 'موادي' : 'دوراتي', noindex: true });
       break;
     case 'my-summaries':
       setPageMeta({ title: 'ملخصاتي', noindex: true });
