@@ -4066,17 +4066,25 @@ function modalEditTeacher(teacherId){
   });
 }
 
-/* حذف حساب مدرّس: نظرًا لعدم توفر مفتاح إداري (service role) بهذا الملف
-   الأمامي، لا يمكننا حذف مستخدم auth الفعلي بأمان من المتصفح مباشرة. بدلًا
-   من ذلك نطبّق "حذف فعّال" بثلاث خطوات: (1) إزالته من قائمة المدرّسين، (2)
-   فك ربطه عن كل موادّه فورًا، (3) منعه من الدخول للوحة التحكم نهائيًا حتى لو
-   استخدم يوزر/باسورد صحيحين (يتم التحقق من هذا عند تسجيل الدخول). */
+/* حذف حساب مدرّس: (1) إزالته من قائمة المدرّسين، (2) فك ربطه عن كل موادّه
+   فورًا، (3) حذف حسابه الفعلي من نظام الدخول (Supabase Auth) عبر Edge
+   Function خاصة (delete-teacher) تشتغل بمفتاح service role على السيرفر —
+   هذا المفتاح لا يوضع أبدًا بهذا الملف الأمامي لأنه يعطي صلاحية كاملة على
+   قاعدة البيانات، لهيك تم عزله بدالة سحابية منفصلة يتحقق فيها إنه المستخدم
+   المتصل فعلًا هو admin قبل تنفيذ الحذف. بعد هذا الحذف الفعلي، يقدر أي حد
+   يسجّل حساب مدرّس جديد بنفس اسم المستخدم من غير مشاكل "already registered". */
 async function deleteTeacher(teacherId){
   state.teachers = state.teachers.filter(t=>t.id!==teacherId);
   await setData('teachers', state.teachers, true);
   let coursesChanged = false;
   state.courses.forEach(c=>{ if(c.teacherId===teacherId){ c.teacherId = null; coursesChanged = true; } });
   if(coursesChanged) await setData('courses', state.courses, true);
+  try{
+    const { error } = await supabaseClient.functions.invoke('delete-teacher', { body: { teacherId } });
+    if(error) console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', error);
+  }catch(e){
+    console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', e);
+  }
 }
 
 /* =========================================================
