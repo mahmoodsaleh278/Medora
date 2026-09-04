@@ -1432,6 +1432,7 @@ function notificationAppliesToStudent(n, session){
   if(n.target === 'university') return session.university && session.university === n.targetValue;
   if(n.target === 'major') return session.major && session.major === n.targetValue;
   if(n.target === 'phones') return Array.isArray(n.targetValue) && n.targetValue.includes(session.phone);
+  if(n.target === 'course') return state.enrollments.some(e=> e.phone===session.phone && e.courseId===n.targetValue);
   return false;
 }
 function studentNotifications(){
@@ -1458,6 +1459,10 @@ function notifTargetLabel(n){
   if(n.target === 'university') return `جامعة: ${n.targetValue}`;
   if(n.target === 'major') return `تخصص: ${n.targetValue}`;
   if(n.target === 'phones') return `${(n.targetValue||[]).length} رقم محدد`;
+  if(n.target === 'course'){
+    const c = state.courses.find(cc=>cc.id===n.targetValue);
+    return `🎓 مشتركو مادة: ${c ? c.title : '(مادة محذوفة)'}`;
+  }
   return '';
 }
 function renderNotifPanel(){
@@ -3044,6 +3049,7 @@ function pageCourseDetail(courseId){
     sideAction = `
       <div class="hint" style="margin-top:2px;">عدد الطلاب المشتركين بهذه المادة: <b>${teacherEnrolledCount}</b></div>
       <button class="btn teal solid small" id="manageBankBtn">🛠 إدارة بنك أسئلة هذه المادة</button>
+      <button class="btn small" id="sendCourseNotifBtn">📢 إرسال إشعار للمشتركين</button>
     `;
   } else if(courseFullyUnlocked(courseId)){
     sideStatus = `<span class="lecture-tier-tag">✅ الكورس مفعّل بالكامل لديك</span>`;
@@ -3064,6 +3070,24 @@ function pageCourseDetail(courseId){
         `;
       }).join('')}
     </div>` : '';
+
+  /* سجل الإشعارات المرسلة لمشتركي هذه المادة تحديدًا (المدرّس بس يشوف/يحذف إشعارات مادته) */
+  const courseNotifBox = isOwnerTeacher ? (()=>{
+    const sent = state.notifications.filter(n=>n.target==='course' && n.targetValue===courseId).sort((a,b)=>b.createdAt-a.createdAt);
+    return `
+    <div class="enroll-box">
+      <h4>الإشعارات المرسلة لهذه المادة</h4>
+      ${sent.length ? sent.map(n=>`
+        <div class="message-card" style="margin-bottom:10px;">
+          <div class="m-head">
+            <b>${escapeHtml(n.title)}</b>
+            <button class="btn danger small" data-del-course-notif="${escapeHtml(n.id)}">${ICONS.trash} حذف</button>
+          </div>
+          <p style="margin-top:4px; font-size:13.5px;">${escapeHtml(n.body)}</p>
+          <p style="margin-top:6px; font-size:12px; color:var(--muted);">${new Date(n.createdAt).toLocaleString('ar-JO',{dateStyle:'medium',timeStyle:'short'})}</p>
+        </div>`).join('') : `<p style="color:var(--muted); font-size:13px;">لم تُرسِل أي إشعار لطلاب هذه المادة بعد.</p>`}
+    </div>`;
+  })() : '';
 
   return `
   <section class="section">
@@ -3103,6 +3127,7 @@ function pageCourseDetail(courseId){
               ${sideAction}
             </div>
             ${enrollAdminBox}
+            ${courseNotifBox}
           </div>
           <div class="course-side-card">
             <h4>مواصفات الدورة</h4>
@@ -4837,6 +4862,34 @@ function modalSendNotification(){
       targetValue = phones;
     }
     state.notifications.push({ id:'n'+Date.now(), title, body, target: targetType, targetValue, createdAt: Date.now() });
+    await setData('notifications', state.notifications, true);
+    closeModal(); render();
+  });
+}
+
+/* نسخة مبسّطة من مودال الإشعارات، خاصة بالمدرّس: يرسل بس لطلاب مادته المشتركين
+   (target:'course')، بدون خيارات استهداف أوسع (جامعة/تخصص/كل الطلاب) محفوظة للأدمن فقط.
+   نخزّن senderTeacherId لتسهيل عرض/حذف المدرّس لإشعاراته لاحقًا من صفحة مادته. */
+function modalSendCourseNotification(courseId){
+  const course = state.courses.find(c=>c.id===courseId);
+  if(!course || !isCourseOwnerTeacher(course)) return;
+  const enrolledCount = enrollmentsFor(courseId).length;
+  openModal(`
+    <h3>${ICONS.plus} إرسال إشعار لمشتركي ${escapeHtml(course.title)}</h3>
+    <p class="hint" style="margin-bottom:14px;">سيصل هذا الإشعار لكل الطلاب المشتركين حاليًا بهذه المادة (${enrolledCount} طالب).</p>
+    <form id="courseNotifForm">
+      <div class="field"><label>عنوان الإشعار</label><input type="text" name="title" required placeholder="مثال: تم إضافة محاضرة جديدة"></div>
+      <div class="field"><label>نص الإشعار</label><textarea name="body" required rows="4" placeholder="اكتب تفاصيل الإشعار هنا"></textarea></div>
+      <div id="courseNotifMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">إرسال الإشعار</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('courseNotifForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const title = fd.get('title').trim();
+    const body = fd.get('body').trim();
+    state.notifications.push({ id:'n'+Date.now(), title, body, target:'course', targetValue:courseId, senderTeacherId: state.session.teacherId, createdAt: Date.now() });
     await setData('notifications', state.notifications, true);
     closeModal(); render();
   });
@@ -6691,6 +6744,19 @@ function bindPageEvents(route){
       state.bankManageCourseId = courseId;
       state.bankManageLectureId = '';
       navigate('bank');
+    });
+    /* زر "إرسال إشعار للمشتركين" (يظهر للمدرّس مالك المادة فقط): يفتح مودال مبسّط
+       يرسل إشعارًا مستهدَفًا فقط لطلاب هذه المادة المشتركين بها */
+    const sendCourseNotifBtn = document.getElementById('sendCourseNotifBtn');
+    if(sendCourseNotifBtn) sendCourseNotifBtn.addEventListener('click', ()=> modalSendCourseNotification(courseId));
+    document.querySelectorAll('[data-del-course-notif]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.delCourseNotif;
+        confirmDelete('سيتم حذف هذا الإشعار نهائيًا. هل أنت متأكد؟', async ()=>{
+          state.notifications = state.notifications.filter(n=>n.id!==id);
+          await setData('notifications', state.notifications, true);
+        });
+      });
     });
     document.querySelectorAll('[data-unenroll]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
