@@ -3720,6 +3720,23 @@ function pageAdminAnalytics(){
         </div>
       </div>` : ''}
 
+      <div class="card-panel" style="padding:18px 20px; margin-bottom:24px;">
+        <div class="toolbar" style="margin-bottom:12px;">
+          <h3 style="margin:0;">الطلاب المسجّلون (${totalStudents})</h3>
+          <input type="text" id="studentSearchInput" placeholder="🔍 ابحث بالاسم أو رقم الهاتف..." style="max-width:260px;">
+        </div>
+        <div id="studentsListWrap" style="display:flex; flex-direction:column; gap:10px; max-height:420px; overflow-y:auto;">
+          ${totalStudents ? state.students.slice().sort((a,b)=>(a.fullName||'').localeCompare(b.fullName||'','ar')).map(s=>`
+            <div class="student-row" data-student-search="${escapeHtml((s.fullName||'')+' '+s.phone)}" style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; font-size:13.5px; padding-bottom:10px; border-bottom:1px solid var(--border);">
+              <div>
+                <div>🧑‍🎓 <b>${escapeHtml(s.fullName||'—')}</b> <span style="color:var(--muted);">(${escapeHtml(s.phone||'')})</span></div>
+                <div style="color:var(--muted); margin-top:4px;">${escapeHtml(s.university||'جامعة غير محددة')} • ${escapeHtml(s.major||'تخصص غير محدد')}</div>
+              </div>
+              <button class="btn danger small" data-del-student="${escapeHtml(s.phone)}">${ICONS.trash} حذف</button>
+            </div>`).join('') : `<p style="color:var(--muted); font-size:13.5px;">لا يوجد طلاب مسجّلون بعد.</p>`}
+        </div>
+      </div>
+
       <div class="analytics-grid">
         <div class="analytics-kpi"><b>${totalStudents}</b><span>طالب مسجّل</span></div>
         <div class="analytics-kpi"><b>${totalCourses}</b><span>كورس</span></div>
@@ -4081,6 +4098,33 @@ async function deleteTeacher(teacherId){
   if(coursesChanged) await setData('courses', state.courses, true);
   try{
     const { error } = await supabaseClient.functions.invoke('delete-teacher', { body: { teacherId } });
+    if(error) console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', error);
+  }catch(e){
+    console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', e);
+  }
+}
+
+/* حذف حساب طالب من لوحة تحكم الأدمن: (1) إزالته فورًا من مصفوفة الطلاب
+   (medora_data/students) — وهذا هو المصدر اللي تُبنى منه أعداد لوحة
+   التحليلات، فالعدد بينحدّث فورًا بمجرد الحذف، (2) فك ربطه عن كل تفعيلاته
+   وملخصاته المحفوظة محليًا حتى ما تضل بيانات يتيمة، (3) حذف حسابه الفعلي
+   من نظام الدخول (Supabase Auth) عبر Edge Function خاصة (delete-student)
+   تشتغل بمفتاح service role على السيرفر — نفس أسلوب حذف المدرّس تمامًا،
+   لأن مفتاح service role لا يوضع أبدًا بهذا الملف الأمامي. */
+async function deleteStudent(phone){
+  state.students = state.students.filter(s=>s.phone!==phone);
+  await setData('students', state.students, true);
+  let enrollmentsChanged = false, summariesChanged = false, progressChanged = false, savedQChanged = false;
+  if(state.enrollments.some(e=>e.phone===phone)){ state.enrollments = state.enrollments.filter(e=>e.phone!==phone); enrollmentsChanged = true; }
+  if(state.summaries.some(s=>s.phone===phone)){ state.summaries = state.summaries.filter(s=>s.phone!==phone); summariesChanged = true; }
+  if(state.lectureProgress.some(p=>p.phone===phone)){ state.lectureProgress = state.lectureProgress.filter(p=>p.phone!==phone); progressChanged = true; }
+  if(state.savedQuestions.some(q=>q.phone===phone)){ state.savedQuestions = state.savedQuestions.filter(q=>q.phone!==phone); savedQChanged = true; }
+  if(enrollmentsChanged) await setData('enrollments', state.enrollments, true);
+  if(summariesChanged) await setData('summaries', state.summaries, true);
+  if(progressChanged) await setData('lectureProgress', state.lectureProgress, true);
+  if(savedQChanged) await setData('savedQuestions', state.savedQuestions, true);
+  try{
+    const { error } = await supabaseClient.functions.invoke('delete-student', { body: { phone } });
     if(error) console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', error);
   }catch(e){
     console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', e);
@@ -6952,6 +6996,23 @@ function bindPageEvents(route){
   if(route === 'admin-analytics'){
     const addTeacherBtn = document.getElementById('addTeacherBtn');
     if(addTeacherBtn) addTeacherBtn.addEventListener('click', modalCreateTeacher);
+    const studentSearchInput = document.getElementById('studentSearchInput');
+    if(studentSearchInput) studentSearchInput.addEventListener('input', ()=>{
+      const q = studentSearchInput.value.trim().toLowerCase();
+      document.querySelectorAll('.student-row').forEach(row=>{
+        const hay = (row.dataset.studentSearch||'').toLowerCase();
+        row.style.display = hay.includes(q) ? '' : 'none';
+      });
+    });
+    document.querySelectorAll('[data-del-student]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const phone = btn.dataset.delStudent;
+        const student = state.students.find(s=>s.phone===phone);
+        confirmDelete(`سيتم حذف حساب "${student ? (student.fullName||phone) : phone}" نهائيًا مع كل تفعيلاته وملخصاته، ولن يقدر يدخل به مرة أخرى. هل أنت متأكد؟`, async ()=>{
+          await deleteStudent(phone);
+        });
+      });
+    });
     document.querySelectorAll('[data-edit-teacher]').forEach(btn=>{
       btn.addEventListener('click', ()=> modalEditTeacher(btn.dataset.editTeacher));
     });
