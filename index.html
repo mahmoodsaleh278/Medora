@@ -3041,7 +3041,10 @@ function pageCourseDetail(courseId){
   } else if(isOwnerTeacher){
     const teacherEnrolledCount = enrollmentsFor(courseId).length;
     sideStatus = `<span class="lecture-tier-tag">👨‍🏫 أنت مدرّس هذه المادة</span>`;
-    sideAction = `<div class="hint" style="margin-top:2px;">عدد الطلاب المشتركين بهذه المادة: <b>${teacherEnrolledCount}</b></div>`;
+    sideAction = `
+      <div class="hint" style="margin-top:2px;">عدد الطلاب المشتركين بهذه المادة: <b>${teacherEnrolledCount}</b></div>
+      <button class="btn teal solid small" id="manageBankBtn">🛠 إدارة بنك أسئلة هذه المادة</button>
+    `;
   } else if(courseFullyUnlocked(courseId)){
     sideStatus = `<span class="lecture-tier-tag">✅ الكورس مفعّل بالكامل لديك</span>`;
   } else if(courseUnlocked(courseId)){
@@ -6679,6 +6682,16 @@ function bindPageEvents(route){
     if(importEnrollBtn) importEnrollBtn.addEventListener('click', ()=> modalImportEnrollments(courseId));
     const resetDeviceBtn = document.getElementById('resetDeviceBtn');
     if(resetDeviceBtn) resetDeviceBtn.addEventListener('click', modalResetStudentDevice);
+    /* زر "إدارة بنك أسئلة هذه المادة" بصفحة تفاصيل الكورس (يظهر للمدرّس مالك المادة فقط):
+       يوديه مباشرة لواجهة إدارة بنك الأسئلة مفلترة على هذا الكورس تحديدًا، بدل ما يروح
+       لصفحة /bank ويختار الكورس يدويًا من القائمة المنسدلة */
+    const manageBankBtn = document.getElementById('manageBankBtn');
+    if(manageBankBtn) manageBankBtn.addEventListener('click', ()=>{
+      state.bankAdminView = true;
+      state.bankManageCourseId = courseId;
+      state.bankManageLectureId = '';
+      navigate('bank');
+    });
     document.querySelectorAll('[data-unenroll]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const phone = btn.dataset.unenroll;
