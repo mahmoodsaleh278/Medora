@@ -4,13 +4,13 @@
    ========================================================= */
 
 /* شعار مِدورا المصغّر (يُستخدم كعلامة موحّدة أعلى كل ملخّص) */
-const MEDORA_LOGO_SM = 'images/logo-medora-sm.jpg';
+const MEDORA_LOGO_SM = 'https://mihbguavqplpwaabwbbu.supabase.co/storage/v1/object/public/assets/logo-medora-sm.jpg';
 
 const UNIVERSITIES = [
-  { id:'mutah', name:'جامعة مؤتة', loc:'الكرك', logo:'images/logo-uni-mutah.jpg' },
-  { id:'petra', name:'جامعة البترا', loc:'عمّان', logo:'images/logo-uni-petra.jpg' },
-  { id:'aspu', name:'جامعة العلوم التطبيقية الخاصة', loc:'عمّان', logo:'images/logo-uni-aspu.jpg' },
-  { id:'just', name:'جامعة العلوم والتكنولوجيا الأردنية', loc:'إربد', logo:'images/logo-uni-just.png' },
+  { id:'mutah', name:'جامعة مؤتة', loc:'الكرك', logo:'https://mihbguavqplpwaabwbbu.supabase.co/storage/v1/object/public/assets/logo-uni-mutah.jpg' },
+  { id:'petra', name:'جامعة البترا', loc:'عمّان', logo:'https://mihbguavqplpwaabwbbu.supabase.co/storage/v1/object/public/assets/logo-uni-petra.jpg' },
+  { id:'aspu', name:'جامعة العلوم التطبيقية الخاصة', loc:'عمّان', logo:'https://mihbguavqplpwaabwbbu.supabase.co/storage/v1/object/public/assets/logo-uni-aspu.jpg' },
+  { id:'just', name:'جامعة العلوم والتكنولوجيا الأردنية', loc:'إربد', logo:'https://mihbguavqplpwaabwbbu.supabase.co/storage/v1/object/public/assets/logo-uni-just.png' },
 ];
 
 const MAJORS = [
