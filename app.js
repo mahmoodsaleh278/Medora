@@ -5582,12 +5582,12 @@ let lastRenderedRoute = null;
    بكل مرة يتغيّر فيها المسار (بدل ما تبقى العناوين ثابتة زي أي SPA بدائي). */
 
 const SITE_NAME = 'MEDORA';
-const DEFAULT_DESCRIPTION = 'منصة MEDORA لطلاب التخصصات الطبية: دورات، محاضرات، ملخصات، وبنك أسئلة تفاعلي لكل الجامعات.';
+const DEFAULT_DESCRIPTION = 'منصة MEDORA (أكاديمية) لطلاب التخصصات الطبية في الأردن — تمريض، طب أسنان: شرح، دورات، محاضرات، ملخصات، وبنك أسئلة تفاعلي لكل الجامعات.';
 
 /* يحدّث <title> ووسوم <meta> (description / robots / canonical / og / twitter)
    دفعة وحدة. أي وسم غير موجود بالـ head (مشروع قديم مثلًا) يتم تجاهله بأمان. */
 function setPageMeta({ title, description, noindex } = {}){
-  const fullTitle = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME} | منصة طلاب التخصصات الطبية`;
+  const fullTitle = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME} | أكاديمية طلاب التخصصات الطبية في الأردن`;
   const desc = description || DEFAULT_DESCRIPTION;
   const url = window.location.origin + window.location.pathname;
 
