@@ -1412,33 +1412,41 @@ function courseSections(courseId){
   return (Array.isArray(course.sections) && course.sections.length) ? course.sections : SECTIONS;
 }
 
+/* كل هذه المفاتيح مخزّنة كصفوف منفصلة بنفس جدول medora_data (key/value)،
+   فبدل 14 استعلام select منفصل (واحد لكل مفتاح عبر getData)، نجيبهم كلهم
+   بطلب واحد via `.in('key', [...])` ثم نوزّع النتائج محليًا. */
+const INIT_DATA_KEYS = ['courses','lectures','questions','students','messages','enrollments',
+  'summaries','lectureProgress','content','savedQuestions','design','coupons','notifications','teachers'];
+async function fetchInitDataBulk(){
+  if(!supabaseClient) return {};
+  try{
+    const { data, error } = await supabaseClient.from('medora_data').select('key,value').in('key', INIT_DATA_KEYS);
+    if(error || !data) return {};
+    const map = {};
+    data.forEach(row=>{ map[row.key] = row.value; });
+    return map;
+  }catch(e){ console.error('fetchInitDataBulk failed', e); return {}; }
+}
 async function initData(){
-  const [courses, lectures, questions, students, messages, enrollments, summaries, lectureProgress, savedContent, savedQuestions, savedDesign, savedCoupons, savedNotifications, teachers] = await Promise.all([
-    getData('courses', SEED_COURSES, true),
-    getData('lectures', SEED_LECTURES, true),
-    getData('questions', SEED_QUESTIONS, true),
-    getData('students', [], true),
-    getData('messages', [], true),
-    getData('enrollments', [], true),
-    getData('summaries', [], true),
-    getData('lectureProgress', [], true),
-    getData('content', {}, true),
-    getData('savedQuestions', [], true),
-    getData('design', DESIGN_DEFAULTS, true),
-    getData('coupons', [], true),
-    getData('notifications', [], true),
-    getData('teachers', [], true),
+  const FALLBACKS = {
+    courses: SEED_COURSES, lectures: SEED_LECTURES, questions: SEED_QUESTIONS,
+    students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [],
+    content: {}, savedQuestions: [], design: DESIGN_DEFAULTS, coupons: [], notifications: [], teachers: []
+  };
+  const [bulk] = await Promise.all([
+    fetchInitDataBulk(),
     syncSessionFromAuth(),
   ]);
-  state.courses = courses.map(normalizeCourse); state.lectures = lectures.map(normalizeLecture); state.questions = questions;
-  state.students = students; state.messages = messages; state.enrollments = enrollments; state.summaries = summaries;
-  state.teachers = Array.isArray(teachers) ? teachers : [];
-  state.lectureProgress = lectureProgress;
-  state.savedQuestions = Array.isArray(savedQuestions) ? savedQuestions : [];
-  state.coupons = Array.isArray(savedCoupons) ? savedCoupons : [];
-  state.notifications = Array.isArray(savedNotifications) ? savedNotifications : [];
-  state.content = Object.assign({}, CONTENT_DEFAULTS, savedContent);
-  state.design = Object.assign({}, DESIGN_DEFAULTS, savedDesign);
+  const pick = k => Object.prototype.hasOwnProperty.call(bulk, k) ? bulk[k] : FALLBACKS[k];
+  state.courses = pick('courses').map(normalizeCourse); state.lectures = pick('lectures').map(normalizeLecture); state.questions = pick('questions');
+  state.students = pick('students'); state.messages = pick('messages'); state.enrollments = pick('enrollments'); state.summaries = pick('summaries');
+  state.teachers = Array.isArray(pick('teachers')) ? pick('teachers') : [];
+  state.lectureProgress = pick('lectureProgress');
+  state.savedQuestions = Array.isArray(pick('savedQuestions')) ? pick('savedQuestions') : [];
+  state.coupons = Array.isArray(pick('coupons')) ? pick('coupons') : [];
+  state.notifications = Array.isArray(pick('notifications')) ? pick('notifications') : [];
+  state.content = Object.assign({}, CONTENT_DEFAULTS, pick('content'));
+  state.design = Object.assign({}, DESIGN_DEFAULTS, pick('design'));
   state.loaded = true;
 }
 
@@ -6362,8 +6370,8 @@ function sanitizeSummaryHtml(html){
   return doc.body.innerHTML.trim();
 }
 
-/* يصغّر صورة الملف المرفوع إلى صورة مربعة تقريبًا (JPEG) قبل تخزينها كنص base64،
-   حتى لا يكون حجم بيانات الطالب كبيرًا جدًا في قاعدة البيانات. */
+/* يصغّر صورة الملف المرفوع إلى صورة مربعة تقريبًا (JPEG) ويرجعها كـ Blob (لا كنص base64)
+   تمهيدًا لرفعها إلى Supabase Storage بدل تخزينها داخل صف الطالب/بيانات الجلسة. */
 function resizeImageFile(file, maxSize=400){
   return new Promise((resolve, reject)=>{
     const reader = new FileReader();
@@ -6378,7 +6386,7 @@ function resizeImageFile(file, maxSize=400){
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.82));
+        canvas.toBlob(blob=> blob ? resolve(blob) : reject(new Error('encode failed')), 'image/jpeg', 0.82);
       };
       img.src = reader.result;
     };
@@ -6386,16 +6394,50 @@ function resizeImageFile(file, maxSize=400){
   });
 }
 
-/* يحفظ الصورة الشخصية (أو يزيلها إن كانت dataUrl تساوي null) في بيانات حساب
-   الطالب على Supabase Auth (metadata) وفي سجله ضمن جدول الطلاب المحلي. */
-async function saveAvatar(dataUrl){
+/* يرفع صورة الطالب المصغّرة إلى Supabase Storage (bucket: avatars) تحت مسار فريد
+   لكل طالب، ويرجّع رابط الصورة العام (URL قصير) بدل نص base64 ضخم.
+
+   نفّذ هذا مرة واحدة في Supabase SQL Editor لإنشاء الـ bucket وصلاحياته
+   (أو أنشئ الـ bucket من لوحة Storage مباشرة واختر public، ثم نفّذ السياسات فقط):
+
+   insert into storage.buckets (id, name, public)
+   values ('avatars', 'avatars', true)
+   on conflict (id) do nothing;
+
+   -- أي طالب مسجّل دخول يقدر يرفع/يحدّث صورة باسم ملف يبدأ برقم هاتفه فقط
+   create policy "student upload own avatar" on storage.objects
+     for insert to authenticated
+     with check (bucket_id = 'avatars' and name = (auth.jwt()->'user_metadata'->>'phone') || '.jpg');
+   create policy "student update own avatar" on storage.objects
+     for update to authenticated
+     using (bucket_id = 'avatars' and name = (auth.jwt()->'user_metadata'->>'phone') || '.jpg');
+   -- القراءة عامة لأن الـ bucket public أصلاً (تُعرض الصور بروابط مباشرة)
+   create policy "public read avatars" on storage.objects
+     for select using (bucket_id = 'avatars');
+*/
+async function uploadAvatarBlob(blob, phone){
+  if(!supabaseClient) throw new Error('no supabase client');
+  const path = `${phone}.jpg`;
+  const { error } = await supabaseClient.storage.from('avatars').upload(path, blob, {
+    contentType: 'image/jpeg', upsert: true, cacheControl: '3600'
+  });
+  if(error) throw error;
+  const { data } = supabaseClient.storage.from('avatars').getPublicUrl(path);
+  // كسر الكاش عند كل تحديث حتى تظهر الصورة الجديدة فورًا بدل نسخة مخزّنة قديمة بالمتصفح
+  return `${data.publicUrl}?v=${Date.now()}`;
+}
+
+/* يحفظ رابط الصورة الشخصية (أو يزيلها إن كانت avatarUrl تساوي null) في بيانات حساب
+   الطالب على Supabase Auth (metadata) وفي سجله ضمن جدول الطلاب المحلي.
+   الرابط نص قصير (URL) وليس محتوى الصورة نفسه، فلا يُثقل حجم بيانات الطالب. */
+async function saveAvatar(avatarUrl){
   const msgBox = document.getElementById('settingsMsg');
   if(!supabaseClient){ if(msgBox) msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
-  const { error } = await supabaseClient.auth.updateUser({ data: { avatar: dataUrl } });
+  const { error } = await supabaseClient.auth.updateUser({ data: { avatar: avatarUrl } });
   if(error){ if(msgBox) msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ الصورة، حاول بصورة أصغر.</div>`; return; }
-  state.session.avatar = dataUrl || null;
+  state.session.avatar = avatarUrl || null;
   const student = state.students.find(s=>s.phone===state.session.phone);
-  if(student){ student.avatar = dataUrl || null; await setData('students', state.students, true); }
+  if(student){ student.avatar = avatarUrl || null; await setData('students', state.students, true); }
   render();
 }
 
@@ -7144,7 +7186,8 @@ function bindPageEvents(route){
     const removeBtn = document.getElementById('removeAvatarBtn');
     const avatarPreviewEl = document.getElementById('avatarPreview');
     const msgBox = document.getElementById('settingsMsg');
-    let pendingAvatar; // undefined = no change، null = إزالة، نص = صورة جديدة (لم تُحفظ بعد)
+    // undefined = لا تغيير، null = إزالة، Blob = صورة جديدة (لم تُرفع/تُحفظ بعد)
+    let pendingAvatarBlob;
 
     if(chooseBtn && fileInput) chooseBtn.addEventListener('click', ()=> fileInput.click());
     if(fileInput) fileInput.addEventListener('change', async ()=>{
@@ -7155,16 +7198,18 @@ function bindPageEvents(route){
         return;
       }
       try{
-        const dataUrl = await resizeImageFile(file);
-        pendingAvatar = dataUrl;
-        if(avatarPreviewEl) avatarPreviewEl.innerHTML = `<img src="${dataUrl}" alt="الصورة الشخصية" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
+        const blob = await resizeImageFile(file);
+        pendingAvatarBlob = blob;
+        // معاينة محلية فورية عبر object URL (بلا أي رفع أو base64)، تُحرَّر لاحقًا بـ revokeObjectURL
+        const previewUrl = URL.createObjectURL(blob);
+        if(avatarPreviewEl) avatarPreviewEl.innerHTML = `<img src="${previewUrl}" alt="الصورة الشخصية" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
         if(msgBox) msgBox.innerHTML = `<div class="form-msg info">تم اختيار الصورة، اضغط "حفظ التعديلات" لتثبيتها.</div>`;
       }catch(e){
         if(msgBox) msgBox.innerHTML = `<div class="form-msg error">تعذّرت معالجة الصورة، جرّب صورة أخرى.</div>`;
       }
     });
     if(removeBtn) removeBtn.addEventListener('click', ()=>{
-      pendingAvatar = null;
+      pendingAvatarBlob = null;
       if(avatarPreviewEl) avatarPreviewEl.innerHTML = majorEmblem(state.session.major);
       if(msgBox) msgBox.innerHTML = `<div class="form-msg info">تم اختيار إزالة الصورة، اضغط "حفظ التعديلات" لتثبيت ذلك.</div>`;
     });
@@ -7181,7 +7226,20 @@ function bindPageEvents(route){
 
     const saveBtn = document.getElementById('saveSettingsBtn');
     if(saveBtn) saveBtn.addEventListener('click', async ()=>{
-      if(pendingAvatar !== undefined) await saveAvatar(pendingAvatar);
+      if(pendingAvatarBlob !== undefined){
+        if(pendingAvatarBlob === null){
+          await saveAvatar(null);
+        } else {
+          if(msgBox) msgBox.innerHTML = `<div class="form-msg info">جارِ رفع الصورة...</div>`;
+          try{
+            const url = await uploadAvatarBlob(pendingAvatarBlob, state.session.phone);
+            await saveAvatar(url);
+          }catch(e){
+            if(msgBox) msgBox.innerHTML = `<div class="form-msg error">تعذّر رفع الصورة، حاول مجددًا.</div>`;
+            return;
+          }
+        }
+      }
       if(fontSel){ applyFontScale(fontSel.value); await setData('fontScale', fontSel.value, false); }
       if(langSel && langSel.value !== LANG) await setLanguage(langSel.value);
       const freshMsgBox = document.getElementById('settingsMsg');
