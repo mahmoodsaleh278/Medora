@@ -15,6 +15,10 @@
 })(window.location);
 </script>
 <meta charset="UTF-8">
+<!-- يخلي أي مسار نسبي بالصفحة (styles.css, app.js, ...) يترجم دايمًا من جذر
+     الموقع بغض النظر عن المسار الحالي (مثلاً /courses)، عشان ما تنكسر
+     الملفات عند عمل Refresh على مسار داخلي -->
+<base href="/">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google" content="notranslate">
 <meta http-equiv="Content-Language" content="ar">
@@ -70,7 +74,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 <!-- مكتبة tus لرفع الفيديوهات مباشرة من المتصفح إلى Bunny Stream عبر بروتوكول رفع متجزّئ قابل للاستئناف -->
 <script src="https://cdn.jsdelivr.net/npm/tus-js-client@3/dist/tus.min.js"></script>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="/styles.css">
 </head>
 <body class="notranslate" translate="no">
 
@@ -155,6 +159,6 @@
 
 <div id="modalRoot"></div>
 
-<script src="app.js" defer></script>
+<script src="/app.js" defer></script>
 </body>
 </html>
