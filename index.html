@@ -1113,24 +1113,44 @@ async function enforceDeviceLock(phone, userId){
   }catch(e){ return true; }
 }
 
-/* يراقب صف جهاز هذا الطالب لحظيًا: إن غيّره/حذفه المشرف (إعادة تعيين) بينما
-   الطالب لا يزال مسجّلاً بجهازه القديم، يُخرَج فورًا دون انتظار تحديث الصفحة. */
-let deviceLockChannel = null;
+/* يراقب صف جهاز هذا الطالب دوريًا (Polling بدل Realtime channel دائم): إن غيّره/حذفه
+   المشرف (إعادة تعيين) بينما الطالب لا يزال مسجّلاً بجهازه القديم، يُخرَج خلال دقيقة
+   تقريبًا كحد أقصى دون انتظار تحديث الصفحة.
+   لماذا Polling وليس Realtime؟ كل طالب متصل عبر Realtime channel يحجز اتصالًا دائمًا طوال
+   مدة تواجده (قد تكون ساعة كاملة أثناء محاضرة) من حصة الاتصالات المتزامنة المحدودة لخطة
+   Supabase. أما الـ Polling فيرسل طلبًا قصيرًا جدًا كل ~55-75 ثانية (فاصل عشوائي/Jitter
+   لتفادي وصول كل الطلبات دفعة واحدة بنفس اللحظة)، فيحرر الاتصال فور انتهاء الطلب، ويرفع
+   بذلك سقف عدد الطلاب المتزامنين بشكل كبير مقابل تأخير بسيط (ثوانٍ إلى دقيقة) في سرعة
+   اكتشاف إعادة التعيين اليدوية من الأدمن — وهو سيناريو نادر أصلًا. */
+let deviceLockPollTimer = null;
+function stopDeviceLockWatch(){
+  if(deviceLockPollTimer){ clearTimeout(deviceLockPollTimer); deviceLockPollTimer = null; }
+}
 function watchDeviceLock(phone){
   if(!supabaseClient || !phone) return;
-  if(deviceLockChannel){ supabaseClient.removeChannel(deviceLockChannel); deviceLockChannel = null; }
-  deviceLockChannel = supabaseClient.channel('device-lock-'+phone)
-    .on('postgres_changes', { event:'*', schema:'public', table:'student_devices', filter:`phone=eq.${phone}` }, async (payload)=>{
-      const deviceId = getDeviceId();
-      const newRow = payload.new;
-      if(!newRow || newRow.device_id !== deviceId){
+  stopDeviceLockWatch();
+  const deviceId = getDeviceId();
+  const scheduleNext = ()=>{
+    const jitterMs = 55000 + Math.floor(Math.random()*20000); // 55-75 ثانية
+    deviceLockPollTimer = setTimeout(poll, jitterMs);
+  };
+  async function poll(){
+    try{
+      const { data, error } = await supabaseClient
+        .from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
+      if(!error && (!data || data.device_id !== deviceId)){
         await supabaseClient.auth.signOut();
         state.session = null;
+        stopDeviceLockWatch();
         navigate('login');
         render();
         alert('تم تسجيل خروجك: تم إعادة تعيين جهاز هذا الحساب من قِبل الإدارة.');
+        return; // لا نجدول جولة جديدة بعد الخروج
       }
-    }).subscribe();
+    }catch(e){ /* خطأ شبكة عابر - لا نطرد الطالب بسببه، نعيد المحاولة بالجولة الجاية */ }
+    scheduleNext();
+  }
+  scheduleNext(); // أول فحص بعد فاصل عشوائي أيضًا، وليس فوريًا، لتفادي دفعة تسجيل دخول جماعية
 }
 
 /* ---------------- App state ---------------- */
@@ -2061,6 +2081,7 @@ function renderNavState(){
 }
 
 async function logout(){
+  stopDeviceLockWatch();
   if(supabaseClient) await supabaseClient.auth.signOut();
   state.session = null;
   navigate('home'); render();
@@ -4386,7 +4407,7 @@ function pageLogin(){
           </select></div>` : ''}
           <div class="field"><label>رقم الهاتف</label><input type="tel" name="phone" placeholder="مثال: 0791234567" style="direction:ltr; text-align:start;" required></div>
           <div class="field"><label>كلمة المرور</label><input type="password" name="password" placeholder="••••••••" required></div>
-          <button type="submit" class="btn solid" style="width:100%; justify-content:center;">${authMode==='login' ? 'دخول' : 'إنشاء الحساب'}</button>
+          <button type="submit" id="authSubmitBtn" class="btn solid" style="width:100%; justify-content:center;">${authMode==='login' ? 'دخول' : 'إنشاء الحساب'}</button>
         </form>
         ${authMode==='register' ? `<p style="font-size:12px; color:var(--muted); text-align:center; margin-top:12px;">بإنشائك حسابًا فإنك توافق على <a href="/privacy" style="color:var(--teal); font-weight:700;">سياسة الخصوصية</a> و<a href="/terms" style="color:var(--teal); font-weight:700;">الشروط والأحكام</a> الخاصة بمنصة MEDORA.</p>` : ''}
         <div class="switch-row">${authMode==='login' ? `ليس لديك حساب؟ <button id="switchAuth">أنشئ حسابًا جديدًا</button>` : `لديك حساب بالفعل؟ <button id="switchAuth">سجّل الدخول</button>`}</div>
@@ -7203,61 +7224,87 @@ function phoneToPseudoEmail(phone){
   return 's'+phone.replace(/\D/g,'')+'@medora.app';
 }
 
+/* رسالة موحّدة لأخطاء الشبكة/الازدحام (Timeout، فشل الاتصال، إلخ) تُميَّز عن خطأ
+   "بيانات دخول خاطئة" الحقيقي، حتى لا يظن الطالب أنه أخطأ برقمه أو كلمة سره بينما
+   السبب الفعلي هو ازدحام مؤقت على السيرفر. */
+function isNetworkOrServerError(error){
+  if(!error) return false;
+  const msg = (error.message || '').toLowerCase();
+  return /fetch|network|timeout|timed out|failed to fetch|503|504|gateway|too many/i.test(msg);
+}
+const SERVER_BUSY_MSG = 'تعذّر الاتصال بالسيرفر (قد يكون هناك ازدحام مؤقت). يرجى الانتظار قليلًا والمحاولة مرة أخرى.';
+
 async function handleAuthSubmit(e){
   e.preventDefault();
-  const fd = new FormData(e.target);
-  const phone = normalizePhone(fd.get('phone'));
-  const password = fd.get('password');
-  const msgBox = document.getElementById('authMsg');
-  if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
-  if(!isValidPhone(phone)){ msgBox.innerHTML = `<div class="form-msg error">الرجاء إدخال رقم الهاتف الأردني والذي يبدأ ب 07.</div>`; return; }
-  const pseudoEmail = phoneToPseudoEmail(phone);
-  if(authMode === 'register'){
-    const fullName = fd.get('fullName').trim();
-    const university = (fd.get('university') || '').trim();
-    const major = (fd.get('major') || '').trim();
-    if(!major){ msgBox.innerHTML = `<div class="form-msg error">يرجى اختيار التخصص.</div>`; return; }
-    if(!university){ msgBox.innerHTML = `<div class="form-msg error">يرجى اختيار الجامعة.</div>`; return; }
-    const { data, error } = await supabaseClient.auth.signUp({
-      email: pseudoEmail,
-      password,
-      options: { data: { phone, fullName, university, major, role:'student' } }
-    });
-    if(error){
-      const msg = /registered|exists/i.test(error.message) ? 'رقم الهاتف هذا مسجّل بالفعل، جرّب تسجيل الدخول بدلًا من ذلك.' : 'تعذّر إنشاء الحساب، تأكد أن كلمة المرور 6 أحرف على الأقل.';
-      msgBox.innerHTML = `<div class="form-msg error">${msg}</div>`; return;
+  const submitBtn = document.getElementById('authSubmitBtn');
+  if(submitBtn && submitBtn.disabled) return; // يمنع الضغط المتكرر أثناء إرسال سابق لم ينتهِ بعد
+  const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+  if(submitBtn){ submitBtn.disabled = true; submitBtn.innerHTML = `<span class="ai-spinner" style="width:16px;height:16px;border-width:2px;margin-left:8px;"></span> جارِ الإرسال...`; }
+  try{
+    const fd = new FormData(e.target);
+    const phone = normalizePhone(fd.get('phone'));
+    const password = fd.get('password');
+    const msgBox = document.getElementById('authMsg');
+    if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
+    if(!isValidPhone(phone)){ msgBox.innerHTML = `<div class="form-msg error">الرجاء إدخال رقم الهاتف الأردني والذي يبدأ ب 07.</div>`; return; }
+    const pseudoEmail = phoneToPseudoEmail(phone);
+    if(authMode === 'register'){
+      const fullName = fd.get('fullName').trim();
+      const university = (fd.get('university') || '').trim();
+      const major = (fd.get('major') || '').trim();
+      if(!major){ msgBox.innerHTML = `<div class="form-msg error">يرجى اختيار التخصص.</div>`; return; }
+      if(!university){ msgBox.innerHTML = `<div class="form-msg error">يرجى اختيار الجامعة.</div>`; return; }
+      const { data, error } = await supabaseClient.auth.signUp({
+        email: pseudoEmail,
+        password,
+        options: { data: { phone, fullName, university, major, role:'student' } }
+      });
+      if(error){
+        const msg = isNetworkOrServerError(error) ? SERVER_BUSY_MSG
+          : /registered|exists/i.test(error.message) ? 'رقم الهاتف هذا مسجّل بالفعل، جرّب تسجيل الدخول بدلًا من ذلك.'
+          : 'تعذّر إنشاء الحساب، تأكد أن كلمة المرور 6 أحرف على الأقل.';
+        msgBox.innerHTML = `<div class="form-msg error">${msg}</div>`; return;
+      }
+      if(!data.session){
+        msgBox.innerHTML = `<div class="form-msg error">تم إنشاء الحساب، لكن يبدو أن تأكيد البريد مفعّل في إعدادات Supabase. عطّل خيار "Confirm email" من Authentication → Providers → Email ثم أعد المحاولة.</div>`; return;
+      }
+      await enforceDeviceLock(phone, data.user.id); // أول تسجيل للحساب، يربط هذا الجهاز به تلقائيًا
+      state.students.push({ phone, fullName, university, major });
+      await setData('students', state.students, true);
+      state.session = { type:'student', phone, name: fullName, university, major, avatar: null };
+      state.courseFilter = university;
+      state.majorFilter = major;
+      watchDeviceLock(phone);
+      navigate('home'); render();
+    } else {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email: pseudoEmail, password });
+      if(error){
+        msgBox.innerHTML = `<div class="form-msg error">${isNetworkOrServerError(error) ? SERVER_BUSY_MSG : 'رقم الهاتف أو كلمة المرور غير صحيحة.'}</div>`;
+        return;
+      }
+      const meta = data.user.user_metadata || {};
+      if(meta.accountDeleted){
+        await supabaseClient.auth.signOut();
+        msgBox.innerHTML = `<div class="form-msg error">هذا الحساب تم حذفه. يمكنك إنشاء حساب جديد من صفحة التسجيل.</div>`;
+        return;
+      }
+      const finalPhone = meta.phone || phone;
+      const allowed = await enforceDeviceLock(finalPhone, data.user.id);
+      if(!allowed){
+        msgBox.innerHTML = `<div class="form-msg error">${ICONS.lock} هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`;
+        return;
+      }
+      state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null, major: meta.major||null, avatar: meta.avatar||null };
+      if(state.session.university) state.courseFilter = state.session.university;
+      if(state.session.major) state.majorFilter = state.session.major;
+      watchDeviceLock(finalPhone);
+      navigate('home'); render();
     }
-    if(!data.session){
-      msgBox.innerHTML = `<div class="form-msg error">تم إنشاء الحساب، لكن يبدو أن تأكيد البريد مفعّل في إعدادات Supabase. عطّل خيار "Confirm email" من Authentication → Providers → Email ثم أعد المحاولة.</div>`; return;
-    }
-    await enforceDeviceLock(phone, data.user.id); // أول تسجيل للحساب، يربط هذا الجهاز به تلقائيًا
-    state.students.push({ phone, fullName, university, major });
-    await setData('students', state.students, true);
-    state.session = { type:'student', phone, name: fullName, university, major, avatar: null };
-    state.courseFilter = university;
-    state.majorFilter = major;
-    watchDeviceLock(phone);
-    navigate('home'); render();
-  } else {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email: pseudoEmail, password });
-    if(error){ msgBox.innerHTML = `<div class="form-msg error">رقم الهاتف أو كلمة المرور غير صحيحة.</div>`; return; }
-    const meta = data.user.user_metadata || {};
-    if(meta.accountDeleted){
-      await supabaseClient.auth.signOut();
-      msgBox.innerHTML = `<div class="form-msg error">هذا الحساب تم حذفه. يمكنك إنشاء حساب جديد من صفحة التسجيل.</div>`;
-      return;
-    }
-    const finalPhone = meta.phone || phone;
-    const allowed = await enforceDeviceLock(finalPhone, data.user.id);
-    if(!allowed){
-      msgBox.innerHTML = `<div class="form-msg error">${ICONS.lock} هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`;
-      return;
-    }
-    state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null, major: meta.major||null, avatar: meta.avatar||null };
-    if(state.session.university) state.courseFilter = state.session.university;
-    if(state.session.major) state.majorFilter = state.session.major;
-    watchDeviceLock(finalPhone);
-    navigate('home'); render();
+  }catch(e){
+    const msgBox = document.getElementById('authMsg');
+    if(msgBox) msgBox.innerHTML = `<div class="form-msg error">${SERVER_BUSY_MSG}</div>`;
+  }finally{
+    if(submitBtn){ submitBtn.disabled = false; submitBtn.innerHTML = originalBtnHtml; }
   }
 }
 
