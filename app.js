@@ -1204,29 +1204,29 @@ function stethDivider(){
 
 /* ---------------- Editable site content (admin can edit every field) ---------------- */
 const CONTENT_DEFAULTS = {
-  hero_title: 'رفيقك الأكاديمي في مسيرة <em>التخصصات الطبية</em>',
-  hero_lead: 'MEDORA منصة تعليمية موحّدة لطلاب التخصصات الطبية من عدّة جامعات أردنية، تجمع الدورات والمحاضرات وبنك الأسئلة في تجربة واحدة سهلة ومنظّمة.',
+  hero_title: 'رفيقك الأكاديمي في مسيرة <em>التمريض وطب الأسنان</em>',
+  hero_lead: 'MEDORA منصة تعليمية موحّدة لطلاب التمريض وطب الأسنان من عدّة جامعات أردنية، تجمع الدورات والمحاضرات وبنك الأسئلة في تجربة واحدة سهلة ومنظّمة.',
   hero_card_title: 'الجامعات المشمولة بالمنصة',
   stat_partners_value: '3',
   stat_partners_label: 'جامعات شريكة',
   why_eyebrow: 'لماذا MEDORA',
-  why_title: 'كل ما يحتاجه طالب التخصصات الطبية في مكان واحد',
+  why_title: 'كل ما يحتاجه طالب التمريض وطب الأسنان في مكان واحد',
   why_desc: 'محتوى مركّز، منظّم حسب المقرر، ومحدّث باستمرار من قبل فريق المنصة.',
   feature1_title: 'كورسات ومحاضرات',
   feature1_desc: 'كل كورس يحتوي على محاضراته الخاصة، مع إمكانية المشاهدة والتحميل مباشرة.',
   feature2_title: 'بنك أسئلة تفاعلي',
   feature2_desc: 'اختبارات ذكية حسب الكورس، بنمط دراسي أو نمط اختبار حقيقي مع نتيجة نهائية.',
-  feature3_title: 'لطلاب التخصصات الطبية',
-  feature3_desc: 'منصّة موحّدة تخدم طلاب مؤتة والعلوم التطبيقية الخاصة والعلوم والتكنولوجيا الأردنية، في مختلف التخصصات الطبية.',
+  feature3_title: 'لطلاب التمريض وطب الأسنان',
+  feature3_desc: 'منصّة موحّدة تخدم طلاب مؤتة والعلوم التطبيقية الخاصة والعلوم والتكنولوجيا الأردنية، في تخصصي التمريض وطب الأسنان.',
   cta_eyebrow: 'جاهز تبدأ؟',
   cta_title: 'سجّل الدخول وابدأ رحلتك التعليمية',
   cta_desc: 'أنشئ حسابك الآن لتتابع الدورات وتحلّ أسئلة بنك المراجعة.',
-  about_title: 'MEDORA — منصة طلاب التخصصات الطبية',
-  about_text: 'MEDORA منصة تعليمية إلكترونية متخصصة، صُممت خصيصًا لخدمة طلاب التخصصات الطبية في أكثر من جامعة أردنية. تجمع المنصة بين المحتوى الدراسي المنظّم، المحاضرات المسجّلة والملفات القابلة للتحميل، وبنك أسئلة مراجعة شامل، بهدف تسهيل رحلة الطالب الأكاديمية وتوفير مصدر موحّد وموثوق للمراجعة والاستعداد للامتحانات.',
+  about_title: 'MEDORA — منصة طلاب التمريض وطب الأسنان',
+  about_text: 'MEDORA منصة تعليمية إلكترونية متخصصة، صُممت خصيصًا لخدمة طلاب كليتي التمريض وطب الأسنان في أكثر من جامعة أردنية. تجمع المنصة بين المحتوى الدراسي المنظّم، المحاضرات المسجّلة والملفات القابلة للتحميل، وبنك أسئلة مراجعة شامل، بهدف تسهيل رحلة الطالب الأكاديمية وتوفير مصدر موحّد وموثوق للمراجعة والاستعداد للامتحانات.',
   mission1_title: '🎯 رسالتنا',
-  mission1_desc: 'تمكين طلاب التخصصات الطبية من الوصول لمحتوى تعليمي عالي الجودة ومنظّم، بغض النظر عن الجامعة أو التخصص الذي ينتمون إليه.',
+  mission1_desc: 'تمكين طلاب التمريض وطب الأسنان من الوصول لمحتوى تعليمي عالي الجودة ومنظّم، بغض النظر عن الجامعة أو التخصص الذي ينتمون إليه.',
   mission2_title: '👁️ رؤيتنا',
-  mission2_desc: 'أن نكون المرجع الرقمي الأول لطلاب التخصصات الطبية في الأردن، من خلال محتوى محدّث باستمرار ومبني على احتياجات الطلاب الفعلية.',
+  mission2_desc: 'أن نكون المرجع الرقمي الأول لطلاب التمريض وطب الأسنان في الأردن، من خلال محتوى محدّث باستمرار ومبني على احتياجات الطلاب الفعلية.',
   mission3_title: '📚 المحتوى',
   mission3_desc: 'كورسات مصنّفة حسب المقرر والجامعة، مع محاضرات قابلة للمشاهدة والتحميل.',
   mission4_title: '❓ بنك الأسئلة',
@@ -1237,7 +1237,7 @@ const CONTENT_DEFAULTS = {
   contact_email: 'medoraacademy2026@gmail.com',
   contact_phone: '+962 78 149 2144',
   contact_location: 'الأردن — عمّان',
-  footer_desc: 'منصة تعليمية متخصصة لطلاب التخصصات الطبية، تجمع الدورات، المحاضرات، وبنك الأسئلة في مكان واحد لدعم رحلتكم الأكاديمية.',
+  footer_desc: 'منصة تعليمية متخصصة لطلاب التمريض وطب الأسنان، تجمع الدورات، المحاضرات، وبنك الأسئلة في مكان واحد لدعم رحلتكم الأكاديمية.',
   footer_copy: '© 2026 MEDORA — جميع الحقوق محفوظة',
   app_title: 'حمّل تطبيق MEDORA',
   app_desc: 'تابع كورساتك وبنك الأسئلة من هاتفك في أي وقت.',
@@ -3344,7 +3344,7 @@ function pagePrivacy(){
   const sections = [
     {
       title: 'مقدمة',
-      body: `تحترم منصة MEDORA خصوصية مستخدميها من طلاب التخصصات الطبية، وتلتزم بحماية بياناتهم الشخصية. توضّح هذه السياسة نوع البيانات التي نجمعها، وكيفية استخدامها وتخزينها، وحقوقك المتعلقة بها. استخدامك للمنصة يعني موافقتك على ما ورد في هذه السياسة.`
+      body: `تحترم منصة MEDORA خصوصية مستخدميها من طلاب التمريض وطب الأسنان، وتلتزم بحماية بياناتهم الشخصية. توضّح هذه السياسة نوع البيانات التي نجمعها، وكيفية استخدامها وتخزينها، وحقوقك المتعلقة بها. استخدامك للمنصة يعني موافقتك على ما ورد في هذه السياسة.`
     },
     {
       title: 'البيانات التي نجمعها',
@@ -4093,14 +4093,24 @@ async function toggleSecurePlayer(btn){
   }
 }
 
-/* ينشئ Collection في Bunny خاص بهذه المادة أول مرة فقط، ويحفظ رقمه على المادة نفسها */
-async function ensureCourseCollection(course){
-  if(course.collectionId) return course.collectionId;
+/* ينشئ Collection في Bunny خاص بهذه المادة أول مرة فقط، ويحفظ رقمه على المادة نفسها.
+   forceNew=true بتتجاهل أي collectionId محفوظ سابقًا وتنشئ وحدة جديدة من الصفر —
+   بتستخدم لما يتضح إن الـ Collection المحفوظة صارت "يتيمة" (محذوفة يدويًا من Bunny،
+   أو محفوظة من مكتبة فيديو (Library) قديمة اتغيّرت). */
+async function ensureCourseCollection(course, forceNew){
+  if(course.collectionId && !forceNew) return course.collectionId;
   const result = await callBunnyFunction('create-collection', { title: course.title });
   if(!result || !result.collectionId) throw new Error('تعذّر إنشاء مجلد الفيديو الخاص بهذه المادة على Bunny.');
   course.collectionId = result.collectionId;
   await setData('courses', state.courses, true);
   return course.collectionId;
+}
+
+/* بترجع true إذا رسالة الخطأ من Bunny بتدل إن الـ Collection المحفوظة مش موجودة فعليًا
+   (مثلاً انحذفت يدويًا من لوحة Bunny، أو تغيّرت مكتبة الفيديو من بعد ما اتسوّت). */
+function isMissingCollectionError(err){
+  const msg = (err && err.message || '').toLowerCase();
+  return msg.includes('collection') && (msg.includes('not exist') || msg.includes('not found'));
 }
 
 /* يرفع ملف فيديو من جهاز المستخدم مباشرة إلى Bunny Stream عبر tus، ويرجّع رابط
@@ -4112,8 +4122,20 @@ function uploadVideoToBunny(file, { courseId, title }, onProgress){
         if(typeof tus === 'undefined') throw new Error('مكتبة الرفع لم يتم تحميلها، تحقق من الاتصال بالإنترنت وأعد المحاولة.');
         const course = state.courses.find(c=>c.id===courseId);
         if(!course) throw new Error('لم يتم العثور على المادة المرتبطة بهذه المحاضرة.');
-        const collectionId = await ensureCourseCollection(course);
-        const created = await callBunnyFunction('create-video', { title: title || file.name, collectionId });
+        let collectionId = await ensureCourseCollection(course);
+        let created;
+        try{
+          created = await callBunnyFunction('create-video', { title: title || file.name, collectionId });
+        }catch(err){
+          // الـ collectionId المحفوظ صار "يتيم" (مش موجود فعليًا على Bunny) — ننشئ
+          // Collection جديدة تلقائيًا، نحدّث المادة، ونعيد المحاولة مرة وحدة بس.
+          if(isMissingCollectionError(err)){
+            collectionId = await ensureCourseCollection(course, true);
+            created = await callBunnyFunction('create-video', { title: title || file.name, collectionId });
+          } else {
+            throw err;
+          }
+        }
         const { videoGuid, libraryId, expire, signature } = created || {};
         if(!videoGuid || !libraryId || !expire || !signature) throw new Error('تعذّر تجهيز رفع الفيديو، حاول مرة أخرى.');
         const upload = new tus.Upload(file, {
@@ -4923,7 +4945,7 @@ function buildHighYieldPrompt({ courseTitle, lectureTitle, university, major, pa
       + pastQuestions.slice(0, 60).map((q,i)=> `${i+1}. ${q.question} — الإجابة الصحيحة: ${q.options?.[q.correctIndex] ?? ''}`).join('\n')
     : 'لا توجد أسئلة امتحانات سابقة مسجّلة لهذه المادة/المحاضرة في بنك الأسئلة حاليًا، فلخّص محتوى الملف مع إبراز أهم النقاط أكاديميًا وسريريًا.';
 
-  return `أنت مساعد أكاديمي متخصص بإعداد ملخصات "High-Yield" لطلاب ${major || 'التخصصات الطبية'}${university ? ' في ' + university : ''}.
+  return `أنت مساعد أكاديمي متخصص بإعداد ملخصات "High-Yield" لطلاب ${major || 'التمريض/طب الأسنان'}${university ? ' في ' + university : ''}.
 المادة: ${courseTitle}.${lectureTitle ? ' المحاضرة: ' + lectureTitle + '.' : ''}
 
 حلّل ملف المحاضرة المرفق (شرائح/PDF/صورة) واستخرج أهم المعلومات فيه، ثم أنتج ملخصًا مركّزًا بصيغة High-Yield.
@@ -5582,12 +5604,12 @@ let lastRenderedRoute = null;
    بكل مرة يتغيّر فيها المسار (بدل ما تبقى العناوين ثابتة زي أي SPA بدائي). */
 
 const SITE_NAME = 'MEDORA';
-const DEFAULT_DESCRIPTION = 'منصة MEDORA (أكاديمية) لطلاب التخصصات الطبية في الأردن — تمريض، طب أسنان: شرح، دورات، محاضرات، ملخصات، وبنك أسئلة تفاعلي لكل الجامعات.';
+const DEFAULT_DESCRIPTION = 'منصة MEDORA لطلاب التمريض وطب الأسنان: دورات، محاضرات، ملخصات، وبنك أسئلة تفاعلي لكل الجامعات.';
 
 /* يحدّث <title> ووسوم <meta> (description / robots / canonical / og / twitter)
    دفعة وحدة. أي وسم غير موجود بالـ head (مشروع قديم مثلًا) يتم تجاهله بأمان. */
 function setPageMeta({ title, description, noindex } = {}){
-  const fullTitle = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME} | أكاديمية طلاب التخصصات الطبية في الأردن`;
+  const fullTitle = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME} | منصة طلاب التمريض وطب الأسنان`;
   const desc = description || DEFAULT_DESCRIPTION;
   const url = window.location.origin + window.location.pathname;
 
@@ -5637,7 +5659,7 @@ function updateSeoMeta(route){
       const title = (major || uni) ? `دورات ${[major, uni].filter(Boolean).join(' ')}` : 'الدورات';
       const description = (major || uni)
         ? `تصفح دورات ${[major, uni].filter(Boolean).join(' في ')} على منصة MEDORA: محاضرات، ملخصات، وبنك أسئلة تفاعلي.`
-        : 'تصفح جميع دورات التخصصات الطبية لكل الجامعات على منصة MEDORA.';
+        : 'تصفح جميع دورات التمريض وطب الأسنان لكل الجامعات على منصة MEDORA.';
       setPageMeta({ title, description });
       break;
     }
@@ -5648,14 +5670,14 @@ function updateSeoMeta(route){
       const title = (major && uni) ? `بنك أسئلة ${major} - ${uni}` : 'بنك الأسئلة';
       const description = (major && uni)
         ? `تدرّب على بنك أسئلة ${major} لجامعة ${uni} بشكل تفاعلي على منصة MEDORA.`
-        : 'بنك أسئلة تفاعلي لطلاب التخصصات الطبية على منصة MEDORA.';
+        : 'بنك أسئلة تفاعلي لطلاب التمريض وطب الأسنان على منصة MEDORA.';
       /* بنك الأسئلة محمي بتسجيل دخول، فما في داعي يتفهرس بمحركات البحث */
       setPageMeta({ title, description, noindex: true });
       break;
     }
 
     case 'about':
-      setPageMeta({ title: 'من نحن', description: 'تعرّف على منصة MEDORA ورسالتها بخدمة طلاب التخصصات الطبية.' });
+      setPageMeta({ title: 'من نحن', description: 'تعرّف على منصة MEDORA ورسالتها بخدمة طلاب التمريض وطب الأسنان.' });
       break;
     case 'contact':
       setPageMeta({ title: 'تواصل معنا', description: 'تواصل مع فريق MEDORA لأي استفسار أو دعم فني.' });
