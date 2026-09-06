@@ -1154,9 +1154,11 @@ function renderNavState(){
         <a href="/admin-analytics" class="btn small" style="border-color:#fff;color:#fff;">📊 التحليلات</a>
         <a href="/admin-coupons" class="btn small" style="border-color:#fff;color:#fff;">🎟️ الكوبونات</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
+        <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLaunchMsgBtn">📢 رسالة الترحيب</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
       </div>`;
     document.getElementById('bannerDesignBtn').addEventListener('click', modalEditDesign);
+    document.getElementById('bannerLaunchMsgBtn').addEventListener('click', modalEditLaunchBanner);
     document.getElementById('bannerLogout').addEventListener('click', logout);
   } else { bannerWrap.innerHTML = ''; }
 }
@@ -1243,6 +1245,8 @@ const CONTENT_DEFAULTS = {
   app_desc: 'تابع كورساتك وبنك الأسئلة من هاتفك في أي وقت.',
   app_ios_url: '#',
   app_android_url: 'https://drive.google.com/file/d/12SB2OeQ49irLS1H39WqxIZwpHg3JJHxx/view?usp=drive_link',
+  launch_banner_text: '',
+  launch_banner_until: '',
 };
 const CONTENT_LABELS = {
   hero_title: 'عنوان الصفحة الرئيسية', hero_lead: 'وصف الصفحة الرئيسية', hero_card_title: 'عنوان بطاقة الجامعات',
@@ -1264,6 +1268,67 @@ const CONTENT_LABELS = {
   app_ios_url: 'رابط App Store', app_android_url: 'رابط Google Play',
 };
 function cval(key){ return (state.content && state.content[key] !== undefined) ? state.content[key] : CONTENT_DEFAULTS[key]; }
+/* ---------------- بانر الترحيب المؤقت (إعلان الإطلاق الرسمي) ----------------
+   نص وتاريخ/وقت انتهاء يضبطهما الأدمن من لوحة التحكم (مخزّنين ضمن state.content
+   عبر Supabase)، فيظهر البانر لكل الزوار على الصفحة الرئيسية حتى موعد الانتهاء
+   بالضبط، بعدها يختفي تلقائيًا وللأبد لكل الزوار بغض النظر عن متصفحهم. */
+function launchBannerActive(){
+  const text = (cval('launch_banner_text')||'').trim();
+  const until = cval('launch_banner_until');
+  if(!text || !until) return false;
+  const untilTime = new Date(until).getTime();
+  if(isNaN(untilTime)) return false;
+  return Date.now() < untilTime;
+}
+function launchBannerDismissKey(){
+  return 'medora_launch_banner_dismissed_' + (cval('launch_banner_until')||'');
+}
+function launchBannerHtml(){
+  if(!launchBannerActive()) return '';
+  try{ if(localStorage.getItem(launchBannerDismissKey()) === '1') return ''; }catch(e){}
+  const text = cval('launch_banner_text');
+  return `
+  <div class="launch-banner" id="launchBanner" style="position:relative; display:flex; align-items:center; gap:12px; background:linear-gradient(135deg, var(--teal), var(--teal-2)); color:#fff; padding:14px 46px 14px 18px; border-radius:14px; margin:16px auto 0; max-width:var(--content-width); font-weight:700; font-size:14.5px; line-height:1.6;">
+    <span style="font-size:22px; flex-shrink:0;">🎉</span>
+    <span style="flex:1;">${escapeHtml(text)}</span>
+    <button type="button" id="launchBannerClose" aria-label="إغلاق" title="إغلاق"
+      style="position:absolute; inset-inline-end:12px; top:50%; transform:translateY(-50%); background:rgba(255,255,255,.22); border:none; color:#fff; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:14px; line-height:1;">✕</button>
+    ${isAdminSession() ? `<button type="button" id="launchBannerEditBtn" class="btn small" style="border-color:#fff; color:#fff; flex-shrink:0;">${ICONS.edit} تعديل</button>` : ''}
+  </div>`;
+}
+function modalEditLaunchBanner(){
+  if(!isAdminSession()) return;
+  const text = cval('launch_banner_text');
+  const until = cval('launch_banner_until');
+  /* input[type=datetime-local] يحتاج قيمة بصيغة YYYY-MM-DDTHH:mm بدون منطقة زمنية */
+  let untilLocal = '';
+  if(until){
+    const d = new Date(until);
+    if(!isNaN(d.getTime())){
+      const pad = n => String(n).padStart(2,'0');
+      untilLocal = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+  }
+  openModal(`
+    <h3>📢 رسالة الترحيب المؤقتة</h3>
+    <p style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">تظهر بأعلى الصفحة الرئيسية لكل الزوار حتى موعد الانتهاء المحدّد، وبعدها تختفي تلقائيًا وللأبد. اترك النص فارغًا لإخفائها فورًا.</p>
+    <form id="launchBannerForm">
+      <div class="field"><label>نص الرسالة</label><textarea name="text" placeholder="مثال: 🎉 MEDORA انطلقت رسميًا! رحّبوا معنا بانطلاقة المنصة">${escapeHtml(text)}</textarea></div>
+      <div class="field"><label>تختفي نهائيًا بعد تاريخ/وقت</label><input type="datetime-local" name="until" value="${untilLocal}"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('launchBannerForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const newText = (fd.get('text')||'').trim();
+    const newUntilLocal = fd.get('until');
+    state.content.launch_banner_text = newText;
+    state.content.launch_banner_until = newUntilLocal ? new Date(newUntilLocal).toISOString() : '';
+    await setData('content', state.content, true);
+    closeModal(); render();
+  });
+}
 function isAdminSession(){ return !!(state.session && state.session.type === 'admin'); }
 /* حساب "مدرّس": صلاحيات محدودة بكورسه هو بس — إدارة واجهة فقط (متل الأدمن تمامًا)،
    وليست حماية حقيقية على مستوى قاعدة البيانات. */
@@ -1463,6 +1528,7 @@ function modalDownloadApp(){
 function pageHome(){
   const uniRows = UNIVERSITIES.map(u => `<div class="uni-row"><div class="uni-dot"></div><div><span class="uni-name">${u.name}</span><span class="uni-loc">${u.loc}</span></div></div>`).join('');
   return `
+  ${launchBannerHtml()}
   <section class="hero">
     <div class="hero-inner">
       <div>
@@ -6537,6 +6603,15 @@ document.getElementById('navLinks').addEventListener('click', (e)=>{ if(e.target
 document.body.addEventListener('click', (e)=>{
   const editBtnEl = e.target.closest('[data-edit-content]');
   if(editBtnEl){ modalEditContent(editBtnEl.dataset.editContent); }
+});
+
+document.body.addEventListener('click', (e)=>{
+  if(e.target.closest('#launchBannerClose')){
+    try{ localStorage.setItem(launchBannerDismissKey(), '1'); }catch(err){}
+    const el = document.getElementById('launchBanner');
+    if(el) el.remove();
+  }
+  if(e.target.closest('#launchBannerEditBtn')){ modalEditLaunchBanner(); }
 });
 
 document.body.addEventListener('click', (e)=>{
