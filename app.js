@@ -228,7 +228,7 @@ function watchDeviceLock(phone){
 
 /* ---------------- App state ---------------- */
 let state = {
-  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [],
+  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [], bankAccess: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', coursePage: 1, bankAdminView: false, bankNotesView: false, content: {}, teachers: [],
   bankManageCourseId: null, bankManageLectureId: '',
 };
@@ -489,7 +489,7 @@ function courseSections(courseId){
    فبدل 14 استعلام select منفصل (واحد لكل مفتاح عبر getData)، نجيبهم كلهم
    بطلب واحد via `.in('key', [...])` ثم نوزّع النتائج محليًا. */
 const INIT_DATA_KEYS = ['courses','lectures','questions','students','messages','enrollments',
-  'summaries','lectureProgress','content','savedQuestions','design','coupons','notifications','teachers'];
+  'summaries','lectureProgress','content','savedQuestions','design','coupons','notifications','teachers','bankAccess'];
 async function fetchInitDataBulk(){
   if(!supabaseClient) return {};
   try{
@@ -504,7 +504,7 @@ async function initData(){
   const FALLBACKS = {
     courses: SEED_COURSES, lectures: SEED_LECTURES, questions: SEED_QUESTIONS,
     students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [],
-    content: {}, savedQuestions: [], design: DESIGN_DEFAULTS, coupons: [], notifications: [], teachers: []
+    content: {}, savedQuestions: [], design: DESIGN_DEFAULTS, coupons: [], notifications: [], teachers: [], bankAccess: []
   };
   const [bulk] = await Promise.all([
     fetchInitDataBulk(),
@@ -517,6 +517,7 @@ async function initData(){
   state.lectureProgress = pick('lectureProgress');
   state.savedQuestions = Array.isArray(pick('savedQuestions')) ? pick('savedQuestions') : [];
   state.coupons = Array.isArray(pick('coupons')) ? pick('coupons') : [];
+  state.bankAccess = Array.isArray(pick('bankAccess')) ? pick('bankAccess') : [];
   state.notifications = Array.isArray(pick('notifications')) ? pick('notifications') : [];
   state.content = Object.assign({}, CONTENT_DEFAULTS, pick('content'));
   state.design = Object.assign({}, DESIGN_DEFAULTS, pick('design'));
@@ -626,6 +627,19 @@ function sectionUnlocked(courseId, section){
 function enrollmentsForSection(courseId, section){
   return state.enrollments.filter(e=> e.courseId===courseId && (e.section===section || !e.section));
 }
+/* ---------------- وصول "بنك الأسئلة فقط" (بدون اشتراك بالكورس) ----------------
+   يُمنح عبر كوبون من نوع bank: يفتح بنك أسئلة مادة أو أكثر للطالب حتى لو مش
+   مشترك أصلًا بالمادة (لا يفتح المحاضرات/الفيديوهات، فقط الأسئلة). */
+function hasBankAccess(courseId, section){
+  if(!state.session || state.session.type !== 'student') return false;
+  const phone = state.session.phone;
+  return state.bankAccess.some(b=> b.courseId===courseId && b.phone===phone && (!b.section || b.section===section));
+}
+function hasAnyBankAccess(courseId){
+  if(!state.session || state.session.type !== 'student') return false;
+  const phone = state.session.phone;
+  return state.bankAccess.some(b=> b.courseId===courseId && b.phone===phone);
+}
 async function selfEnrollSection(courseId, section){
   if(!state.session || state.session.type !== 'student') return;
   const phone = state.session.phone;
@@ -684,6 +698,29 @@ async function redeemCoupon(rawCode, chosenCourseId){
   if(couponUsesLeft(coupon) <= 0) return { ok:false, msg:'تم استنفاد عدد مرات استخدام هذا الكوبون.' };
   const phone = state.session.phone;
   if(hasStudentUsedCoupon(coupon, phone)) return { ok:false, msg:'لقد استخدمت هذا الكوبون مسبقًا.' };
+
+  // كوبون "فتح بنك الأسئلة فقط": يستهدف مادة أو أكثر دفعة وحدة (courseIds)،
+  // يمنح وصولًا لبنك الأسئلة فقط دون فتح المحاضرات/الفيديوهات، وحتى لو
+  // الطالب مش مشترك أصلًا بهذه المواد.
+  if(coupon.type === 'bank'){
+    const targetCourseIds = (coupon.courseIds||[]).filter(id=> state.courses.some(c=>c.id===id));
+    if(!targetCourseIds.length) return { ok:false, msg:'هذا الكوبون لم يعد يستهدف أي مادة متاحة، تواصل مع الإدارة.' };
+    const usedAt = Date.now();
+    let addedAny = false;
+    targetCourseIds.forEach(cid=>{
+      if(!hasAnyBankAccess(cid)){
+        state.bankAccess.push({ courseId: cid, phone });
+        addedAny = true;
+      }
+    });
+    if(addedAny) await setData('bankAccess', state.bankAccess, true);
+    const titles = targetCourseIds.map(cid=> state.courses.find(c=>c.id===cid)?.title).filter(Boolean).join('، ');
+    const msg = `🎉 تم فتح بنك الأسئلة مجانًا في حسابك لمادة: ${titles}${targetCourseIds.length>1 ? ' (كل المواد المذكورة)' : ''}. لاحظ أن هذا لا يفتح المحاضرات/الفيديوهات، بنك الأسئلة فقط.`;
+    coupon.usedBy = coupon.usedBy || [];
+    coupon.usedBy.push({ phone, usedAt, courseIds: targetCourseIds });
+    await setData('coupons', state.coupons, true);
+    return { ok:true, msg, card:null };
+  }
 
   // كوبون "المادة من اختيار الطالب": ما فيه courseId مخزَّن على الكوبون نفسه،
   // فلازم الطالب يحدد المادة أولًا قبل ما نكمل التفعيل
@@ -2445,7 +2482,7 @@ function isLectureIncluded(lid){
 function isLectureAccessibleForBank(lid){
   const l = state.lectures.find(x=>x.id===lid);
   if(!l) return false;
-  return sectionUnlocked(l.courseId, l.section);
+  return sectionUnlocked(l.courseId, l.section) || hasBankAccess(l.courseId, l.section);
 }
 
 function pageBankSetup(){
@@ -2500,15 +2537,20 @@ function pageBankSetup(){
       </div>`;
     }
     eligibleCourses = (quiz.university && quiz.major)
-      ? state.courses.filter(c => (c.university === quiz.university || c.university === 'عام') && (c.major || 'التمريض') === quiz.major && courseUnlocked(c.id))
+      ? state.courses.filter(c => (c.university === quiz.university || c.university === 'عام') && (c.major || 'التمريض') === quiz.major && (courseUnlocked(c.id) || hasAnyBankAccess(c.id)))
       : [];
   }
 
   const courseSelectDisabled = (!isAdmin && !(quiz.university && quiz.major)) ? 'disabled' : '';
-  const courseOptions = `<option value="">— اختر المادة —</option>` + eligibleCourses.map(c=>`<option value="${c.id}" ${quiz.courseId===c.id?'selected':''}>${escapeHtml(c.title)} — ${escapeHtml(c.university)} / ${escapeHtml(c.major || 'التمريض')}</option>`).join('');
+  const courseOptions = `<option value="">— اختر المادة —</option>` + eligibleCourses.map(c=>{
+    const bankOnly = !isAdmin && !courseUnlocked(c.id) && hasAnyBankAccess(c.id);
+    return `<option value="${c.id}" ${quiz.courseId===c.id?'selected':''}>${escapeHtml(c.title)} — ${escapeHtml(c.university)} / ${escapeHtml(c.major || 'التمريض')}${bankOnly ? ' (بنك الأسئلة فقط)' : ''}</option>`;
+  }).join('');
   const courseCardsHtml = `<select id="bankCourseSelect" class="bank-select i18n-skip" ${courseSelectDisabled?'disabled':''}>${courseOptions}</select>`;
   const noEligibleHint = (!isAdmin && quiz.university && quiz.major && eligibleCourses.length===0)
     ? `<p class="hint" style="margin:10px 0 0;">لا توجد لديك مواد مشترك بها ضمن هذا التخصص والجامعة. اشترك بكورس من صفحة الدورات أولًا.</p>` : '';
+  const bankOnlyHint = (quiz.courseId && !isAdmin && !courseUnlocked(quiz.courseId) && hasAnyBankAccess(quiz.courseId))
+    ? `<p class="hint" style="margin:10px 0 0;">📖 عندك وصول لبنك أسئلة هذه المادة فقط (بدون اشتراك بمحاضراتها/فيديوهاتها).</p>` : '';
 
   let natureBlock = '', lecturesBlock = '', countBlock = '', modeBlock = '', startBlock = '';
 
@@ -2529,7 +2571,7 @@ function pageBankSetup(){
     /* الطالب لا يرى إلا محاضرات الأقسام (فيرست/ميد/فاينال) المفعّلة لديه فعليًا لهذا الكورس؛
        الأدمن يرى الجميع لأن sectionUnlocked تعتبره مفعّلًا بكل الأقسام دائمًا. */
     const allCourseLectures = state.lectures.filter(l=>l.courseId===quiz.courseId);
-    const lectures = allCourseLectures.filter(l=> sectionUnlocked(quiz.courseId, l.section));
+    const lectures = allCourseLectures.filter(l=> sectionUnlocked(quiz.courseId, l.section) || hasBankAccess(quiz.courseId, l.section));
     const lockedLecturesCount = allCourseLectures.length - lectures.length;
     const countFor = (lid) => state.questions.filter(q=>q.courseId===quiz.courseId && q.lectureId===lid && (quiz.nature==='both' || (q.nature||'past')===quiz.nature)).length;
     const generalCount = state.questions.filter(q=>q.courseId===quiz.courseId && !q.lectureId && (quiz.nature==='both' || (q.nature||'past')===quiz.nature)).length;
@@ -2605,6 +2647,7 @@ function pageBankSetup(){
           <div class="bank-block-label">المادة</div>
           <div style="display:flex; flex-direction:column; gap:8px;">${courseCardsHtml}</div>
           ${noEligibleHint}
+          ${bankOnlyHint}
         </div>
         ${natureBlock}
         ${lecturesBlock}
@@ -3004,6 +3047,13 @@ function pageAdminAnalytics(){
    PAGE: ADMIN COUPONS (كوبونات الفتح المجاني والخصم)
    ========================================================= */
 function couponTargetLabel(coupon){
+  if(coupon.type === 'bank'){
+    const titles = (coupon.courseIds||[]).map(id=>{
+      const c = state.courses.find(x=>x.id===id);
+      return c ? c.title : 'مادة محذوفة';
+    });
+    return `📖 فتح بنك الأسئلة فقط — ${titles.length ? titles.join('، ') : 'لا توجد مواد محددة'}`;
+  }
   if(!coupon.courseId){
     return coupon.section ? `🧑‍🎓 من اختيار الطالب — قسم ${SECTION_LABELS[coupon.section]} فقط` : '🧑‍🎓 المادة من اختيار الطالب — كل الأقسام';
   }
@@ -3014,7 +3064,9 @@ function couponTargetLabel(coupon){
 function couponCardHtml(coupon){
   const usesLeft = couponUsesLeft(coupon);
   const usesText = coupon.maxUses==null ? `${(coupon.usedBy||[]).length} استخدام (بدون حد أقصى)` : `${(coupon.usedBy||[]).length} / ${coupon.maxUses} استخدام`;
-  const typeTag = coupon.type==='free' ? `<span class="lecture-tier-tag">🆓 فتح مجاني</span>` : `<span class="lecture-tier-tag locked">🏷️ خصم ${coupon.discountPercent}%</span>`;
+  const typeTag = coupon.type==='free' ? `<span class="lecture-tier-tag">🆓 فتح مجاني</span>`
+    : coupon.type==='bank' ? `<span class="lecture-tier-tag">📖 فتح بنك الأسئلة فقط</span>`
+    : `<span class="lecture-tier-tag locked">🏷️ خصم ${coupon.discountPercent}%</span>`;
   const expired = isCouponExpired(coupon);
   const expiryTag = coupon.expiresAt ? (expired
       ? `<span class="lecture-tier-tag locked" style="background:var(--danger); color:#fff;">⏰ منتهي الصلاحية</span>`
@@ -3068,6 +3120,12 @@ function modalCreateCoupon(){
     const secs = courseId ? courseSections(courseId) : SECTIONS;
     return `<option value="">كل الأقسام</option>` + secs.map(s=>`<option value="${s}">${SECTION_LABELS[s]}</option>`).join('');
   };
+  const bankCoursesCheckboxesHtml = state.courses.length ? `<div style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow:auto; border:1px solid var(--border); border-radius:10px; padding:10px;">
+    ${state.courses.map(c=>`<label style="display:flex; align-items:center; gap:8px; font-size:13.5px; cursor:pointer;">
+        <input type="checkbox" name="bankCourseIds" value="${c.id}">
+        <span class="i18n-skip">${escapeHtml(c.title)} — ${escapeHtml(c.university)} / ${escapeHtml(c.major || 'التمريض')}</span>
+      </label>`).join('')}
+  </div>` : `<p class="hint">لا توجد مواد بعد، أنشئ كورسًا أولًا.</p>`;
   openModal(`
     <h3>${ICONS.plus} إنشاء كوبون جديد</h3>
     <form id="couponForm">
@@ -3081,7 +3139,8 @@ function modalCreateCoupon(){
       <div class="field">
         <label>نوع الكوبون</label>
         <select name="type" id="couponTypeSelect">
-          <option value="free">🆓 فتح مجاني (يفتح مباشرة عند الاستخدام)</option>
+          <option value="free">🆓 فتح مجاني (يفتح الكورس والمحاضرات مباشرة عند الاستخدام)</option>
+          <option value="bank">📖 فتح بنك الأسئلة فقط (مادة أو أكثر، بدون اشتراك بالمحاضرات)</option>
           <option value="discount">🏷️ خصم بنسبة (رسالة توضيحية فقط، التفعيل يدوي)</option>
         </select>
       </div>
@@ -3089,7 +3148,12 @@ function modalCreateCoupon(){
         <label>نسبة الخصم %</label>
         <input type="number" name="discountPercent" min="1" max="100" value="20">
       </div>
-      <div class="field">
+      <div class="field" id="couponBankCoursesField" style="display:none;">
+        <label>المواد التي يفتح الكوبون بنك أسئلتها (اختر مادة أو أكثر)</label>
+        ${bankCoursesCheckboxesHtml}
+        <p class="hint" style="margin-top:6px;">يفتح هذا الكوبون بنك الأسئلة فقط للمواد المحددة، دون فتح المحاضرات أو الفيديوهات، حتى لو الطالب مش مشترك بها.</p>
+      </div>
+      <div class="field" id="couponStudentChooseField">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:700;">
           <input type="checkbox" id="couponStudentChooseCourse" style="width:18px; height:18px; accent-color:var(--teal);">
           اترك المادة ليختارها الطالب بنفسه عند تفعيل الكوبون
@@ -3100,7 +3164,7 @@ function modalCreateCoupon(){
         <label>الكورس</label>
         <select name="courseId" id="couponCourseSelect">${courseOptions}</select>
       </div>
-      <div class="field">
+      <div class="field" id="couponSectionFieldWrap">
         <label>النطاق (الأقسام المشمولة بالكوبون)</label>
         <select name="section" id="couponSectionSelect">${sectionOptionsFor(firstCourseId)}</select>
         <p class="hint" id="couponSectionHint" style="margin-top:6px; display:none;">بما أن المادة من اختيار الطالب، اختر هنا القسم (فيرست/ميد/فاينال) الذي عليه الخصم أو الفتح، وسيُطبَّق على أي مادة يختارها — بشرط أن يكون هذا القسم موجودًا فيها.</p>
@@ -3122,13 +3186,26 @@ function modalCreateCoupon(){
   document.getElementById('regenCouponCodeBtn').addEventListener('click', ()=>{ codeInput.value = generateCouponCode(); });
   const typeSelect = document.getElementById('couponTypeSelect');
   const discountField = document.getElementById('couponDiscountField');
-  typeSelect.addEventListener('change', ()=>{ discountField.style.display = typeSelect.value==='discount' ? '' : 'none'; });
+  const bankCoursesField = document.getElementById('couponBankCoursesField');
+  const studentChooseField = document.getElementById('couponStudentChooseField');
+  const courseFieldWrap = document.getElementById('couponCourseFieldWrap');
+  const sectionFieldWrap = document.getElementById('couponSectionFieldWrap');
   const courseSelect = document.getElementById('couponCourseSelect');
   const sectionSelect = document.getElementById('couponSectionSelect');
-  courseSelect.addEventListener('change', ()=>{ sectionSelect.innerHTML = sectionOptionsFor(courseSelect.value); });
   const studentChooseCheckbox = document.getElementById('couponStudentChooseCourse');
-  const courseFieldWrap = document.getElementById('couponCourseFieldWrap');
   const sectionHint = document.getElementById('couponSectionHint');
+  function refreshFieldsForType(){
+    const isBank = typeSelect.value === 'bank';
+    discountField.style.display = typeSelect.value==='discount' ? '' : 'none';
+    bankCoursesField.style.display = isBank ? '' : 'none';
+    /* نوع "بنك الأسئلة فقط" يستهدف عدة مواد دفعة وحدة، فما يحتاج خيار
+       "المادة من اختيار الطالب" ولا حقل الكورس/القسم المفردين */
+    studentChooseField.style.display = isBank ? 'none' : '';
+    courseFieldWrap.style.display = isBank ? 'none' : (studentChooseCheckbox.checked ? 'none' : '');
+    sectionFieldWrap.style.display = isBank ? 'none' : '';
+  }
+  typeSelect.addEventListener('change', refreshFieldsForType);
+  courseSelect.addEventListener('change', ()=>{ sectionSelect.innerHTML = sectionOptionsFor(courseSelect.value); });
   studentChooseCheckbox.addEventListener('change', ()=>{
     const studentChooses = studentChooseCheckbox.checked;
     courseFieldWrap.style.display = studentChooses ? 'none' : '';
@@ -3137,6 +3214,7 @@ function modalCreateCoupon(){
     // في وضع اختيار الطالب، الأقسام المعروضة عامة (فيرست/ميد/فاينال) وليست تابعة لكورس محدد
     sectionSelect.innerHTML = studentChooses ? sectionOptionsFor(null) : sectionOptionsFor(courseSelect.value);
   });
+  refreshFieldsForType();
   document.getElementById('couponForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -3144,6 +3222,27 @@ function modalCreateCoupon(){
     const code = (fd.get('code')||'').trim().toUpperCase();
     if(!code){ msgBox.innerHTML = `<div class="form-msg error">أدخل كود الكوبون.</div>`; return; }
     if(findCouponByCode(code)){ msgBox.innerHTML = `<div class="form-msg error">هذا الكود مستخدم مسبقًا لكوبون آخر، اختر كودًا مختلفًا.</div>`; return; }
+    const type = fd.get('type');
+
+    if(type === 'bank'){
+      const bankCourseIds = Array.from(document.querySelectorAll('input[name="bankCourseIds"]:checked')).map(el=>el.value);
+      if(!bankCourseIds.length){ msgBox.innerHTML = `<div class="form-msg error">اختر مادة واحدة على الأقل يفتحها الكوبون.</div>`; return; }
+      const maxUsesRaw = fd.get('maxUses');
+      const maxUses = maxUsesRaw ? Number(maxUsesRaw) : null;
+      const expiresAtRaw = fd.get('expiresAt');
+      const expiresAt = expiresAtRaw ? new Date(expiresAtRaw).getTime() : null;
+      if(expiresAtRaw && expiresAt <= Date.now()){
+        msgBox.innerHTML = `<div class="form-msg error">تاريخ انتهاء الصلاحية يجب أن يكون في المستقبل.</div>`; return;
+      }
+      state.coupons.push({
+        id:'cp'+Date.now(), code, type:'bank', discountPercent:null, courseId:null, courseIds: bankCourseIds, section:null,
+        maxUses, expiresAt, usedBy: [], active:true, note:(fd.get('note')||'').trim(), createdAt: Date.now(),
+      });
+      await setData('coupons', state.coupons, true);
+      closeModal(); navigate('admin-coupons'); render();
+      return;
+    }
+
     const studentChooses = studentChooseCheckbox.checked;
     let courseId = null;
     if(!studentChooses){
@@ -3151,7 +3250,6 @@ function modalCreateCoupon(){
       if(!courseId){ msgBox.innerHTML = `<div class="form-msg error">اختر الكورس المستهدف، أو فعّل خيار "اترك المادة ليختارها الطالب".</div>`; return; }
     }
     const section = fd.get('section') || null;
-    const type = fd.get('type');
     const discountPercent = type==='discount' ? Number(fd.get('discountPercent')) : null;
     if(type==='discount' && (!discountPercent || discountPercent<1 || discountPercent>100)){
       msgBox.innerHTML = `<div class="form-msg error">أدخل نسبة خصم صحيحة بين 1 و100.</div>`; return;
