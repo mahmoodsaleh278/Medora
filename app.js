@@ -1325,6 +1325,13 @@ function launchBannerHtml(){
   try{ if(localStorage.getItem(launchBannerDismissKey()) === '1') return ''; }catch(e){}
   const text = cval('launch_banner_text');
   return `
+  <style>
+    @keyframes launchBannerSlideDown{
+      0%{ opacity:0; transform:translateY(-24px); }
+      100%{ opacity:1; transform:translateY(0); }
+    }
+    .launch-banner{ animation: launchBannerSlideDown .7s cubic-bezier(.22,.9,.32,1) both; }
+  </style>
   <div class="launch-banner" id="launchBanner" style="position:relative; display:flex; align-items:center; gap:12px; background:linear-gradient(135deg, var(--teal), var(--teal-2)); color:#fff; padding:14px 46px 14px 18px; border-radius:14px; margin:16px auto 0; max-width:var(--content-width); font-weight:700; font-size:14.5px; line-height:1.6;">
     <span style="font-size:22px; flex-shrink:0;">🎉</span>
     <span style="flex:1;">${escapeHtml(text)}</span>
@@ -6707,7 +6714,20 @@ document.body.addEventListener('click', (e)=>{
   if(e.target.closest('#launchBannerClose')){
     try{ localStorage.setItem(launchBannerDismissKey(), '1'); }catch(err){}
     const el = document.getElementById('launchBanner');
-    if(el) el.remove();
+    if(el){
+      el.style.transition = 'opacity .35s ease, transform .35s ease, margin .35s ease, max-height .35s ease, padding .35s ease';
+      el.style.overflow = 'hidden';
+      el.style.maxHeight = el.offsetHeight + 'px';
+      requestAnimationFrame(()=>{
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-14px)';
+        el.style.maxHeight = '0px';
+        el.style.marginTop = '0px';
+        el.style.paddingTop = '0px';
+        el.style.paddingBottom = '0px';
+      });
+      setTimeout(()=> el.remove(), 380);
+    }
   }
   if(e.target.closest('#launchBannerEditBtn')){ modalEditLaunchBanner(); }
 });
