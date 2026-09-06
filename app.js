@@ -458,7 +458,7 @@ function normalizeLecture(l){
   if(!videos.length && l.videoUrl) videos = [{ label:'', url:l.videoUrl }];
   if(!files.length && l.fileUrl) files = [{ label:'', url:l.fileUrl }];
   const section = SECTIONS.includes(l.section) ? l.section : 'first';
-  return Object.assign({}, l, { videos, files, section });
+  return Object.assign({}, l, { videos, files, section, hidden: !!l.hidden });
 }
 
 /* يبني خريطة أسعار لكل قسم (فيرست/ميد/فاينال) من بيانات الكورس، وقائمة الأقسام
@@ -2027,7 +2027,10 @@ function pageCourseDetail(courseId){
   if(!course){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>الكورس غير موجود</h3><p>ربما تم حذفه. <a href="/courses" style="color:var(--teal); font-weight:800;">عودة إلى الدورات</a></p></div></div></section>`;
   }
-  const lectures = state.lectures.filter(l=>l.courseId===courseId);
+  /* المحاضرات المخفية (hidden) يشوفها فقط الأدمن أو مدرّس المادة (canManageLectures)،
+     الطالب أو الزائر ما يشوفها إطلاقًا — لا في القائمة ولا في عدّاد الأقسام */
+  const lecturesAll = state.lectures.filter(l=>l.courseId===courseId);
+  const lectures = canManageLectures ? lecturesAll : lecturesAll.filter(l=>!l.hidden);
   /* الأدمن يشوف الأقسام المفعّلة لهذه المادة تحديدًا (بعض المواد فيها ميد وفاينال بس مثلًا)،
      والطالب يشوف بس الأقسام اللي فيها محاضرات فعليًا من ضمنها */
   const courseSecs = courseSections(courseId);
@@ -2065,12 +2068,13 @@ function pageCourseDetail(courseId){
     const hasMedia = videos.length || files.length;
     const isStudent = state.session && state.session.type === 'student';
     const watched = isStudent && isLectureWatched(l.id);
+    const isHidden = !!l.hidden;
     return `
-    <details class="lecture-row ${unlocked?'':'locked'} ${watched?'watched':''}">
+    <details class="lecture-row ${unlocked?'':'locked'} ${watched?'watched':''} ${isHidden?'lecture-hidden':''}">
       <summary class="lecture-row-summary">
         <div class="lecture-num">${watched ? '✓' : (i+1)}</div>
         <div class="lecture-row-main">
-          <h4>${escapeHtml(l.title)}</h4>
+          <h4>${escapeHtml(l.title)} ${canManageLectures && isHidden ? '<span class="lecture-tier-tag locked" style="margin-inline-start:8px;">🙈 مخفية عن الطلاب</span>' : ''}</h4>
         </div>
         <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg></span>
       </summary>
@@ -2086,7 +2090,7 @@ function pageCourseDetail(courseId){
           ${hasMedia ? (videoRowsHtml + fileRowsHtml) : `<div class="lecture-lock-msg">${ICONS.play} لم تتم إضافة فيديو أو ملف لهذه المحاضرة بعد</div>`}
         </div>` : `
         <div class="lecture-lock-msg">${ICONS.lock} ${lockMsg}</div>`}
-        ${canManageLectures ? `<div class="lecture-row-admin"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
+        ${canManageLectures ? `<div class="lecture-row-admin"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn small" data-toggle-hide-lecture="${l.id}">${isHidden ? '👁️ إظهار للطلاب' : '🙈 إخفاء عن الطلاب'}</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
       </div>
     </details>
   `;
@@ -4290,6 +4294,12 @@ function modalAddLecture(courseId){
         <div class="link-rows" id="fileRows"></div>
         <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
       </div>
+      <div class="field">
+        <label class="watch-toggle" style="justify-content:flex-start; gap:8px;">
+          <input type="checkbox" name="hidden">
+          <span>🙈 إخفاء هذه المحاضرة عن الطلاب مؤقتًا (تبقى ظاهرة لك وللمشرف فقط)</span>
+        </label>
+      </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ المحاضرة</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
@@ -4313,6 +4323,7 @@ function modalAddLecture(courseId){
       description:(fd.get('description')||'').trim(),
       videos: [...collectVideoRows('videoRows'), ...manualVideos],
       files: collectLinkRows('fileRows'),
+      hidden: fd.get('hidden') === 'on',
     });
     await setData('lectures', state.lectures, true);
     closeModal(); render();
@@ -4347,6 +4358,12 @@ function modalEditLecture(lectureId){
         <div class="link-rows" id="fileRows">${files.map(f=>linkRowHtml(f.label,f.url)).join('')}</div>
         <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
       </div>
+      <div class="field">
+        <label class="watch-toggle" style="justify-content:flex-start; gap:8px;">
+          <input type="checkbox" name="hidden" ${lecture.hidden ? 'checked' : ''}>
+          <span>🙈 إخفاء هذه المحاضرة عن الطلاب مؤقتًا (تبقى ظاهرة لك وللمشرف فقط)</span>
+        </label>
+      </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
@@ -4366,6 +4383,7 @@ function modalEditLecture(lectureId){
     lecture.section = SECTIONS.includes(fd.get('section')) ? fd.get('section') : 'first';
     lecture.videos = [...collectVideoRows('videoRows'), ...manualVideos];
     lecture.files = collectLinkRows('fileRows');
+    lecture.hidden = fd.get('hidden') === 'on';
     delete lecture.videoUrl; delete lecture.fileUrl;
     await setData('lectures', state.lectures, true);
     closeModal(); render();
@@ -5940,6 +5958,17 @@ function bindPageEvents(route){
     });
     document.querySelectorAll('[data-edit-lecture]').forEach(btn=>{
       btn.addEventListener('click', ()=> modalEditLecture(btn.dataset.editLecture));
+    });
+    document.querySelectorAll('[data-toggle-hide-lecture]').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        e.preventDefault();
+        const id = btn.dataset.toggleHideLecture;
+        const lecture = state.lectures.find(l=>l.id===id);
+        if(!lecture) return;
+        lecture.hidden = !lecture.hidden;
+        await setData('lectures', state.lectures, true);
+        render();
+      });
     });
     document.querySelectorAll('[data-del-lecture]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
