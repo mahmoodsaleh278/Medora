@@ -228,7 +228,7 @@ function watchDeviceLock(phone){
 
 /* ---------------- App state ---------------- */
 let state = {
-  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [], bankAccess: [],
+  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', coursePage: 1, bankAdminView: false, bankNotesView: false, content: {}, teachers: [],
   bankManageCourseId: null, bankManageLectureId: '',
 };
@@ -458,7 +458,7 @@ function normalizeLecture(l){
   if(!videos.length && l.videoUrl) videos = [{ label:'', url:l.videoUrl }];
   if(!files.length && l.fileUrl) files = [{ label:'', url:l.fileUrl }];
   const section = SECTIONS.includes(l.section) ? l.section : 'first';
-  return Object.assign({}, l, { videos, files, section, hidden: !!l.hidden });
+  return Object.assign({}, l, { videos, files, section });
 }
 
 /* يبني خريطة أسعار لكل قسم (فيرست/ميد/فاينال) من بيانات الكورس، وقائمة الأقسام
@@ -489,7 +489,7 @@ function courseSections(courseId){
    فبدل 14 استعلام select منفصل (واحد لكل مفتاح عبر getData)، نجيبهم كلهم
    بطلب واحد via `.in('key', [...])` ثم نوزّع النتائج محليًا. */
 const INIT_DATA_KEYS = ['courses','lectures','questions','students','messages','enrollments',
-  'summaries','lectureProgress','content','savedQuestions','design','coupons','notifications','teachers','bankAccess'];
+  'summaries','lectureProgress','content','savedQuestions','design','coupons','notifications','teachers'];
 async function fetchInitDataBulk(){
   if(!supabaseClient) return {};
   try{
@@ -504,7 +504,7 @@ async function initData(){
   const FALLBACKS = {
     courses: SEED_COURSES, lectures: SEED_LECTURES, questions: SEED_QUESTIONS,
     students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [],
-    content: {}, savedQuestions: [], design: DESIGN_DEFAULTS, coupons: [], notifications: [], teachers: [], bankAccess: []
+    content: {}, savedQuestions: [], design: DESIGN_DEFAULTS, coupons: [], notifications: [], teachers: []
   };
   const [bulk] = await Promise.all([
     fetchInitDataBulk(),
@@ -517,7 +517,6 @@ async function initData(){
   state.lectureProgress = pick('lectureProgress');
   state.savedQuestions = Array.isArray(pick('savedQuestions')) ? pick('savedQuestions') : [];
   state.coupons = Array.isArray(pick('coupons')) ? pick('coupons') : [];
-  state.bankAccess = Array.isArray(pick('bankAccess')) ? pick('bankAccess') : [];
   state.notifications = Array.isArray(pick('notifications')) ? pick('notifications') : [];
   state.content = Object.assign({}, CONTENT_DEFAULTS, pick('content'));
   state.design = Object.assign({}, DESIGN_DEFAULTS, pick('design'));
@@ -627,19 +626,6 @@ function sectionUnlocked(courseId, section){
 function enrollmentsForSection(courseId, section){
   return state.enrollments.filter(e=> e.courseId===courseId && (e.section===section || !e.section));
 }
-/* ---------------- وصول "بنك الأسئلة فقط" (بدون اشتراك بالكورس) ----------------
-   يُمنح عبر كوبون من نوع bank: يفتح بنك أسئلة مادة أو أكثر للطالب حتى لو مش
-   مشترك أصلًا بالمادة (لا يفتح المحاضرات/الفيديوهات، فقط الأسئلة). */
-function hasBankAccess(courseId, section){
-  if(!state.session || state.session.type !== 'student') return false;
-  const phone = state.session.phone;
-  return state.bankAccess.some(b=> b.courseId===courseId && b.phone===phone && (!b.section || b.section===section));
-}
-function hasAnyBankAccess(courseId){
-  if(!state.session || state.session.type !== 'student') return false;
-  const phone = state.session.phone;
-  return state.bankAccess.some(b=> b.courseId===courseId && b.phone===phone);
-}
 async function selfEnrollSection(courseId, section){
   if(!state.session || state.session.type !== 'student') return;
   const phone = state.session.phone;
@@ -698,47 +684,6 @@ async function redeemCoupon(rawCode, chosenCourseId){
   if(couponUsesLeft(coupon) <= 0) return { ok:false, msg:'تم استنفاد عدد مرات استخدام هذا الكوبون.' };
   const phone = state.session.phone;
   if(hasStudentUsedCoupon(coupon, phone)) return { ok:false, msg:'لقد استخدمت هذا الكوبون مسبقًا.' };
-
-  // كوبون "فتح بنك الأسئلة فقط": يستهدف مادة أو أكثر دفعة وحدة (courseIds)،
-  // مع إمكانية تحديد قسم واحد (فيرست/ميد/فاينال) أو كل الأقسام. يمنح وصولًا
-  // لبنك الأسئلة فقط دون فتح المحاضرات/الفيديوهات، وحتى لو الطالب مش مشترك
-  // أصلًا بهذه المواد.
-  if(coupon.type === 'bank'){
-    const targetCourseIds = (coupon.courseIds||[]).filter(id=> state.courses.some(c=>c.id===id));
-    if(!targetCourseIds.length) return { ok:false, msg:'هذا الكوبون لم يعد يستهدف أي مادة متاحة، تواصل مع الإدارة.' };
-    const requestedSection = coupon.section || null;
-    const usedAt = Date.now();
-    let addedAny = false;
-    const grantedTitles = [];
-    const skippedTitles = [];
-    targetCourseIds.forEach(cid=>{
-      const course = state.courses.find(c=>c.id===cid);
-      const title = course ? course.title : cid;
-      if(requestedSection && !courseSections(cid).includes(requestedSection)){
-        skippedTitles.push(title);
-        return;
-      }
-      grantedTitles.push(title);
-      const alreadyHasExact = state.bankAccess.some(b=> b.courseId===cid && b.phone===phone && (b.section||null) === requestedSection);
-      if(!alreadyHasExact){
-        const entry = { courseId: cid, phone };
-        if(requestedSection) entry.section = requestedSection;
-        state.bankAccess.push(entry);
-        addedAny = true;
-      }
-    });
-    if(!grantedTitles.length){
-      return { ok:false, msg: `قسم ${SECTION_LABELS[requestedSection]} غير متوفر في أي من مواد هذا الكوبون، تواصل مع الإدارة.` };
-    }
-    if(addedAny) await setData('bankAccess', state.bankAccess, true);
-    const sectionLabel = requestedSection ? ` — قسم ${SECTION_LABELS[requestedSection]}` : ' — كل الأقسام';
-    let msg = `🎉 تم فتح بنك الأسئلة${sectionLabel} مجانًا في حسابك لمادة: ${grantedTitles.join('، ')}. لاحظ أن هذا لا يفتح المحاضرات/الفيديوهات، بنك الأسئلة فقط.`;
-    if(skippedTitles.length) msg += ` (تم تجاوز: ${skippedTitles.join('، ')} لأنّ هذا القسم غير متوفر فيها)`;
-    coupon.usedBy = coupon.usedBy || [];
-    coupon.usedBy.push({ phone, usedAt, courseIds: targetCourseIds, section: requestedSection });
-    await setData('coupons', state.coupons, true);
-    return { ok:true, msg, card:null };
-  }
 
   // كوبون "المادة من اختيار الطالب": ما فيه courseId مخزَّن على الكوبون نفسه،
   // فلازم الطالب يحدد المادة أولًا قبل ما نكمل التفعيل
@@ -1209,11 +1154,9 @@ function renderNavState(){
         <a href="/admin-analytics" class="btn small" style="border-color:#fff;color:#fff;">📊 التحليلات</a>
         <a href="/admin-coupons" class="btn small" style="border-color:#fff;color:#fff;">🎟️ الكوبونات</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
-        <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLaunchMsgBtn">📢 رسالة الترحيب</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
       </div>`;
     document.getElementById('bannerDesignBtn').addEventListener('click', modalEditDesign);
-    document.getElementById('bannerLaunchMsgBtn').addEventListener('click', modalEditLaunchBanner);
     document.getElementById('bannerLogout').addEventListener('click', logout);
   } else { bannerWrap.innerHTML = ''; }
 }
@@ -1300,8 +1243,6 @@ const CONTENT_DEFAULTS = {
   app_desc: 'تابع كورساتك وبنك الأسئلة من هاتفك في أي وقت.',
   app_ios_url: '#',
   app_android_url: 'https://drive.google.com/file/d/12SB2OeQ49irLS1H39WqxIZwpHg3JJHxx/view?usp=drive_link',
-  launch_banner_text: '',
-  launch_banner_until: '',
 };
 const CONTENT_LABELS = {
   hero_title: 'عنوان الصفحة الرئيسية', hero_lead: 'وصف الصفحة الرئيسية', hero_card_title: 'عنوان بطاقة الجامعات',
@@ -1323,74 +1264,6 @@ const CONTENT_LABELS = {
   app_ios_url: 'رابط App Store', app_android_url: 'رابط Google Play',
 };
 function cval(key){ return (state.content && state.content[key] !== undefined) ? state.content[key] : CONTENT_DEFAULTS[key]; }
-/* ---------------- بانر الترحيب المؤقت (إعلان الإطلاق الرسمي) ----------------
-   نص وتاريخ/وقت انتهاء يضبطهما الأدمن من لوحة التحكم (مخزّنين ضمن state.content
-   عبر Supabase)، فيظهر البانر لكل الزوار على الصفحة الرئيسية حتى موعد الانتهاء
-   بالضبط، بعدها يختفي تلقائيًا وللأبد لكل الزوار بغض النظر عن متصفحهم. */
-function launchBannerActive(){
-  const text = (cval('launch_banner_text')||'').trim();
-  const until = cval('launch_banner_until');
-  if(!text || !until) return false;
-  const untilTime = new Date(until).getTime();
-  if(isNaN(untilTime)) return false;
-  return Date.now() < untilTime;
-}
-function launchBannerDismissKey(){
-  return 'medora_launch_banner_dismissed_' + (cval('launch_banner_until')||'');
-}
-function launchBannerHtml(){
-  if(!launchBannerActive()) return '';
-  try{ if(localStorage.getItem(launchBannerDismissKey()) === '1') return ''; }catch(e){}
-  const text = cval('launch_banner_text');
-  return `
-  <style>
-    @keyframes launchBannerSlideDown{
-      0%{ opacity:0; transform:translateY(-24px); }
-      100%{ opacity:1; transform:translateY(0); }
-    }
-    .launch-banner{ animation: launchBannerSlideDown .7s cubic-bezier(.22,.9,.32,1) both; }
-  </style>
-  <div class="launch-banner" id="launchBanner" style="position:relative; display:flex; align-items:center; gap:12px; background:linear-gradient(135deg, var(--teal), var(--teal-2)); color:#fff; padding:14px 46px 14px 18px; border-radius:14px; margin:16px auto 0; max-width:var(--content-width); font-weight:700; font-size:14.5px; line-height:1.6;">
-    <span style="font-size:22px; flex-shrink:0;">🎉</span>
-    <span style="flex:1;">${escapeHtml(text)}</span>
-    <button type="button" id="launchBannerClose" aria-label="إغلاق" title="إغلاق"
-      style="position:absolute; inset-inline-end:12px; top:50%; transform:translateY(-50%); background:rgba(255,255,255,.22); border:none; color:#fff; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:14px; line-height:1;">✕</button>
-    ${isAdminSession() ? `<button type="button" id="launchBannerEditBtn" class="btn small" style="border-color:#fff; color:#fff; flex-shrink:0;">${ICONS.edit} تعديل</button>` : ''}
-  </div>`;
-}
-function modalEditLaunchBanner(){
-  if(!isAdminSession()) return;
-  const text = cval('launch_banner_text');
-  const until = cval('launch_banner_until');
-  /* input[type=datetime-local] يحتاج قيمة بصيغة YYYY-MM-DDTHH:mm بدون منطقة زمنية */
-  let untilLocal = '';
-  if(until){
-    const d = new Date(until);
-    if(!isNaN(d.getTime())){
-      const pad = n => String(n).padStart(2,'0');
-      untilLocal = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    }
-  }
-  openModal(`
-    <h3>📢 رسالة الترحيب المؤقتة</h3>
-    <p style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">تظهر بأعلى الصفحة الرئيسية لكل الزوار حتى موعد الانتهاء المحدّد، وبعدها تختفي تلقائيًا وللأبد. اترك النص فارغًا لإخفائها فورًا.</p>
-    <form id="launchBannerForm">
-      <div class="field"><label>نص الرسالة</label><textarea name="text" placeholder="مثال: 🎉 MEDORA انطلقت رسميًا! رحّبوا معنا بانطلاقة المنصة">${escapeHtml(text)}</textarea></div>
-      <div class="field"><label>تختفي نهائيًا بعد تاريخ/وقت</label><input type="datetime-local" name="until" value="${untilLocal}"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ</button></div>
-    </form>`);
-  document.getElementById('cancelModal').addEventListener('click', closeModal);
-  document.getElementById('launchBannerForm').addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const newText = (fd.get('text')||'').trim();
-    const newUntilLocal = fd.get('until');
-    state.content.launch_banner_text = newText;
-    state.content.launch_banner_until = newUntilLocal ? new Date(newUntilLocal).toISOString() : '';
-    await setData('content', state.content, true);
-    closeModal(); render();
-  });
-}
 function isAdminSession(){ return !!(state.session && state.session.type === 'admin'); }
 /* حساب "مدرّس": صلاحيات محدودة بكورسه هو بس — إدارة واجهة فقط (متل الأدمن تمامًا)،
    وليست حماية حقيقية على مستوى قاعدة البيانات. */
@@ -1590,7 +1463,6 @@ function modalDownloadApp(){
 function pageHome(){
   const uniRows = UNIVERSITIES.map(u => `<div class="uni-row"><div class="uni-dot"></div><div><span class="uni-name">${u.name}</span><span class="uni-loc">${u.loc}</span></div></div>`).join('');
   return `
-  ${launchBannerHtml()}
   <section class="hero">
     <div class="hero-inner">
       <div>
@@ -1943,10 +1815,10 @@ function pageMyTeachCourses(){
       <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
       <div class="my-course-info">
         <div class="my-course-row-top">
-          <h3>${escapeHtml(c.title)}</h3>
-          <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
+          <h3 class="i18n-skip">${escapeHtml(c.title)}</h3>
+          <span class="chip i18n-skip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
         </div>
-        <div class="course-uni">${escapeHtml(c.university)}</div>
+        <div class="course-uni i18n-skip">${escapeHtml(c.university)}</div>
         <div class="course-stats-row" style="margin-bottom:0;">
           <span class="course-stat-chip">⏱ ${c.hours} ساعات</span>
           <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
@@ -1987,10 +1859,10 @@ function pageMyCourses(){
       <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
       <div class="my-course-info">
         <div class="my-course-row-top">
-          <h3>${escapeHtml(c.title)}</h3>
-          <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
+          <h3 class="i18n-skip">${escapeHtml(c.title)}</h3>
+          <span class="chip i18n-skip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
         </div>
-        <div class="course-uni">${escapeHtml(c.university)}</div>
+        <div class="course-uni i18n-skip">${escapeHtml(c.university)}</div>
         <div class="course-stats-row" style="margin-bottom:0;">
           <span class="course-stat-chip">⏱ ${c.hours} ساعات</span>
           <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
@@ -2155,10 +2027,7 @@ function pageCourseDetail(courseId){
   if(!course){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>الكورس غير موجود</h3><p>ربما تم حذفه. <a href="/courses" style="color:var(--teal); font-weight:800;">عودة إلى الدورات</a></p></div></div></section>`;
   }
-  /* المحاضرات المخفية (hidden) يشوفها فقط الأدمن أو مدرّس المادة (canManageLectures)،
-     الطالب أو الزائر ما يشوفها إطلاقًا — لا في القائمة ولا في عدّاد الأقسام */
-  const lecturesAll = state.lectures.filter(l=>l.courseId===courseId);
-  const lectures = canManageLectures ? lecturesAll : lecturesAll.filter(l=>!l.hidden);
+  const lectures = state.lectures.filter(l=>l.courseId===courseId);
   /* الأدمن يشوف الأقسام المفعّلة لهذه المادة تحديدًا (بعض المواد فيها ميد وفاينال بس مثلًا)،
      والطالب يشوف بس الأقسام اللي فيها محاضرات فعليًا من ضمنها */
   const courseSecs = courseSections(courseId);
@@ -2196,13 +2065,12 @@ function pageCourseDetail(courseId){
     const hasMedia = videos.length || files.length;
     const isStudent = state.session && state.session.type === 'student';
     const watched = isStudent && isLectureWatched(l.id);
-    const isHidden = !!l.hidden;
     return `
-    <details class="lecture-row ${unlocked?'':'locked'} ${watched?'watched':''} ${isHidden?'lecture-hidden':''}">
+    <details class="lecture-row ${unlocked?'':'locked'} ${watched?'watched':''}">
       <summary class="lecture-row-summary">
         <div class="lecture-num">${watched ? '✓' : (i+1)}</div>
         <div class="lecture-row-main">
-          <h4>${escapeHtml(l.title)} ${canManageLectures && isHidden ? '<span class="lecture-tier-tag locked" style="margin-inline-start:8px;">🙈 مخفية عن الطلاب</span>' : ''}</h4>
+          <h4>${escapeHtml(l.title)}</h4>
         </div>
         <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg></span>
       </summary>
@@ -2218,7 +2086,7 @@ function pageCourseDetail(courseId){
           ${hasMedia ? (videoRowsHtml + fileRowsHtml) : `<div class="lecture-lock-msg">${ICONS.play} لم تتم إضافة فيديو أو ملف لهذه المحاضرة بعد</div>`}
         </div>` : `
         <div class="lecture-lock-msg">${ICONS.lock} ${lockMsg}</div>`}
-        ${canManageLectures ? `<div class="lecture-row-admin"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn small" data-toggle-hide-lecture="${l.id}">${isHidden ? '👁️ إظهار للطلاب' : '🙈 إخفاء عن الطلاب'}</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
+        ${canManageLectures ? `<div class="lecture-row-admin"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
       </div>
     </details>
   `;
@@ -2507,7 +2375,7 @@ function isLectureIncluded(lid){
 function isLectureAccessibleForBank(lid){
   const l = state.lectures.find(x=>x.id===lid);
   if(!l) return false;
-  return sectionUnlocked(l.courseId, l.section) || hasBankAccess(l.courseId, l.section);
+  return sectionUnlocked(l.courseId, l.section);
 }
 
 function pageBankSetup(){
@@ -2562,20 +2430,15 @@ function pageBankSetup(){
       </div>`;
     }
     eligibleCourses = (quiz.university && quiz.major)
-      ? state.courses.filter(c => (c.university === quiz.university || c.university === 'عام') && (c.major || 'التمريض') === quiz.major && (courseUnlocked(c.id) || hasAnyBankAccess(c.id)))
+      ? state.courses.filter(c => (c.university === quiz.university || c.university === 'عام') && (c.major || 'التمريض') === quiz.major && courseUnlocked(c.id))
       : [];
   }
 
   const courseSelectDisabled = (!isAdmin && !(quiz.university && quiz.major)) ? 'disabled' : '';
-  const courseOptions = `<option value="">— اختر المادة —</option>` + eligibleCourses.map(c=>{
-    const bankOnly = !isAdmin && !courseUnlocked(c.id) && hasAnyBankAccess(c.id);
-    return `<option value="${c.id}" ${quiz.courseId===c.id?'selected':''}>${escapeHtml(c.title)} — ${escapeHtml(c.university)} / ${escapeHtml(c.major || 'التمريض')}${bankOnly ? ' (بنك الأسئلة فقط)' : ''}</option>`;
-  }).join('');
+  const courseOptions = `<option value="">— اختر المادة —</option>` + eligibleCourses.map(c=>`<option value="${c.id}" ${quiz.courseId===c.id?'selected':''}>${escapeHtml(c.title)} — ${escapeHtml(c.university)} / ${escapeHtml(c.major || 'التمريض')}</option>`).join('');
   const courseCardsHtml = `<select id="bankCourseSelect" class="bank-select i18n-skip" ${courseSelectDisabled?'disabled':''}>${courseOptions}</select>`;
   const noEligibleHint = (!isAdmin && quiz.university && quiz.major && eligibleCourses.length===0)
     ? `<p class="hint" style="margin:10px 0 0;">لا توجد لديك مواد مشترك بها ضمن هذا التخصص والجامعة. اشترك بكورس من صفحة الدورات أولًا.</p>` : '';
-  const bankOnlyHint = (quiz.courseId && !isAdmin && !courseUnlocked(quiz.courseId) && hasAnyBankAccess(quiz.courseId))
-    ? `<p class="hint" style="margin:10px 0 0;">📖 عندك وصول لبنك أسئلة هذه المادة فقط (بدون اشتراك بمحاضراتها/فيديوهاتها).</p>` : '';
 
   let natureBlock = '', lecturesBlock = '', countBlock = '', modeBlock = '', startBlock = '';
 
@@ -2596,7 +2459,7 @@ function pageBankSetup(){
     /* الطالب لا يرى إلا محاضرات الأقسام (فيرست/ميد/فاينال) المفعّلة لديه فعليًا لهذا الكورس؛
        الأدمن يرى الجميع لأن sectionUnlocked تعتبره مفعّلًا بكل الأقسام دائمًا. */
     const allCourseLectures = state.lectures.filter(l=>l.courseId===quiz.courseId);
-    const lectures = allCourseLectures.filter(l=> sectionUnlocked(quiz.courseId, l.section) || hasBankAccess(quiz.courseId, l.section));
+    const lectures = allCourseLectures.filter(l=> sectionUnlocked(quiz.courseId, l.section));
     const lockedLecturesCount = allCourseLectures.length - lectures.length;
     const countFor = (lid) => state.questions.filter(q=>q.courseId===quiz.courseId && q.lectureId===lid && (quiz.nature==='both' || (q.nature||'past')===quiz.nature)).length;
     const generalCount = state.questions.filter(q=>q.courseId===quiz.courseId && !q.lectureId && (quiz.nature==='both' || (q.nature||'past')===quiz.nature)).length;
@@ -2672,7 +2535,6 @@ function pageBankSetup(){
           <div class="bank-block-label">المادة</div>
           <div style="display:flex; flex-direction:column; gap:8px;">${courseCardsHtml}</div>
           ${noEligibleHint}
-          ${bankOnlyHint}
         </div>
         ${natureBlock}
         ${lecturesBlock}
@@ -3072,14 +2934,6 @@ function pageAdminAnalytics(){
    PAGE: ADMIN COUPONS (كوبونات الفتح المجاني والخصم)
    ========================================================= */
 function couponTargetLabel(coupon){
-  if(coupon.type === 'bank'){
-    const titles = (coupon.courseIds||[]).map(id=>{
-      const c = state.courses.find(x=>x.id===id);
-      return c ? c.title : 'مادة محذوفة';
-    });
-    const sectionPart = coupon.section ? ` — قسم ${SECTION_LABELS[coupon.section]}` : ' — كل الأقسام';
-    return `📖 فتح بنك الأسئلة فقط${sectionPart} — ${titles.length ? titles.join('، ') : 'لا توجد مواد محددة'}`;
-  }
   if(!coupon.courseId){
     return coupon.section ? `🧑‍🎓 من اختيار الطالب — قسم ${SECTION_LABELS[coupon.section]} فقط` : '🧑‍🎓 المادة من اختيار الطالب — كل الأقسام';
   }
@@ -3090,9 +2944,7 @@ function couponTargetLabel(coupon){
 function couponCardHtml(coupon){
   const usesLeft = couponUsesLeft(coupon);
   const usesText = coupon.maxUses==null ? `${(coupon.usedBy||[]).length} استخدام (بدون حد أقصى)` : `${(coupon.usedBy||[]).length} / ${coupon.maxUses} استخدام`;
-  const typeTag = coupon.type==='free' ? `<span class="lecture-tier-tag">🆓 فتح مجاني</span>`
-    : coupon.type==='bank' ? `<span class="lecture-tier-tag">📖 فتح بنك الأسئلة فقط</span>`
-    : `<span class="lecture-tier-tag locked">🏷️ خصم ${coupon.discountPercent}%</span>`;
+  const typeTag = coupon.type==='free' ? `<span class="lecture-tier-tag">🆓 فتح مجاني</span>` : `<span class="lecture-tier-tag locked">🏷️ خصم ${coupon.discountPercent}%</span>`;
   const expired = isCouponExpired(coupon);
   const expiryTag = coupon.expiresAt ? (expired
       ? `<span class="lecture-tier-tag locked" style="background:var(--danger); color:#fff;">⏰ منتهي الصلاحية</span>`
@@ -3146,12 +2998,6 @@ function modalCreateCoupon(){
     const secs = courseId ? courseSections(courseId) : SECTIONS;
     return `<option value="">كل الأقسام</option>` + secs.map(s=>`<option value="${s}">${SECTION_LABELS[s]}</option>`).join('');
   };
-  const bankCoursesCheckboxesHtml = state.courses.length ? `<div style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow:auto; border:1px solid var(--border); border-radius:10px; padding:10px;">
-    ${state.courses.map(c=>`<label style="display:flex; align-items:center; gap:8px; font-size:13.5px; cursor:pointer;">
-        <input type="checkbox" name="bankCourseIds" value="${c.id}">
-        <span class="i18n-skip">${escapeHtml(c.title)} — ${escapeHtml(c.university)} / ${escapeHtml(c.major || 'التمريض')}</span>
-      </label>`).join('')}
-  </div>` : `<p class="hint">لا توجد مواد بعد، أنشئ كورسًا أولًا.</p>`;
   openModal(`
     <h3>${ICONS.plus} إنشاء كوبون جديد</h3>
     <form id="couponForm">
@@ -3165,8 +3011,7 @@ function modalCreateCoupon(){
       <div class="field">
         <label>نوع الكوبون</label>
         <select name="type" id="couponTypeSelect">
-          <option value="free">🆓 فتح مجاني (يفتح الكورس والمحاضرات مباشرة عند الاستخدام)</option>
-          <option value="bank">📖 فتح بنك الأسئلة فقط (مادة أو أكثر، بدون اشتراك بالمحاضرات)</option>
+          <option value="free">🆓 فتح مجاني (يفتح مباشرة عند الاستخدام)</option>
           <option value="discount">🏷️ خصم بنسبة (رسالة توضيحية فقط، التفعيل يدوي)</option>
         </select>
       </div>
@@ -3174,12 +3019,7 @@ function modalCreateCoupon(){
         <label>نسبة الخصم %</label>
         <input type="number" name="discountPercent" min="1" max="100" value="20">
       </div>
-      <div class="field" id="couponBankCoursesField" style="display:none;">
-        <label>المواد التي يفتح الكوبون بنك أسئلتها (اختر مادة أو أكثر)</label>
-        ${bankCoursesCheckboxesHtml}
-        <p class="hint" style="margin-top:6px;">يفتح هذا الكوبون بنك الأسئلة فقط للمواد المحددة، دون فتح المحاضرات أو الفيديوهات، حتى لو الطالب مش مشترك بها.</p>
-      </div>
-      <div class="field" id="couponStudentChooseField">
+      <div class="field">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:700;">
           <input type="checkbox" id="couponStudentChooseCourse" style="width:18px; height:18px; accent-color:var(--teal);">
           اترك المادة ليختارها الطالب بنفسه عند تفعيل الكوبون
@@ -3190,11 +3030,10 @@ function modalCreateCoupon(){
         <label>الكورس</label>
         <select name="courseId" id="couponCourseSelect">${courseOptions}</select>
       </div>
-      <div class="field" id="couponSectionFieldWrap">
+      <div class="field">
         <label>النطاق (الأقسام المشمولة بالكوبون)</label>
         <select name="section" id="couponSectionSelect">${sectionOptionsFor(firstCourseId)}</select>
         <p class="hint" id="couponSectionHint" style="margin-top:6px; display:none;">بما أن المادة من اختيار الطالب، اختر هنا القسم (فيرست/ميد/فاينال) الذي عليه الخصم أو الفتح، وسيُطبَّق على أي مادة يختارها — بشرط أن يكون هذا القسم موجودًا فيها.</p>
-        <p class="hint" id="couponBankSectionHint" style="margin-top:6px; display:none;">اختر "كل الأقسام" لفتح بنك الأسئلة كاملًا بكل المواد المحددة، أو حدد قسمًا معينًا (فيرست/ميد/فاينال) ليُفتح هذا القسم فقط من بنك أسئلة كل مادة من المواد المحددة أعلاه — بشرط أن يكون هذا القسم موجودًا فيها، وإلا يتم تجاوزها.</p>
       </div>
       <div class="field">
         <label>الحد الأقصى لعدد مرات الاستخدام (اتركه فارغًا لعدد غير محدود)</label>
@@ -3213,37 +3052,13 @@ function modalCreateCoupon(){
   document.getElementById('regenCouponCodeBtn').addEventListener('click', ()=>{ codeInput.value = generateCouponCode(); });
   const typeSelect = document.getElementById('couponTypeSelect');
   const discountField = document.getElementById('couponDiscountField');
-  const bankCoursesField = document.getElementById('couponBankCoursesField');
-  const studentChooseField = document.getElementById('couponStudentChooseField');
-  const courseFieldWrap = document.getElementById('couponCourseFieldWrap');
-  const sectionFieldWrap = document.getElementById('couponSectionFieldWrap');
+  typeSelect.addEventListener('change', ()=>{ discountField.style.display = typeSelect.value==='discount' ? '' : 'none'; });
   const courseSelect = document.getElementById('couponCourseSelect');
   const sectionSelect = document.getElementById('couponSectionSelect');
-  const studentChooseCheckbox = document.getElementById('couponStudentChooseCourse');
-  const sectionHint = document.getElementById('couponSectionHint');
-  const bankSectionHint = document.getElementById('couponBankSectionHint');
-  function refreshFieldsForType(){
-    const isBank = typeSelect.value === 'bank';
-    discountField.style.display = typeSelect.value==='discount' ? '' : 'none';
-    bankCoursesField.style.display = isBank ? '' : 'none';
-    /* نوع "بنك الأسئلة فقط" يستهدف عدة مواد دفعة وحدة، فما يحتاج خيار
-       "المادة من اختيار الطالب" ولا حقل الكورس المفرد، لكنه يحتاج حقل القسم
-       (بخيارات عامة غير مرتبطة بكورس واحد لأنه ممكن يطبَّق على أكثر من مادة) */
-    studentChooseField.style.display = isBank ? 'none' : '';
-    courseFieldWrap.style.display = isBank ? 'none' : (studentChooseCheckbox.checked ? 'none' : '');
-    sectionFieldWrap.style.display = '';
-    sectionHint.style.display = (!isBank && studentChooseCheckbox.checked) ? '' : 'none';
-    bankSectionHint.style.display = isBank ? '' : 'none';
-    if(isBank){
-      sectionSelect.innerHTML = sectionOptionsFor(null);
-    } else if(studentChooseCheckbox.checked){
-      sectionSelect.innerHTML = sectionOptionsFor(null);
-    } else {
-      sectionSelect.innerHTML = sectionOptionsFor(courseSelect.value);
-    }
-  }
-  typeSelect.addEventListener('change', refreshFieldsForType);
   courseSelect.addEventListener('change', ()=>{ sectionSelect.innerHTML = sectionOptionsFor(courseSelect.value); });
+  const studentChooseCheckbox = document.getElementById('couponStudentChooseCourse');
+  const courseFieldWrap = document.getElementById('couponCourseFieldWrap');
+  const sectionHint = document.getElementById('couponSectionHint');
   studentChooseCheckbox.addEventListener('change', ()=>{
     const studentChooses = studentChooseCheckbox.checked;
     courseFieldWrap.style.display = studentChooses ? 'none' : '';
@@ -3252,7 +3067,6 @@ function modalCreateCoupon(){
     // في وضع اختيار الطالب، الأقسام المعروضة عامة (فيرست/ميد/فاينال) وليست تابعة لكورس محدد
     sectionSelect.innerHTML = studentChooses ? sectionOptionsFor(null) : sectionOptionsFor(courseSelect.value);
   });
-  refreshFieldsForType();
   document.getElementById('couponForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -3260,27 +3074,6 @@ function modalCreateCoupon(){
     const code = (fd.get('code')||'').trim().toUpperCase();
     if(!code){ msgBox.innerHTML = `<div class="form-msg error">أدخل كود الكوبون.</div>`; return; }
     if(findCouponByCode(code)){ msgBox.innerHTML = `<div class="form-msg error">هذا الكود مستخدم مسبقًا لكوبون آخر، اختر كودًا مختلفًا.</div>`; return; }
-    const type = fd.get('type');
-
-    if(type === 'bank'){
-      const bankCourseIds = Array.from(document.querySelectorAll('input[name="bankCourseIds"]:checked')).map(el=>el.value);
-      if(!bankCourseIds.length){ msgBox.innerHTML = `<div class="form-msg error">اختر مادة واحدة على الأقل يفتحها الكوبون.</div>`; return; }
-      const maxUsesRaw = fd.get('maxUses');
-      const maxUses = maxUsesRaw ? Number(maxUsesRaw) : null;
-      const expiresAtRaw = fd.get('expiresAt');
-      const expiresAt = expiresAtRaw ? new Date(expiresAtRaw).getTime() : null;
-      if(expiresAtRaw && expiresAt <= Date.now()){
-        msgBox.innerHTML = `<div class="form-msg error">تاريخ انتهاء الصلاحية يجب أن يكون في المستقبل.</div>`; return;
-      }
-      state.coupons.push({
-        id:'cp'+Date.now(), code, type:'bank', discountPercent:null, courseId:null, courseIds: bankCourseIds, section: fd.get('section') || null,
-        maxUses, expiresAt, usedBy: [], active:true, note:(fd.get('note')||'').trim(), createdAt: Date.now(),
-      });
-      await setData('coupons', state.coupons, true);
-      closeModal(); navigate('admin-coupons'); render();
-      return;
-    }
-
     const studentChooses = studentChooseCheckbox.checked;
     let courseId = null;
     if(!studentChooses){
@@ -3288,6 +3081,7 @@ function modalCreateCoupon(){
       if(!courseId){ msgBox.innerHTML = `<div class="form-msg error">اختر الكورس المستهدف، أو فعّل خيار "اترك المادة ليختارها الطالب".</div>`; return; }
     }
     const section = fd.get('section') || null;
+    const type = fd.get('type');
     const discountPercent = type==='discount' ? Number(fd.get('discountPercent')) : null;
     if(type==='discount' && (!discountPercent || discountPercent<1 || discountPercent>100)){
       msgBox.innerHTML = `<div class="form-msg error">أدخل نسبة خصم صحيحة بين 1 و100.</div>`; return;
@@ -4496,12 +4290,6 @@ function modalAddLecture(courseId){
         <div class="link-rows" id="fileRows"></div>
         <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
       </div>
-      <div class="field">
-        <label class="watch-toggle" style="justify-content:flex-start; gap:8px;">
-          <input type="checkbox" name="hidden">
-          <span>🙈 إخفاء هذه المحاضرة عن الطلاب مؤقتًا (تبقى ظاهرة لك وللمشرف فقط)</span>
-        </label>
-      </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ المحاضرة</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
@@ -4525,7 +4313,6 @@ function modalAddLecture(courseId){
       description:(fd.get('description')||'').trim(),
       videos: [...collectVideoRows('videoRows'), ...manualVideos],
       files: collectLinkRows('fileRows'),
-      hidden: fd.get('hidden') === 'on',
     });
     await setData('lectures', state.lectures, true);
     closeModal(); render();
@@ -4560,12 +4347,6 @@ function modalEditLecture(lectureId){
         <div class="link-rows" id="fileRows">${files.map(f=>linkRowHtml(f.label,f.url)).join('')}</div>
         <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
       </div>
-      <div class="field">
-        <label class="watch-toggle" style="justify-content:flex-start; gap:8px;">
-          <input type="checkbox" name="hidden" ${lecture.hidden ? 'checked' : ''}>
-          <span>🙈 إخفاء هذه المحاضرة عن الطلاب مؤقتًا (تبقى ظاهرة لك وللمشرف فقط)</span>
-        </label>
-      </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
@@ -4585,7 +4366,6 @@ function modalEditLecture(lectureId){
     lecture.section = SECTIONS.includes(fd.get('section')) ? fd.get('section') : 'first';
     lecture.videos = [...collectVideoRows('videoRows'), ...manualVideos];
     lecture.files = collectLinkRows('fileRows');
-    lecture.hidden = fd.get('hidden') === 'on';
     delete lecture.videoUrl; delete lecture.fileUrl;
     await setData('lectures', state.lectures, true);
     closeModal(); render();
@@ -6161,17 +5941,6 @@ function bindPageEvents(route){
     document.querySelectorAll('[data-edit-lecture]').forEach(btn=>{
       btn.addEventListener('click', ()=> modalEditLecture(btn.dataset.editLecture));
     });
-    document.querySelectorAll('[data-toggle-hide-lecture]').forEach(btn=>{
-      btn.addEventListener('click', async (e)=>{
-        e.preventDefault();
-        const id = btn.dataset.toggleHideLecture;
-        const lecture = state.lectures.find(l=>l.id===id);
-        if(!lecture) return;
-        lecture.hidden = !lecture.hidden;
-        await setData('lectures', state.lectures, true);
-        render();
-      });
-    });
     document.querySelectorAll('[data-del-lecture]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const id = btn.dataset.delLecture;
@@ -6739,28 +6508,6 @@ document.getElementById('navLinks').addEventListener('click', (e)=>{ if(e.target
 document.body.addEventListener('click', (e)=>{
   const editBtnEl = e.target.closest('[data-edit-content]');
   if(editBtnEl){ modalEditContent(editBtnEl.dataset.editContent); }
-});
-
-document.body.addEventListener('click', (e)=>{
-  if(e.target.closest('#launchBannerClose')){
-    try{ localStorage.setItem(launchBannerDismissKey(), '1'); }catch(err){}
-    const el = document.getElementById('launchBanner');
-    if(el){
-      el.style.transition = 'opacity .35s ease, transform .35s ease, margin .35s ease, max-height .35s ease, padding .35s ease';
-      el.style.overflow = 'hidden';
-      el.style.maxHeight = el.offsetHeight + 'px';
-      requestAnimationFrame(()=>{
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(-14px)';
-        el.style.maxHeight = '0px';
-        el.style.marginTop = '0px';
-        el.style.paddingTop = '0px';
-        el.style.paddingBottom = '0px';
-      });
-      setTimeout(()=> el.remove(), 380);
-    }
-  }
-  if(e.target.closest('#launchBannerEditBtn')){ modalEditLaunchBanner(); }
 });
 
 document.body.addEventListener('click', (e)=>{
