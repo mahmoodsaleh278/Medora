@@ -458,7 +458,13 @@ function normalizeLecture(l){
   if(!videos.length && l.videoUrl) videos = [{ label:'', url:l.videoUrl }];
   if(!files.length && l.fileUrl) files = [{ label:'', url:l.fileUrl }];
   const section = SECTIONS.includes(l.section) ? l.section : 'first';
-  return Object.assign({}, l, { videos, files, section });
+  return Object.assign({}, l, { videos, files, section, hidden: !!l.hidden });
+}
+
+/* عدد محاضرات كورس معيّن — للطالب لا تُحتسب المحاضرات المخفية (hidden)،
+   بينما المشرف/المدرّس (canSeeHidden=true) يشوف العدد الكامل شامل المخفي */
+function courseLectureCount(courseId, canSeeHidden){
+  return state.lectures.filter(l=>l.courseId===courseId && (canSeeHidden || !l.hidden)).length;
 }
 
 /* يبني خريطة أسعار لكل قسم (فيرست/ميد/فاينال) من بيانات الكورس، وقائمة الأقسام
@@ -983,6 +989,16 @@ function isLectureWatched(lectureId){
   const phone = state.session.phone;
   return state.lectureProgress.some(p=> p.phone===phone && p.lectureId===lectureId);
 }
+/* يخفي/يُظهر محاضرة عن الطلاب (يستخدمها المدرّس مالك المادة أو المشرف فقط).
+   المحاضرة المخفية تبقى موجودة بالكامل (فيديوهاتها وملفاتها) لكن لا تظهر إطلاقًا
+   لأي طالب في أي صفحة (تفاصيل الكورس، بنك الأسئلة/الاختبارات، تلخيص AI، أو عدّاد المحاضرات). */
+async function toggleLectureHidden(lectureId){
+  const lecture = state.lectures.find(l=>l.id===lectureId);
+  if(!lecture) return;
+  lecture.hidden = !lecture.hidden;
+  await setData('lectures', state.lectures, true);
+  render();
+}
 async function toggleLectureWatched(lectureId){
   if(!state.session || state.session.type !== 'student') return;
   const phone = state.session.phone;
@@ -995,7 +1011,7 @@ async function toggleLectureWatched(lectureId){
 function courseProgress(courseId){
   if(!state.session || state.session.type !== 'student') return { watched:0, total:0, pct:0 };
   const phone = state.session.phone;
-  const courseLectures = state.lectures.filter(l=>l.courseId===courseId);
+  const courseLectures = state.lectures.filter(l=>l.courseId===courseId && !l.hidden);
   const total = courseLectures.length;
   const watched = courseLectures.filter(l=> state.lectureProgress.some(p=> p.phone===phone && p.lectureId===l.id)).length;
   const pct = total ? Math.round((watched/total)*100) : 0;
@@ -1570,7 +1586,7 @@ function pageCourses(){
   const majorOptions = majorFilters.map(f => `<option value="${escapeHtml(f)}" ${state.majorFilter===f?'selected':''}>${escapeHtml(f)}</option>`).join('');
 
   const cards = pageCourseList.map(c => {
-    const lectureCount = state.lectures.filter(l=>l.courseId===c.id).length;
+    const lectureCount = courseLectureCount(c.id, isAdmin);
     return `
     <div class="course-card">
       <div class="course-top"></div>
@@ -1808,17 +1824,17 @@ function pageMyTeachCourses(){
   }
   const myCourses = state.courses.filter(c=>c.teacherId===state.session.teacherId);
   const rows = myCourses.map(c => {
-    const lectureCount = state.lectures.filter(l=>l.courseId===c.id).length;
+    const lectureCount = courseLectureCount(c.id, true);
     const studentCount = enrollmentsFor(c.id).length;
     return `
     <a href="/course/${c.id}" class="my-course-row">
       <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
       <div class="my-course-info">
         <div class="my-course-row-top">
-          <h3 class="i18n-skip">${escapeHtml(c.title)}</h3>
-          <span class="chip i18n-skip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
+          <h3>${escapeHtml(c.title)}</h3>
+          <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
         </div>
-        <div class="course-uni i18n-skip">${escapeHtml(c.university)}</div>
+        <div class="course-uni">${escapeHtml(c.university)}</div>
         <div class="course-stats-row" style="margin-bottom:0;">
           <span class="course-stat-chip">⏱ ${c.hours} ساعات</span>
           <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
@@ -1850,7 +1866,7 @@ function pageMyCourses(){
   const myCourseIds = myEnrollments.map(e=>e.courseId);
   const courses = state.courses.filter(c=>myCourseIds.includes(c.id));
   const rows = courses.map(c => {
-    const lectureCount = state.lectures.filter(l=>l.courseId===c.id).length;
+    const lectureCount = courseLectureCount(c.id, false);
     const myEntries = myEnrollments.filter(e=>e.courseId===c.id);
     const sectionsLabel = myEntries.some(e=>!e.section) ? 'الكورس بالكامل' : myEntries.map(e=>SECTION_LABELS[e.section]).join(' + ');
     const { watched, total, pct } = courseProgress(c.id);
@@ -1859,10 +1875,10 @@ function pageMyCourses(){
       <div class="course-emblem">${majorEmblem(c.major || 'التمريض')}</div>
       <div class="my-course-info">
         <div class="my-course-row-top">
-          <h3 class="i18n-skip">${escapeHtml(c.title)}</h3>
-          <span class="chip i18n-skip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
+          <h3>${escapeHtml(c.title)}</h3>
+          <span class="chip" style="cursor:default; padding:4px 10px; font-size:12px;">${escapeHtml(c.major || 'التمريض')}</span>
         </div>
-        <div class="course-uni i18n-skip">${escapeHtml(c.university)}</div>
+        <div class="course-uni">${escapeHtml(c.university)}</div>
         <div class="course-stats-row" style="margin-bottom:0;">
           <span class="course-stat-chip">⏱ ${c.hours} ساعات</span>
           <span class="course-stat-chip">🎬 ${lectureCount} محاضرة</span>
@@ -2027,7 +2043,7 @@ function pageCourseDetail(courseId){
   if(!course){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>الكورس غير موجود</h3><p>ربما تم حذفه. <a href="/courses" style="color:var(--teal); font-weight:800;">عودة إلى الدورات</a></p></div></div></section>`;
   }
-  const lectures = state.lectures.filter(l=>l.courseId===courseId);
+  const lectures = state.lectures.filter(l=>l.courseId===courseId && (canManageLectures || !l.hidden));
   /* الأدمن يشوف الأقسام المفعّلة لهذه المادة تحديدًا (بعض المواد فيها ميد وفاينال بس مثلًا)،
      والطالب يشوف بس الأقسام اللي فيها محاضرات فعليًا من ضمنها */
   const courseSecs = courseSections(courseId);
@@ -2066,12 +2082,13 @@ function pageCourseDetail(courseId){
     const isStudent = state.session && state.session.type === 'student';
     const watched = isStudent && isLectureWatched(l.id);
     return `
-    <details class="lecture-row ${unlocked?'':'locked'} ${watched?'watched':''}">
+    <details class="lecture-row ${unlocked?'':'locked'} ${watched?'watched':''} ${l.hidden?'lecture-hidden':''}">
       <summary class="lecture-row-summary">
         <div class="lecture-num">${watched ? '✓' : (i+1)}</div>
         <div class="lecture-row-main">
           <h4>${escapeHtml(l.title)}</h4>
         </div>
+        ${canManageLectures && l.hidden ? `<span class="lecture-tier-tag locked">🙈 مخفية عن الطلاب</span>` : ''}
         <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg></span>
       </summary>
       <div class="lecture-row-content">
@@ -2086,7 +2103,11 @@ function pageCourseDetail(courseId){
           ${hasMedia ? (videoRowsHtml + fileRowsHtml) : `<div class="lecture-lock-msg">${ICONS.play} لم تتم إضافة فيديو أو ملف لهذه المحاضرة بعد</div>`}
         </div>` : `
         <div class="lecture-lock-msg">${ICONS.lock} ${lockMsg}</div>`}
-        ${canManageLectures ? `<div class="lecture-row-admin"><button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button></div>` : ''}
+        ${canManageLectures ? `<div class="lecture-row-admin">
+          <button class="btn ${l.hidden?'teal':''} small" data-toggle-lecture-hidden="${l.id}">${l.hidden ? '👁️ إظهار للطلاب' : '🙈 إخفاء عن الطلاب'}</button>
+          <button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button>
+          <button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button>
+        </div>` : ''}
       </div>
     </details>
   `;
@@ -2375,6 +2396,8 @@ function isLectureIncluded(lid){
 function isLectureAccessibleForBank(lid){
   const l = state.lectures.find(x=>x.id===lid);
   if(!l) return false;
+  const course = state.courses.find(c=>c.id===l.courseId);
+  if(l.hidden && !isAdminSession() && !isCourseOwnerTeacher(course)) return false;
   return sectionUnlocked(l.courseId, l.section);
 }
 
@@ -2458,7 +2481,7 @@ function pageBankSetup(){
 
     /* الطالب لا يرى إلا محاضرات الأقسام (فيرست/ميد/فاينال) المفعّلة لديه فعليًا لهذا الكورس؛
        الأدمن يرى الجميع لأن sectionUnlocked تعتبره مفعّلًا بكل الأقسام دائمًا. */
-    const allCourseLectures = state.lectures.filter(l=>l.courseId===quiz.courseId);
+    const allCourseLectures = state.lectures.filter(l=>l.courseId===quiz.courseId && (isAdmin || !l.hidden));
     const lectures = allCourseLectures.filter(l=> sectionUnlocked(quiz.courseId, l.section));
     const lockedLecturesCount = allCourseLectures.length - lectures.length;
     const countFor = (lid) => state.questions.filter(q=>q.courseId===quiz.courseId && q.lectureId===lid && (quiz.nature==='both' || (q.nature||'past')===quiz.nature)).length;
@@ -4290,6 +4313,9 @@ function modalAddLecture(courseId){
         <div class="link-rows" id="fileRows"></div>
         <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
       </div>
+      <div class="field">
+        <label class="watch-toggle"><input type="checkbox" name="hidden"><span>🙈 إخفاء هذه المحاضرة عن الطلاب (تبقى محفوظة، ويمكنك إظهارها لاحقًا)</span></label>
+      </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ المحاضرة</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
@@ -4313,6 +4339,7 @@ function modalAddLecture(courseId){
       description:(fd.get('description')||'').trim(),
       videos: [...collectVideoRows('videoRows'), ...manualVideos],
       files: collectLinkRows('fileRows'),
+      hidden: fd.get('hidden') === 'on',
     });
     await setData('lectures', state.lectures, true);
     closeModal(); render();
@@ -4347,6 +4374,9 @@ function modalEditLecture(lectureId){
         <div class="link-rows" id="fileRows">${files.map(f=>linkRowHtml(f.label,f.url)).join('')}</div>
         <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
       </div>
+      <div class="field">
+        <label class="watch-toggle"><input type="checkbox" name="hidden" ${lecture.hidden?'checked':''}><span>🙈 إخفاء هذه المحاضرة عن الطلاب (تبقى محفوظة، ويمكنك إظهارها لاحقًا)</span></label>
+      </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
@@ -4366,6 +4396,7 @@ function modalEditLecture(lectureId){
     lecture.section = SECTIONS.includes(fd.get('section')) ? fd.get('section') : 'first';
     lecture.videos = [...collectVideoRows('videoRows'), ...manualVideos];
     lecture.files = collectLinkRows('fileRows');
+    lecture.hidden = fd.get('hidden') === 'on';
     delete lecture.videoUrl; delete lecture.fileUrl;
     await setData('lectures', state.lectures, true);
     closeModal(); render();
@@ -5119,7 +5150,7 @@ function wireAiSummaryPage(){
 
   function refreshLectures(){
     const courseId = courseSelect.value;
-    const lectures = state.lectures.filter(l=>l.courseId===courseId);
+    const lectures = state.lectures.filter(l=>l.courseId===courseId && !l.hidden);
     lectureSelect.innerHTML = `<option value="">بدون تحديد (عام)</option>` + lectures.map(l=>`<option value="${l.id}">${escapeHtml(l.title)}</option>`).join('');
     refreshBankHint();
   }
@@ -5940,6 +5971,9 @@ function bindPageEvents(route){
     });
     document.querySelectorAll('[data-edit-lecture]').forEach(btn=>{
       btn.addEventListener('click', ()=> modalEditLecture(btn.dataset.editLecture));
+    });
+    document.querySelectorAll('[data-toggle-lecture-hidden]').forEach(btn=>{
+      btn.addEventListener('click', ()=> toggleLectureHidden(btn.dataset.toggleLectureHidden));
     });
     document.querySelectorAll('[data-del-lecture]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
