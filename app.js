@@ -231,7 +231,7 @@ let state = {
   courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [], books: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', coursePage: 1, bankAdminView: false, bankNotesView: false, content: {}, teachers: [],
   bankManageCourseId: null, bankManageLectureId: '',
-  libraryMajorFilter: 'الكل', librarySearch: '',
+  libraryCurrentId: null,
 };
 
 /* =========================================================
@@ -3307,11 +3307,33 @@ async function deleteStudent(phone){
    PAGE: ABOUT
    ========================================================= */
 /* =========================================================
-   PAGE: مكتبة التمريض (Books Library)
-   مرجع مركزي لكتب/ملفات PDF يقدر الطالب يرجع لها من أي مكان،
-   وممكن تُربط لاحقًا بمحاضرات معينة. نفس نمط التخزين المستخدم
-   بباقي المشروع: state.books[] + setData('books', ..., true).
-   ========================================================= */
+   PAGE: مكتبة التمريض (Books Library) — بنية شجرية
+   state.books[] عبارة عن عقد (nodes) بنوعين:
+     - type:'folder' → parentId=null تعتبر "مادة" (المستوى الجذري)،
+       وparentId مش null تعتبر مجلد فرعي جوا مادة/مجلد آخر (تعشيش بلا حد).
+     - type:'file'   → ملف فعلي (رابط PDF) جوا أي مادة/مجلد.
+   نفس نمط التخزين المستخدم بباقي المشروع: setData('books', ..., true).
+   التنقّل بين المجلدات محلي بالواجهة (state.libraryCurrentId) بدون
+   تغيير الرابط، بنفس فكرة معالج بنك الأسئلة (quiz state). */
+function libraryNode(id){ return (state.books||[]).find(n=>n.id===id); }
+function libraryChildren(parentId){ return (state.books||[]).filter(n=>(n.parentId||null)===(parentId||null)); }
+function libraryBreadcrumb(id){
+  const trail = [];
+  let cur = id ? libraryNode(id) : null;
+  while(cur){ trail.unshift(cur); cur = cur.parentId ? libraryNode(cur.parentId) : null; }
+  return trail;
+}
+function libraryDescendantIds(id){
+  const direct = (state.books||[]).filter(n=>n.parentId===id);
+  let all = direct.map(n=>n.id);
+  direct.forEach(n=>{ if(n.type==='folder') all = all.concat(libraryDescendantIds(n.id)); });
+  return all;
+}
+function deleteLibraryNode(id){
+  const idsToRemove = new Set([id, ...libraryDescendantIds(id)]);
+  state.books = state.books.filter(n=>!idsToRemove.has(n.id));
+}
+
 function pageLibrary(){
   if(!isLibraryAllowed()){
     if(!state.session){
@@ -3320,129 +3342,164 @@ function pageLibrary(){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>غير متاح لحسابك</h3><p>مكتبة التمريض متاحة حاليًا فقط لطلاب التمريض المسجّلين في جامعة مؤتة.</p></div></div></section>`;
   }
   const isAdmin = state.session && state.session.type === 'admin';
-  const majorFilters = ['الكل', ...MAJORS.map(m=>m.name)];
-  const activeFilter = state.libraryMajorFilter || 'الكل';
-  const search = (state.librarySearch || '').trim().toLowerCase();
 
-  let books = state.books || [];
-  if(activeFilter !== 'الكل') books = books.filter(b => (b.major||'') === activeFilter);
-  if(search) books = books.filter(b =>
-    (b.title||'').toLowerCase().includes(search) ||
-    (b.author||'').toLowerCase().includes(search) ||
-    (b.subject||'').toLowerCase().includes(search)
-  );
+  let currentId = state.libraryCurrentId || null;
+  let currentNode = currentId ? libraryNode(currentId) : null;
+  if(currentId && !currentNode){ currentId = null; state.libraryCurrentId = null; } // مجلد محذوف/غير موجود: رجوع للجذر
 
-  const majorOptions = majorFilters.map(f => `<option value="${escapeHtml(f)}" ${activeFilter===f?'selected':''}>${escapeHtml(f)}</option>`).join('');
+  const trail = libraryBreadcrumb(currentId);
+  const children = libraryChildren(currentId);
+  const folders = children.filter(n=>n.type==='folder');
+  const files = children.filter(n=>n.type==='file');
 
-  const cards = books.map(b => `
+  const breadcrumbHtml = `
+    <div class="toolbar" style="gap:8px; flex-wrap:wrap;">
+      <button type="button" class="chip${!currentId?' active':''}" data-open-folder="">🏠 مكتبة التمريض</button>
+      ${trail.map(n=>`<span style="color:var(--muted);">›</span><button type="button" class="chip${n.id===currentId?' active':''}" data-open-folder="${n.id}">📁 ${escapeHtml(n.title)}</button>`).join('')}
+    </div>`;
+
+  const addToolbarHtml = isAdmin ? `
+    <div class="toolbar" style="justify-content:flex-end; gap:10px;">
+      ${!currentId
+        ? `<button class="btn teal solid" id="addSubjectBtn">${ICONS.plus} إضافة مادة جديدة</button>`
+        : `<button class="btn small" id="addFolderBtn">${ICONS.plus} إضافة مجلد</button>
+           <button class="btn teal solid small" id="addFileBtn">${ICONS.plus} إضافة ملف</button>`}
+    </div>` : '';
+
+  const folderCards = folders.map(f=>{
+    const itemCount = libraryChildren(f.id).length;
+    return `
+    <div class="course-card" data-open-folder="${f.id}" style="cursor:pointer;">
+      <div class="course-top"></div>
+      <div class="course-body">
+        <div class="course-emblem">📁</div>
+        <h3 class="i18n-skip">${escapeHtml(f.title)}</h3>
+        <p>${itemCount} عنصر</p>
+        ${isAdmin ? `<div class="course-actions">
+          <button class="btn edit small" data-edit-folder="${f.id}">${ICONS.edit} تعديل</button>
+          <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash} حذف</button>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const fileCards = files.map(f=>`
     <div class="course-card">
       <div class="course-top"></div>
       <div class="course-body">
-        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
-          <div class="course-emblem">${b.coverUrl ? `<img src="${escapeHtml(b.coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" onerror="this.remove()">` : ICONS.book}</div>
-          ${b.major ? `<span class="lecture-tier-tag">${escapeHtml(b.major)}</span>` : ''}
-        </div>
-        <h3 class="i18n-skip">${escapeHtml(b.title)}</h3>
-        ${b.author ? `<p class="i18n-skip" style="margin:0 0 4px;">✍️ ${escapeHtml(b.author)}</p>` : ''}
-        ${b.subject ? `<p class="i18n-skip">${escapeHtml(b.subject)}</p>` : ''}
+        <div class="course-emblem">${ICONS.book}</div>
+        <h3 class="i18n-skip">${escapeHtml(f.title)}</h3>
+        ${f.author ? `<p class="i18n-skip">✍️ ${escapeHtml(f.author)}</p>` : ''}
         <div class="course-actions">
-          ${b.fileUrl ? `<a href="${escapeHtml(b.fileUrl)}" target="_blank" rel="noopener" class="btn teal small">${ICONS.download} فتح الكتاب</a>` : ''}
-          ${isAdmin ? `<button class="btn edit small" data-edit-book="${b.id}">${ICONS.edit} تعديل</button>` : ''}
-          ${isAdmin ? `<button class="btn danger small" data-del-book="${b.id}">${ICONS.trash} حذف</button>` : ''}
+          <a href="${escapeHtml(f.fileUrl)}" target="_blank" rel="noopener" class="btn teal small">${ICONS.download} فتح الملف</a>
+          ${isAdmin ? `<button class="btn edit small" data-edit-file="${f.id}">${ICONS.edit} تعديل</button>` : ''}
+          ${isAdmin ? `<button class="btn danger small" data-del-node="${f.id}">${ICONS.trash} حذف</button>` : ''}
         </div>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
+
+  const emptyHtml = `<div class="empty-state"><h3>${currentId ? 'هذا المجلد فارغ' : 'لا توجد مواد بعد'}</h3><p>${isAdmin ? (currentId ? 'أضف مجلدًا أو ملفًا جديدًا.' : 'أضف مادة جديدة لتبدأ.') : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
 
   return `
   <section class="section">
     <div class="container">
       <div class="courses-hero">
         <div class="courses-hero-inner">
-          <h2>مكتبة التمريض</h2>
-          <p>مرجعك الدائم من الكتب والملخصات المرجعية بصيغة PDF، تدعم محاضراتك ومذاكرتك</p>
-          <div class="courses-search">
-            <span class="search-icon">🔍</span>
-            <input type="text" id="librarySearchInput" placeholder="ابحث عن كتاب، مؤلف، أو مادة..." value="${escapeHtml(state.librarySearch||'')}">
-          </div>
+          <h2>${currentNode ? escapeHtml(currentNode.title) : 'مكتبة التمريض'}</h2>
+          <p>${currentNode ? 'تصفّح محتوى هذا المجلد' : 'مرجعك الدائم من كتب وملفات المواد، منظّمة داخل مجلدات لكل مادة'}</p>
         </div>
       </div>
-      ${isAdmin ? `<div class="toolbar" style="justify-content:flex-end;"><button class="btn teal solid" id="addBookBtn">${ICONS.plus} إضافة كتاب جديد</button></div>` : ''}
-      <div class="filter-dropdown-bar">
-        <div class="filter-dropdown">
-          <label>التخصص</label>
-          <select id="libraryMajorFilterSelect">${majorOptions}</select>
-        </div>
-      </div>
-      ${books.length
-        ? `<div class="course-canvas"><div class="course-grid">${cards}</div></div>`
-        : `<div class="empty-state"><h3>لا توجد كتب ضمن هذا التصنيف بعد</h3><p>جرّب تصنيفًا آخر${isAdmin ? '، أو أضف كتابًا جديدًا.' : '.'}</p></div>`}
+      ${breadcrumbHtml}
+      ${addToolbarHtml}
+      ${(folders.length || files.length) ? `<div class="course-canvas"><div class="course-grid">${folderCards}${fileCards}</div></div>` : emptyHtml}
     </div>
   </section>
   `;
 }
 
-function modalAddBook(){
-  const majorOptions = MAJORS.map(m=>`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
+function modalAddFolder(parentId){
   openModal(`
-    <h3>${ICONS.book} إضافة كتاب جديد</h3>
-    <form id="bookForm">
-      <div class="field"><label>عنوان الكتاب</label><input type="text" name="title" required maxlength="120" placeholder="مثال: أساسيات التمريض السريري"></div>
-      <div class="field"><label>المؤلف (اختياري)</label><input type="text" name="author" maxlength="80" placeholder="اسم المؤلف"></div>
-      <div class="field"><label>التخصص</label><select name="major"><option value="">— بدون تحديد —</option>${majorOptions}</select></div>
-      <div class="field"><label>المادة/الموضوع (اختياري)</label><input type="text" name="subject" maxlength="80" placeholder="مثال: صحة الأم والطفل"></div>
-      <div class="field"><label>رابط الملف (PDF)</label><input type="url" name="fileUrl" required placeholder="https://..." style="direction:ltr; text-align:start;"></div>
-      <div class="field"><label>رابط صورة الغلاف (اختياري)</label><input type="url" name="coverUrl" placeholder="https://..." style="direction:ltr; text-align:start;"></div>
-      <div id="bookMsg"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ الكتاب</button></div>
+    <h3>${ICONS.plus} ${parentId ? 'إضافة مجلد جديد' : 'إضافة مادة جديدة'}</h3>
+    <form id="folderForm">
+      <div class="field"><label>${parentId ? 'اسم المجلد' : 'اسم المادة'}</label><input type="text" name="title" required maxlength="100" placeholder="${parentId ? 'مثال: الفصل الأول' : 'مثال: تمريض صحة الأم والطفل'}"></div>
+      <div id="folderMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
-  document.getElementById('bookForm').addEventListener('submit', async (e)=>{
+  document.getElementById('folderForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
     const title = fd.get('title').trim();
-    const fileUrl = fd.get('fileUrl').trim();
-    if(!title || !fileUrl){
-      document.getElementById('bookMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان ورابط الملف.</div>`; return;
-    }
-    state.books.push({
-      id: 'bk'+Date.now(),
-      title, author: fd.get('author').trim(), major: fd.get('major'),
-      subject: fd.get('subject').trim(), fileUrl, coverUrl: fd.get('coverUrl').trim(),
-      createdAt: Date.now(),
-    });
+    if(!title){ document.getElementById('folderMsg').innerHTML = `<div class="form-msg error">يرجى إدخال الاسم.</div>`; return; }
+    state.books.push({ id:'fld'+Date.now(), type:'folder', parentId: parentId||null, title, createdAt: Date.now() });
     await setData('books', state.books, true);
     closeModal(); render();
   });
 }
 
-function modalEditBook(bookId){
-  const b = state.books.find(x=>x.id===bookId);
-  if(!b) return;
-  const majorOptions = MAJORS.map(m=>`<option value="${escapeHtml(m.name)}" ${b.major===m.name?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
+function modalEditFolder(id){
+  const n = libraryNode(id); if(!n) return;
   openModal(`
-    <h3>${ICONS.edit} تعديل الكتاب</h3>
-    <form id="bookEditForm">
-      <div class="field"><label>عنوان الكتاب</label><input type="text" name="title" required maxlength="120" value="${escapeHtml(b.title)}"></div>
-      <div class="field"><label>المؤلف (اختياري)</label><input type="text" name="author" maxlength="80" value="${escapeHtml(b.author||'')}"></div>
-      <div class="field"><label>التخصص</label><select name="major"><option value="">— بدون تحديد —</option>${majorOptions}</select></div>
-      <div class="field"><label>المادة/الموضوع (اختياري)</label><input type="text" name="subject" maxlength="80" value="${escapeHtml(b.subject||'')}"></div>
-      <div class="field"><label>رابط الملف (PDF)</label><input type="url" name="fileUrl" required value="${escapeHtml(b.fileUrl||'')}" style="direction:ltr; text-align:start;"></div>
-      <div class="field"><label>رابط صورة الغلاف (اختياري)</label><input type="url" name="coverUrl" value="${escapeHtml(b.coverUrl||'')}" style="direction:ltr; text-align:start;"></div>
-      <div id="bookMsg"></div>
+    <h3>${ICONS.edit} تعديل ${n.parentId ? 'المجلد' : 'المادة'}</h3>
+    <form id="folderEditForm">
+      <div class="field"><label>الاسم</label><input type="text" name="title" required maxlength="100" value="${escapeHtml(n.title)}"></div>
+      <div id="folderMsg"></div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
-  document.getElementById('bookEditForm').addEventListener('submit', async (e)=>{
+  document.getElementById('folderEditForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const title = fd.get('title').trim();
+    if(!title){ document.getElementById('folderMsg').innerHTML = `<div class="form-msg error">يرجى إدخال الاسم.</div>`; return; }
+    n.title = title;
+    await setData('books', state.books, true);
+    closeModal(); render();
+  });
+}
+
+function modalAddFile(parentId){
+  openModal(`
+    <h3>${ICONS.book} إضافة ملف جديد</h3>
+    <form id="fileForm">
+      <div class="field"><label>عنوان الملف</label><input type="text" name="title" required maxlength="120" placeholder="مثال: ملخص المحاضرة الأولى"></div>
+      <div class="field"><label>المؤلف (اختياري)</label><input type="text" name="author" maxlength="80" placeholder="اسم المؤلف"></div>
+      <div class="field"><label>رابط الملف (PDF)</label><input type="url" name="fileUrl" required placeholder="https://..." style="direction:ltr; text-align:start;"></div>
+      <div id="fileMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ الملف</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('fileForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
     const title = fd.get('title').trim();
     const fileUrl = fd.get('fileUrl').trim();
-    if(!title || !fileUrl){
-      document.getElementById('bookMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان ورابط الملف.</div>`; return;
-    }
-    b.title = title; b.author = fd.get('author').trim(); b.major = fd.get('major');
-    b.subject = fd.get('subject').trim(); b.fileUrl = fileUrl; b.coverUrl = fd.get('coverUrl').trim();
+    if(!title || !fileUrl){ document.getElementById('fileMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان ورابط الملف.</div>`; return; }
+    state.books.push({ id:'file'+Date.now(), type:'file', parentId: parentId||null, title, author: fd.get('author').trim(), fileUrl, createdAt: Date.now() });
+    await setData('books', state.books, true);
+    closeModal(); render();
+  });
+}
+
+function modalEditFile(id){
+  const n = libraryNode(id); if(!n) return;
+  openModal(`
+    <h3>${ICONS.edit} تعديل الملف</h3>
+    <form id="fileEditForm">
+      <div class="field"><label>عنوان الملف</label><input type="text" name="title" required maxlength="120" value="${escapeHtml(n.title)}"></div>
+      <div class="field"><label>المؤلف (اختياري)</label><input type="text" name="author" maxlength="80" value="${escapeHtml(n.author||'')}"></div>
+      <div class="field"><label>رابط الملف (PDF)</label><input type="url" name="fileUrl" required value="${escapeHtml(n.fileUrl||'')}" style="direction:ltr; text-align:start;"></div>
+      <div id="fileMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('fileEditForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const title = fd.get('title').trim();
+    const fileUrl = fd.get('fileUrl').trim();
+    if(!title || !fileUrl){ document.getElementById('fileMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان ورابط الملف.</div>`; return; }
+    n.title = title; n.author = fd.get('author').trim(); n.fileUrl = fileUrl;
     await setData('books', state.books, true);
     closeModal(); render();
   });
@@ -6061,30 +6118,35 @@ function bindPageEvents(route){
   }
 
   if(route === 'library'){
-    const majorSel = document.getElementById('libraryMajorFilterSelect');
-    if(majorSel) majorSel.addEventListener('change', ()=>{ state.libraryMajorFilter = majorSel.value; render(); });
-    const searchInput = document.getElementById('librarySearchInput');
-    if(searchInput){
-      searchInput.addEventListener('input', ()=>{
-        state.librarySearch = searchInput.value;
-        render().then(()=>{
-          const el = document.getElementById('librarySearchInput');
-          if(el){ el.focus(); const pos = el.value.length; el.setSelectionRange(pos,pos); }
-        });
+    document.querySelectorAll('[data-open-folder]').forEach(el=>{
+      el.addEventListener('click', (e)=>{
+        if(e.target.closest('[data-edit-folder],[data-edit-file],[data-del-node]')) return;
+        state.libraryCurrentId = el.dataset.openFolder || null;
+        render();
       });
-    }
-    const addBtn = document.getElementById('addBookBtn');
-    if(addBtn) addBtn.addEventListener('click', modalAddBook);
-    document.querySelectorAll('[data-edit-book]').forEach(btn=>{
-      btn.addEventListener('click', ()=> modalEditBook(btn.dataset.editBook));
     });
-    document.querySelectorAll('[data-del-book]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const id = btn.dataset.delBook;
-        confirmDelete('سيتم حذف هذا الكتاب من المكتبة نهائيًا. هل أنت متأكد؟', async ()=>{
-          state.books = state.books.filter(x=>x.id!==id);
-          await setData('books', state.books, true);
-        });
+    const addSubjectBtn = document.getElementById('addSubjectBtn');
+    if(addSubjectBtn) addSubjectBtn.addEventListener('click', ()=> modalAddFolder(null));
+    const addFolderBtn = document.getElementById('addFolderBtn');
+    if(addFolderBtn) addFolderBtn.addEventListener('click', ()=> modalAddFolder(state.libraryCurrentId));
+    const addFileBtn = document.getElementById('addFileBtn');
+    if(addFileBtn) addFileBtn.addEventListener('click', ()=> modalAddFile(state.libraryCurrentId));
+    document.querySelectorAll('[data-edit-folder]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); modalEditFolder(btn.dataset.editFolder); });
+    });
+    document.querySelectorAll('[data-edit-file]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); modalEditFile(btn.dataset.editFile); });
+    });
+    document.querySelectorAll('[data-del-node]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const id = btn.dataset.delNode;
+        const node = libraryNode(id);
+        const isFolder = node && node.type === 'folder';
+        confirmDelete(
+          isFolder ? 'سيتم حذف هذا المجلد وكل ما بداخله (مجلدات وملفات) نهائيًا. هل أنت متأكد؟' : 'سيتم حذف هذا الملف نهائيًا. هل أنت متأكد؟',
+          async ()=>{ deleteLibraryNode(id); await setData('books', state.books, true); }
+        );
       });
     });
   }
