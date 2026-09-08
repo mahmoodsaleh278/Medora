@@ -231,7 +231,7 @@ let state = {
   courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [], books: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', coursePage: 1, bankAdminView: false, bankNotesView: false, content: {}, teachers: [],
   bankManageCourseId: null, bankManageLectureId: '',
-  libraryCurrentId: null, libraryOpenSubjectId: null,
+  libraryCurrentId: null, libraryOpenSubjectId: null, librarySearch: '',
 };
 
 /* =========================================================
@@ -3455,7 +3455,9 @@ function pageLibrary(){
   /* -------- المستوى الجذري: قائمة مواد مرتّبة عموديًا (أكورديون) + توسّع مباشرة تحت المادة عند الضغط -------- */
   if(!currentId){
     libraryEnsureAccordionStyles();
-    const subjects = libraryChildren(null); // كل المواد (مجلدات على مستوى الجذر)
+    const allSubjects = libraryChildren(null); // كل المواد (مجلدات على مستوى الجذر)
+    const searchTerm = (state.librarySearch || '').trim().toLowerCase();
+    const subjects = searchTerm ? allSubjects.filter(s => (s.title||'').toLowerCase().includes(searchTerm)) : allSubjects;
     let openId = state.libraryOpenSubjectId || null;
     let openSubject = openId ? libraryNode(openId) : null;
     if(openId && (!openSubject || openSubject.parentId)){ openId = null; openSubject = null; state.libraryOpenSubjectId = null; }
@@ -3508,7 +3510,9 @@ function pageLibrary(){
         <button class="btn teal solid" id="addSubjectBtn">${ICONS.plus} إضافة مادة جديدة</button>
       </div>` : '';
 
-    const rootEmptyHtml = `<div class="empty-state"><h3>لا توجد مواد بعد</h3><p>${isAdmin ? 'أضف مادة جديدة لتبدأ.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
+    const rootEmptyHtml = searchTerm
+      ? `<div class="empty-state"><h3>لا توجد نتائج</h3><p>ما لقينا مادة باسم "${escapeHtml(state.librarySearch.trim())}"، جرّب اسمًا آخر.</p></div>`
+      : `<div class="empty-state"><h3>لا توجد مواد بعد</h3><p>${isAdmin ? 'أضف مادة جديدة لتبدأ.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
 
     return `
     <section class="section">
@@ -3517,6 +3521,10 @@ function pageLibrary(){
           <div class="courses-hero-inner">
             <h2>مكتبة التمريض</h2>
             <p>مرجعك الدائم من كتب وملفات المواد، منظّمة داخل مجلدات لكل مادة</p>
+            <div class="courses-search">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="librarySearchInput" placeholder="ابحث عن مادة..." value="${escapeHtml(state.librarySearch||'')}">
+            </div>
           </div>
         </div>
         ${addSubjectHtml}
@@ -6290,6 +6298,16 @@ function bindPageEvents(route){
     });
     const addSubjectBtn = document.getElementById('addSubjectBtn');
     if(addSubjectBtn) addSubjectBtn.addEventListener('click', ()=> modalAddFolder(null));
+    const librarySearchInput = document.getElementById('librarySearchInput');
+    if(librarySearchInput){
+      librarySearchInput.addEventListener('input', ()=>{
+        state.librarySearch = librarySearchInput.value;
+        render().then(()=>{
+          const el = document.getElementById('librarySearchInput');
+          if(el){ el.focus(); const pos = el.value.length; el.setSelectionRange(pos,pos); }
+        });
+      });
+    }
     const addFolderBtn = document.getElementById('addFolderBtn');
     if(addFolderBtn) addFolderBtn.addEventListener('click', ()=> modalAddFolder(state.libraryCurrentId || state.libraryOpenSubjectId));
     const addFileBtn = document.getElementById('addFileBtn');
