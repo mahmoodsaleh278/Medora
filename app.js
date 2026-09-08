@@ -231,7 +231,7 @@ let state = {
   courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [], books: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', coursePage: 1, bankAdminView: false, bankNotesView: false, content: {}, teachers: [],
   bankManageCourseId: null, bankManageLectureId: '',
-  libraryCurrentId: null,
+  libraryCurrentId: null, libraryOpenSubjectId: null,
 };
 
 /* =========================================================
@@ -3334,6 +3334,40 @@ function deleteLibraryNode(id){
   state.books = state.books.filter(n=>!idsToRemove.has(n.id));
 }
 
+/* بطاقة مجلد أو ملف (تُستخدم داخل الشبكة العادية وداخل قائمة المادة المنسدلة) */
+function libraryFolderCardHtml(f, isAdmin){
+  const itemCount = libraryChildren(f.id).length;
+  return `
+  <div class="course-card" data-open-folder="${f.id}" style="cursor:pointer;">
+    <div class="course-top"></div>
+    <div class="course-body">
+      <div class="course-emblem">📁</div>
+      <h3 class="i18n-skip">${escapeHtml(f.title)}</h3>
+      <p>${itemCount} عنصر</p>
+      ${isAdmin ? `<div class="course-actions">
+        <button class="btn edit small" data-edit-folder="${f.id}">${ICONS.edit} تعديل</button>
+        <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash} حذف</button>
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+function libraryFileCardHtml(f, isAdmin){
+  return `
+  <div class="course-card">
+    <div class="course-top"></div>
+    <div class="course-body">
+      <div class="course-emblem">${ICONS.book}</div>
+      <h3 class="i18n-skip">${escapeHtml(f.title)}</h3>
+      ${f.author ? `<p class="i18n-skip">✍️ ${escapeHtml(f.author)}</p>` : ''}
+      <div class="course-actions">
+        <a href="${escapeHtml(f.fileUrl)}" target="_blank" rel="noopener" class="btn teal small">${ICONS.download} فتح الملف</a>
+        ${isAdmin ? `<button class="btn edit small" data-edit-file="${f.id}">${ICONS.edit} تعديل</button>` : ''}
+        ${isAdmin ? `<button class="btn danger small" data-del-node="${f.id}">${ICONS.trash} حذف</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
 function pageLibrary(){
   if(!isLibraryAllowed()){
     if(!state.session){
@@ -3347,6 +3381,86 @@ function pageLibrary(){
   let currentNode = currentId ? libraryNode(currentId) : null;
   if(currentId && !currentNode){ currentId = null; state.libraryCurrentId = null; } // مجلد محذوف/غير موجود: رجوع للجذر
 
+  /* -------- المستوى الجذري: عرض المواد أفقيًا + قائمة منسدلة عند الضغط -------- */
+  if(!currentId){
+    const subjects = libraryChildren(null); // كل المواد (مجلدات على مستوى الجذر)
+    let openId = state.libraryOpenSubjectId || null;
+    let openSubject = openId ? libraryNode(openId) : null;
+    if(openId && (!openSubject || openSubject.parentId)){ openId = null; openSubject = null; state.libraryOpenSubjectId = null; }
+
+    const subjectChips = subjects.map(s=>{
+      const itemCount = libraryChildren(s.id).length;
+      const isOpen = s.id === openId;
+      return `
+      <div class="course-card${isOpen ? ' active' : ''}" data-toggle-subject="${s.id}"
+           style="cursor:pointer; flex:0 0 190px; scroll-snap-align:start; ${isOpen ? 'box-shadow:0 0 0 2px var(--teal, #0f9d8f) inset;' : ''}">
+        <div class="course-top"></div>
+        <div class="course-body">
+          <div class="course-emblem">📚</div>
+          <h3 class="i18n-skip">${escapeHtml(s.title)}</h3>
+          <p>${itemCount} عنصر</p>
+          <div style="text-align:center; font-size:14px; color:var(--teal, #0f9d8f); margin-top:4px;">${isOpen ? '▲ إخفاء المجلدات' : '▼ عرض المجلدات'}</div>
+          ${isAdmin ? `<div class="course-actions">
+            <button class="btn edit small" data-edit-folder="${s.id}">${ICONS.edit} تعديل</button>
+            <button class="btn danger small" data-del-node="${s.id}">${ICONS.trash} حذف</button>
+          </div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    const subjectsRowHtml = `
+      <div class="lib-subjects-row" style="display:flex; gap:14px; overflow-x:auto; padding:8px 2px 16px; scroll-snap-type:x proximity;">
+        ${subjectChips}
+      </div>`;
+
+    const addSubjectHtml = isAdmin ? `
+      <div class="toolbar" style="justify-content:flex-end;">
+        <button class="btn teal solid" id="addSubjectBtn">${ICONS.plus} إضافة مادة جديدة</button>
+      </div>` : '';
+
+    let dropdownHtml = '';
+    if(openSubject){
+      const subChildren = libraryChildren(openSubject.id);
+      const subFolders = subChildren.filter(n=>n.type==='folder');
+      const subFiles = subChildren.filter(n=>n.type==='file');
+      const subFolderCards = subFolders.map(f=>libraryFolderCardHtml(f, isAdmin)).join('');
+      const subFileCards = subFiles.map(f=>libraryFileCardHtml(f, isAdmin)).join('');
+      const subAddToolbar = isAdmin ? `
+        <div class="toolbar" style="justify-content:flex-end; gap:10px;">
+          <button class="btn small" id="addFolderBtn">${ICONS.plus} إضافة مجلد</button>
+          <button class="btn teal solid small" id="addFileBtn">${ICONS.plus} إضافة ملف</button>
+        </div>` : '';
+      const subEmptyHtml = `<div class="empty-state"><h3>هذا المجلد فارغ</h3><p>${isAdmin ? 'أضف مجلدًا أو ملفًا جديدًا.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
+      dropdownHtml = `
+        <div class="lib-subject-dropdown" style="margin-top:4px; padding-top:16px; border-top:1px dashed var(--border, rgba(120,120,120,.3));">
+          <div class="toolbar" style="gap:8px;">
+            <span class="chip active">📁 ${escapeHtml(openSubject.title)}</span>
+          </div>
+          ${subAddToolbar}
+          ${(subFolders.length || subFiles.length) ? `<div class="course-canvas"><div class="course-grid">${subFolderCards}${subFileCards}</div></div>` : subEmptyHtml}
+        </div>`;
+    }
+
+    const rootEmptyHtml = `<div class="empty-state"><h3>لا توجد مواد بعد</h3><p>${isAdmin ? 'أضف مادة جديدة لتبدأ.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
+
+    return `
+    <section class="section">
+      <div class="container">
+        <div class="courses-hero">
+          <div class="courses-hero-inner">
+            <h2>مكتبة التمريض</h2>
+            <p>مرجعك الدائم من كتب وملفات المواد، منظّمة داخل مجلدات لكل مادة</p>
+          </div>
+        </div>
+        ${addSubjectHtml}
+        ${subjects.length ? subjectsRowHtml : rootEmptyHtml}
+        ${dropdownHtml}
+      </div>
+    </section>
+    `;
+  }
+
+  /* -------- داخل مادة/مجلد: نفس التصفّح الشجري المعتاد بالتنقّل والمسار -------- */
   const trail = libraryBreadcrumb(currentId);
   const children = libraryChildren(currentId);
   const folders = children.filter(n=>n.type==='folder');
@@ -3354,59 +3468,28 @@ function pageLibrary(){
 
   const breadcrumbHtml = `
     <div class="toolbar" style="gap:8px; flex-wrap:wrap;">
-      <button type="button" class="chip${!currentId?' active':''}" data-open-folder="">🏠 مكتبة التمريض</button>
+      <button type="button" class="chip" data-open-folder="">🏠 مكتبة التمريض</button>
       ${trail.map(n=>`<span style="color:var(--muted);">›</span><button type="button" class="chip${n.id===currentId?' active':''}" data-open-folder="${n.id}">📁 ${escapeHtml(n.title)}</button>`).join('')}
     </div>`;
 
   const addToolbarHtml = isAdmin ? `
     <div class="toolbar" style="justify-content:flex-end; gap:10px;">
-      ${!currentId
-        ? `<button class="btn teal solid" id="addSubjectBtn">${ICONS.plus} إضافة مادة جديدة</button>`
-        : `<button class="btn small" id="addFolderBtn">${ICONS.plus} إضافة مجلد</button>
-           <button class="btn teal solid small" id="addFileBtn">${ICONS.plus} إضافة ملف</button>`}
+      <button class="btn small" id="addFolderBtn">${ICONS.plus} إضافة مجلد</button>
+      <button class="btn teal solid small" id="addFileBtn">${ICONS.plus} إضافة ملف</button>
     </div>` : '';
 
-  const folderCards = folders.map(f=>{
-    const itemCount = libraryChildren(f.id).length;
-    return `
-    <div class="course-card" data-open-folder="${f.id}" style="cursor:pointer;">
-      <div class="course-top"></div>
-      <div class="course-body">
-        <div class="course-emblem">📁</div>
-        <h3 class="i18n-skip">${escapeHtml(f.title)}</h3>
-        <p>${itemCount} عنصر</p>
-        ${isAdmin ? `<div class="course-actions">
-          <button class="btn edit small" data-edit-folder="${f.id}">${ICONS.edit} تعديل</button>
-          <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash} حذف</button>
-        </div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
+  const folderCards = folders.map(f=>libraryFolderCardHtml(f, isAdmin)).join('');
+  const fileCards = files.map(f=>libraryFileCardHtml(f, isAdmin)).join('');
 
-  const fileCards = files.map(f=>`
-    <div class="course-card">
-      <div class="course-top"></div>
-      <div class="course-body">
-        <div class="course-emblem">${ICONS.book}</div>
-        <h3 class="i18n-skip">${escapeHtml(f.title)}</h3>
-        ${f.author ? `<p class="i18n-skip">✍️ ${escapeHtml(f.author)}</p>` : ''}
-        <div class="course-actions">
-          <a href="${escapeHtml(f.fileUrl)}" target="_blank" rel="noopener" class="btn teal small">${ICONS.download} فتح الملف</a>
-          ${isAdmin ? `<button class="btn edit small" data-edit-file="${f.id}">${ICONS.edit} تعديل</button>` : ''}
-          ${isAdmin ? `<button class="btn danger small" data-del-node="${f.id}">${ICONS.trash} حذف</button>` : ''}
-        </div>
-      </div>
-    </div>`).join('');
-
-  const emptyHtml = `<div class="empty-state"><h3>${currentId ? 'هذا المجلد فارغ' : 'لا توجد مواد بعد'}</h3><p>${isAdmin ? (currentId ? 'أضف مجلدًا أو ملفًا جديدًا.' : 'أضف مادة جديدة لتبدأ.') : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
+  const emptyHtml = `<div class="empty-state"><h3>هذا المجلد فارغ</h3><p>${isAdmin ? 'أضف مجلدًا أو ملفًا جديدًا.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
 
   return `
   <section class="section">
     <div class="container">
       <div class="courses-hero">
         <div class="courses-hero-inner">
-          <h2>${currentNode ? escapeHtml(currentNode.title) : 'مكتبة التمريض'}</h2>
-          <p>${currentNode ? 'تصفّح محتوى هذا المجلد' : 'مرجعك الدائم من كتب وملفات المواد، منظّمة داخل مجلدات لكل مادة'}</p>
+          <h2>${escapeHtml(currentNode.title)}</h2>
+          <p>تصفّح محتوى هذا المجلد</p>
         </div>
       </div>
       ${breadcrumbHtml}
@@ -6118,19 +6201,33 @@ function bindPageEvents(route){
   }
 
   if(route === 'library'){
+    document.querySelectorAll('[data-toggle-subject]').forEach(el=>{
+      el.addEventListener('click', (e)=>{
+        if(e.target.closest('[data-edit-folder],[data-edit-file],[data-del-node]')) return;
+        const id = el.dataset.toggleSubject;
+        state.libraryOpenSubjectId = (state.libraryOpenSubjectId === id) ? null : id;
+        render();
+      });
+    });
     document.querySelectorAll('[data-open-folder]').forEach(el=>{
       el.addEventListener('click', (e)=>{
         if(e.target.closest('[data-edit-folder],[data-edit-file],[data-del-node]')) return;
-        state.libraryCurrentId = el.dataset.openFolder || null;
+        const targetId = el.dataset.openFolder || null;
+        if(!targetId){
+          /* الرجوع لمكتبة التمريض (المستوى الجذري): نُبقي مادة المسار مفتوحة بالقائمة المنسدلة */
+          const trail = libraryBreadcrumb(state.libraryCurrentId);
+          if(trail.length) state.libraryOpenSubjectId = trail[0].id;
+        }
+        state.libraryCurrentId = targetId;
         render();
       });
     });
     const addSubjectBtn = document.getElementById('addSubjectBtn');
     if(addSubjectBtn) addSubjectBtn.addEventListener('click', ()=> modalAddFolder(null));
     const addFolderBtn = document.getElementById('addFolderBtn');
-    if(addFolderBtn) addFolderBtn.addEventListener('click', ()=> modalAddFolder(state.libraryCurrentId));
+    if(addFolderBtn) addFolderBtn.addEventListener('click', ()=> modalAddFolder(state.libraryCurrentId || state.libraryOpenSubjectId));
     const addFileBtn = document.getElementById('addFileBtn');
-    if(addFileBtn) addFileBtn.addEventListener('click', ()=> modalAddFile(state.libraryCurrentId));
+    if(addFileBtn) addFileBtn.addEventListener('click', ()=> modalAddFile(state.libraryCurrentId || state.libraryOpenSubjectId));
     document.querySelectorAll('[data-edit-folder]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{ e.stopPropagation(); modalEditFolder(btn.dataset.editFolder); });
     });
