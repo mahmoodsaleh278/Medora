@@ -3347,7 +3347,7 @@ function libraryEnsureAccordionStyles(){
     .lib-subject-row .lib-chevron{ font-size:16px; line-height:1; color:var(--muted,#7c93a3); transition:transform .2s ease; display:inline-block; }
     .lib-subject-row.open .lib-chevron{ transform:rotate(180deg); color:var(--teal,#0f9d8f); }
     .lib-subject-main{ display:flex; align-items:center; gap:10px; }
-    .lib-subject-title{ font-weight:800; font-size:15.5px; }
+    .lib-subject-title{ font-weight:800; font-size:15.5px; direction:ltr; unicode-bidi:plaintext; text-align:left; }
     .lib-subject-icon{ color:var(--teal,#0f9d8f); font-size:18px; }
     .lib-count-badge{ background:rgba(20,184,201,.16); color:var(--teal,#0f9d8f); font-weight:800; font-size:13px; padding:3px 12px; border-radius:999px; min-width:26px; text-align:center; }
     .lib-subject-panel{ padding:16px 18px 20px; margin:0 0 12px; border-radius:0 0 14px 14px; background:rgba(20,184,201,.03); border:1px solid rgba(20,184,201,.4); border-top:1px dashed rgba(20,184,201,.3); }
@@ -3362,7 +3362,7 @@ function libraryEnsureAccordionStyles(){
     .lib-child-row .lib-subject-title{ font-weight:700; font-size:14.5px; }
     .lib-child-badge{ background:rgba(124,92,246,.18); color:#7c5cf6; font-weight:800; font-size:12.5px; padding:3px 11px; border-radius:999px; min-width:24px; text-align:center; }
     .lib-child-icon{ color:#7c5cf6; font-size:17px; }
-    .lib-file-author{ font-size:12.5px; color:var(--muted,#7c93a3); font-weight:600; }
+    .lib-file-author{ font-size:12.5px; color:var(--muted,#7c93a3); font-weight:600; direction:ltr; unicode-bidi:plaintext; text-align:left; }
     .lib-nested-panel{ padding:14px 16px 16px; margin:0 0 10px; border-radius:0 0 12px 12px; background:rgba(124,92,246,.04); border:1px solid rgba(124,92,246,.45); border-top:1px dashed rgba(124,92,246,.35); }
     body.dark .lib-child-row{ background:linear-gradient(180deg, rgba(124,92,246,.14), rgba(124,92,246,.05)); border-color:rgba(124,92,246,.35); }
     body.dark .lib-nested-panel{ background:rgba(124,92,246,.06); }
