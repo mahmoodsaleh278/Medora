@@ -1024,6 +1024,15 @@ function majorEmblem(major){
   return major === 'طب الأسنان' ? '🦷' : '🩺';
 }
 
+/* مكتبة التمريض مقصورة على طلاب التمريض المسجّلين في جامعة مؤتة فقط
+   (الأدمن يشوفها دايمًا عشان يقدر يدير محتواها). */
+function isLibraryAllowed(){
+  if(state.session && state.session.type === 'admin') return true;
+  return !!(state.session && state.session.type === 'student'
+    && state.session.university === 'جامعة مؤتة'
+    && state.session.major === 'التمريض');
+}
+
 function priceBadgeHtml(c, isAdmin){
   if(isAdmin){
     if(courseIsAllFree(c)) return `<span class="lecture-tier-tag">🆓 مجاني</span>`;
@@ -1161,6 +1170,14 @@ function renderNavState(){
   if(heroBankLinkEl) heroBankLinkEl.classList.toggle('hidden', !isLoggedIn);
 
   const footerDesc = document.getElementById('footerDescText');
+
+  // مكتبة التمريض: تظهر فقط لطلاب التمريض بجامعة مؤتة (أو للأدمن لإدارتها)
+  const libAllowed = isLibraryAllowed();
+  const navLibraryLinkEl = document.getElementById('navLibraryLink');
+  if(navLibraryLinkEl) navLibraryLinkEl.classList.toggle('hidden', !libAllowed);
+  const footerLibraryLinkEl = document.getElementById('footerLibraryLink');
+  if(footerLibraryLinkEl) footerLibraryLinkEl.classList.toggle('hidden', !libAllowed);
+
   if(footerDesc) footerDesc.innerHTML = `${cval('footer_desc')}${editBtn('footer_desc')}`;
   const footerCopy = document.getElementById('footerCopyText');
   if(footerCopy) footerCopy.innerHTML = `${cval('footer_copy')}${editBtn('footer_copy')}`;
@@ -3296,6 +3313,12 @@ async function deleteStudent(phone){
    بباقي المشروع: state.books[] + setData('books', ..., true).
    ========================================================= */
 function pageLibrary(){
+  if(!isLibraryAllowed()){
+    if(!state.session){
+      return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>مكتبة التمريض متاحة فقط لطلاب التمريض في جامعة مؤتة بعد تسجيل الدخول. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+    }
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>غير متاح لحسابك</h3><p>مكتبة التمريض متاحة حاليًا فقط لطلاب التمريض المسجّلين في جامعة مؤتة.</p></div></div></section>`;
+  }
   const isAdmin = state.session && state.session.type === 'admin';
   const majorFilters = ['الكل', ...MAJORS.map(m=>m.name)];
   const activeFilter = state.libraryMajorFilter || 'الكل';
