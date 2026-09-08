@@ -228,9 +228,10 @@ function watchDeviceLock(phone){
 
 /* ---------------- App state ---------------- */
 let state = {
-  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [],
+  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [], books: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', coursePage: 1, bankAdminView: false, bankNotesView: false, content: {}, teachers: [],
   bankManageCourseId: null, bankManageLectureId: '',
+  libraryMajorFilter: 'الكل', librarySearch: '',
 };
 
 /* =========================================================
@@ -495,7 +496,7 @@ function courseSections(courseId){
    فبدل 14 استعلام select منفصل (واحد لكل مفتاح عبر getData)، نجيبهم كلهم
    بطلب واحد via `.in('key', [...])` ثم نوزّع النتائج محليًا. */
 const INIT_DATA_KEYS = ['courses','lectures','questions','students','messages','enrollments',
-  'summaries','lectureProgress','content','savedQuestions','design','coupons','notifications','teachers'];
+  'summaries','lectureProgress','content','savedQuestions','design','coupons','notifications','teachers','books'];
 async function fetchInitDataBulk(){
   if(!supabaseClient) return {};
   try{
@@ -510,7 +511,7 @@ async function initData(){
   const FALLBACKS = {
     courses: SEED_COURSES, lectures: SEED_LECTURES, questions: SEED_QUESTIONS,
     students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [],
-    content: {}, savedQuestions: [], design: DESIGN_DEFAULTS, coupons: [], notifications: [], teachers: []
+    content: {}, savedQuestions: [], design: DESIGN_DEFAULTS, coupons: [], notifications: [], teachers: [], books: []
   };
   const [bulk] = await Promise.all([
     fetchInitDataBulk(),
@@ -524,6 +525,7 @@ async function initData(){
   state.savedQuestions = Array.isArray(pick('savedQuestions')) ? pick('savedQuestions') : [];
   state.coupons = Array.isArray(pick('coupons')) ? pick('coupons') : [];
   state.notifications = Array.isArray(pick('notifications')) ? pick('notifications') : [];
+  state.books = Array.isArray(pick('books')) ? pick('books') : [];
   state.content = Object.assign({}, CONTENT_DEFAULTS, pick('content'));
   state.design = Object.assign({}, DESIGN_DEFAULTS, pick('design'));
   state.loaded = true;
@@ -3287,6 +3289,142 @@ async function deleteStudent(phone){
 /* =========================================================
    PAGE: ABOUT
    ========================================================= */
+/* =========================================================
+   PAGE: مكتبة التمريض (Books Library)
+   مرجع مركزي لكتب/ملفات PDF يقدر الطالب يرجع لها من أي مكان،
+   وممكن تُربط لاحقًا بمحاضرات معينة. نفس نمط التخزين المستخدم
+   بباقي المشروع: state.books[] + setData('books', ..., true).
+   ========================================================= */
+function pageLibrary(){
+  const isAdmin = state.session && state.session.type === 'admin';
+  const majorFilters = ['الكل', ...MAJORS.map(m=>m.name)];
+  const activeFilter = state.libraryMajorFilter || 'الكل';
+  const search = (state.librarySearch || '').trim().toLowerCase();
+
+  let books = state.books || [];
+  if(activeFilter !== 'الكل') books = books.filter(b => (b.major||'') === activeFilter);
+  if(search) books = books.filter(b =>
+    (b.title||'').toLowerCase().includes(search) ||
+    (b.author||'').toLowerCase().includes(search) ||
+    (b.subject||'').toLowerCase().includes(search)
+  );
+
+  const majorOptions = majorFilters.map(f => `<option value="${escapeHtml(f)}" ${activeFilter===f?'selected':''}>${escapeHtml(f)}</option>`).join('');
+
+  const cards = books.map(b => `
+    <div class="course-card">
+      <div class="course-top"></div>
+      <div class="course-body">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;">
+          <div class="course-emblem">${b.coverUrl ? `<img src="${escapeHtml(b.coverUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" onerror="this.remove()">` : ICONS.book}</div>
+          ${b.major ? `<span class="lecture-tier-tag">${escapeHtml(b.major)}</span>` : ''}
+        </div>
+        <h3 class="i18n-skip">${escapeHtml(b.title)}</h3>
+        ${b.author ? `<p class="i18n-skip" style="margin:0 0 4px;">✍️ ${escapeHtml(b.author)}</p>` : ''}
+        ${b.subject ? `<p class="i18n-skip">${escapeHtml(b.subject)}</p>` : ''}
+        <div class="course-actions">
+          ${b.fileUrl ? `<a href="${escapeHtml(b.fileUrl)}" target="_blank" rel="noopener" class="btn teal small">${ICONS.download} فتح الكتاب</a>` : ''}
+          ${isAdmin ? `<button class="btn edit small" data-edit-book="${b.id}">${ICONS.edit} تعديل</button>` : ''}
+          ${isAdmin ? `<button class="btn danger small" data-del-book="${b.id}">${ICONS.trash} حذف</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  return `
+  <section class="section">
+    <div class="container">
+      <div class="courses-hero">
+        <div class="courses-hero-inner">
+          <h2>مكتبة التمريض</h2>
+          <p>مرجعك الدائم من الكتب والملخصات المرجعية بصيغة PDF، تدعم محاضراتك ومذاكرتك</p>
+          <div class="courses-search">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="librarySearchInput" placeholder="ابحث عن كتاب، مؤلف، أو مادة..." value="${escapeHtml(state.librarySearch||'')}">
+          </div>
+        </div>
+      </div>
+      ${isAdmin ? `<div class="toolbar" style="justify-content:flex-end;"><button class="btn teal solid" id="addBookBtn">${ICONS.plus} إضافة كتاب جديد</button></div>` : ''}
+      <div class="filter-dropdown-bar">
+        <div class="filter-dropdown">
+          <label>التخصص</label>
+          <select id="libraryMajorFilterSelect">${majorOptions}</select>
+        </div>
+      </div>
+      ${books.length
+        ? `<div class="course-canvas"><div class="course-grid">${cards}</div></div>`
+        : `<div class="empty-state"><h3>لا توجد كتب ضمن هذا التصنيف بعد</h3><p>جرّب تصنيفًا آخر${isAdmin ? '، أو أضف كتابًا جديدًا.' : '.'}</p></div>`}
+    </div>
+  </section>
+  `;
+}
+
+function modalAddBook(){
+  const majorOptions = MAJORS.map(m=>`<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
+  openModal(`
+    <h3>${ICONS.book} إضافة كتاب جديد</h3>
+    <form id="bookForm">
+      <div class="field"><label>عنوان الكتاب</label><input type="text" name="title" required maxlength="120" placeholder="مثال: أساسيات التمريض السريري"></div>
+      <div class="field"><label>المؤلف (اختياري)</label><input type="text" name="author" maxlength="80" placeholder="اسم المؤلف"></div>
+      <div class="field"><label>التخصص</label><select name="major"><option value="">— بدون تحديد —</option>${majorOptions}</select></div>
+      <div class="field"><label>المادة/الموضوع (اختياري)</label><input type="text" name="subject" maxlength="80" placeholder="مثال: صحة الأم والطفل"></div>
+      <div class="field"><label>رابط الملف (PDF)</label><input type="url" name="fileUrl" required placeholder="https://..." style="direction:ltr; text-align:start;"></div>
+      <div class="field"><label>رابط صورة الغلاف (اختياري)</label><input type="url" name="coverUrl" placeholder="https://..." style="direction:ltr; text-align:start;"></div>
+      <div id="bookMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ الكتاب</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('bookForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const title = fd.get('title').trim();
+    const fileUrl = fd.get('fileUrl').trim();
+    if(!title || !fileUrl){
+      document.getElementById('bookMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان ورابط الملف.</div>`; return;
+    }
+    state.books.push({
+      id: 'bk'+Date.now(),
+      title, author: fd.get('author').trim(), major: fd.get('major'),
+      subject: fd.get('subject').trim(), fileUrl, coverUrl: fd.get('coverUrl').trim(),
+      createdAt: Date.now(),
+    });
+    await setData('books', state.books, true);
+    closeModal(); render();
+  });
+}
+
+function modalEditBook(bookId){
+  const b = state.books.find(x=>x.id===bookId);
+  if(!b) return;
+  const majorOptions = MAJORS.map(m=>`<option value="${escapeHtml(m.name)}" ${b.major===m.name?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
+  openModal(`
+    <h3>${ICONS.edit} تعديل الكتاب</h3>
+    <form id="bookEditForm">
+      <div class="field"><label>عنوان الكتاب</label><input type="text" name="title" required maxlength="120" value="${escapeHtml(b.title)}"></div>
+      <div class="field"><label>المؤلف (اختياري)</label><input type="text" name="author" maxlength="80" value="${escapeHtml(b.author||'')}"></div>
+      <div class="field"><label>التخصص</label><select name="major"><option value="">— بدون تحديد —</option>${majorOptions}</select></div>
+      <div class="field"><label>المادة/الموضوع (اختياري)</label><input type="text" name="subject" maxlength="80" value="${escapeHtml(b.subject||'')}"></div>
+      <div class="field"><label>رابط الملف (PDF)</label><input type="url" name="fileUrl" required value="${escapeHtml(b.fileUrl||'')}" style="direction:ltr; text-align:start;"></div>
+      <div class="field"><label>رابط صورة الغلاف (اختياري)</label><input type="url" name="coverUrl" value="${escapeHtml(b.coverUrl||'')}" style="direction:ltr; text-align:start;"></div>
+      <div id="bookMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('bookEditForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const title = fd.get('title').trim();
+    const fileUrl = fd.get('fileUrl').trim();
+    if(!title || !fileUrl){
+      document.getElementById('bookMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان ورابط الملف.</div>`; return;
+    }
+    b.title = title; b.author = fd.get('author').trim(); b.major = fd.get('major');
+    b.subject = fd.get('subject').trim(); b.fileUrl = fileUrl; b.coverUrl = fd.get('coverUrl').trim();
+    await setData('books', state.books, true);
+    closeModal(); render();
+  });
+}
+
 function pageAbout(){
   const uniCards = UNIVERSITIES.map((u) => `<div class="uni-card"><div class="badge"><img src="${escapeHtml(u.logo||'')}" alt="${escapeHtml(u.name)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'badge-fallback',textContent:'${escapeHtml((u.name||'').charAt(0))}'}))"></div><h4>${u.name}</h4><p>${u.loc} — الأردن</p></div>`).join('');
   return `
@@ -5707,6 +5845,10 @@ function updateSeoMeta(route){
       break;
     }
 
+    case 'library':
+      setPageMeta({ title: 'مكتبة التمريض', description: 'مكتبة مرجعية تضم كتب ومراجع التمريض بصيغة PDF لدعم محاضراتك وتخصصك على منصة MEDORA.' });
+      break;
+
     case 'about':
       setPageMeta({ title: 'من نحن', description: 'تعرّف على منصة MEDORA ورسالتها بخدمة طلاب التمريض وطب الأسنان.' });
       break;
@@ -5773,6 +5915,7 @@ async function render(){
       case 'student-space': html = pageStudentSpace(); break;
       case 'student-settings': html = pageStudentSettings(); break;
       case 'bank': html = pageBank(); break;
+      case 'library': html = pageLibrary(); break;
       case 'about': html = pageAbout(); break;
       case 'contact': html = pageContact(); break;
       case 'privacy': html = pagePrivacy(); break;
@@ -5889,6 +6032,35 @@ function bindPageEvents(route){
           await setData('courses', state.courses, true);
           await setData('lectures', state.lectures, true);
           await setData('questions', state.questions, true);
+        });
+      });
+    });
+  }
+
+  if(route === 'library'){
+    const majorSel = document.getElementById('libraryMajorFilterSelect');
+    if(majorSel) majorSel.addEventListener('change', ()=>{ state.libraryMajorFilter = majorSel.value; render(); });
+    const searchInput = document.getElementById('librarySearchInput');
+    if(searchInput){
+      searchInput.addEventListener('input', ()=>{
+        state.librarySearch = searchInput.value;
+        render().then(()=>{
+          const el = document.getElementById('librarySearchInput');
+          if(el){ el.focus(); const pos = el.value.length; el.setSelectionRange(pos,pos); }
+        });
+      });
+    }
+    const addBtn = document.getElementById('addBookBtn');
+    if(addBtn) addBtn.addEventListener('click', modalAddBook);
+    document.querySelectorAll('[data-edit-book]').forEach(btn=>{
+      btn.addEventListener('click', ()=> modalEditBook(btn.dataset.editBook));
+    });
+    document.querySelectorAll('[data-del-book]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.delBook;
+        confirmDelete('سيتم حذف هذا الكتاب من المكتبة نهائيًا. هل أنت متأكد؟', async ()=>{
+          state.books = state.books.filter(x=>x.id!==id);
+          await setData('books', state.books, true);
         });
       });
     });
