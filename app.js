@@ -3351,13 +3351,61 @@ function libraryEnsureAccordionStyles(){
     .lib-subject-icon{ color:var(--teal,#0f9d8f); font-size:18px; }
     .lib-count-badge{ background:rgba(20,184,201,.16); color:var(--teal,#0f9d8f); font-weight:800; font-size:13px; padding:3px 12px; border-radius:999px; min-width:26px; text-align:center; }
     .lib-subject-panel{ padding:16px 18px 20px; margin:0 0 12px; border-radius:0 0 14px 14px; background:rgba(20,184,201,.03); border:1px solid rgba(20,184,201,.4); border-top:1px dashed rgba(20,184,201,.3); }
+    .lib-child-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px; border-radius:12px; background:linear-gradient(180deg, rgba(124,92,246,.09), rgba(124,92,246,.02)); border:1px solid rgba(124,92,246,.2); margin-bottom:10px; transition:box-shadow .15s ease, background .15s ease; }
+    .lib-child-row:last-child{ margin-bottom:0; }
+    .lib-child-row.lib-folder-row{ cursor:pointer; }
+    .lib-child-row.lib-file-row{ cursor:default; }
+    .lib-child-row:hover{ box-shadow:0 4px 14px rgba(124,92,246,.15); }
+    .lib-row-arrow{ font-size:15px; line-height:1; color:var(--muted,#7c93a3); }
+    .lib-child-row .lib-subject-title{ font-weight:700; font-size:14.5px; }
+    .lib-child-badge{ background:rgba(124,92,246,.18); color:#7c5cf6; font-weight:800; font-size:12.5px; padding:3px 11px; border-radius:999px; min-width:24px; text-align:center; }
+    .lib-child-icon{ color:#7c5cf6; font-size:17px; }
+    .lib-file-author{ font-size:12.5px; color:var(--muted,#7c93a3); font-weight:600; }
+    body.dark .lib-child-row{ background:linear-gradient(180deg, rgba(124,92,246,.14), rgba(124,92,246,.05)); border-color:rgba(124,92,246,.35); }
     body.dark .lib-subject-row{ background:linear-gradient(180deg, rgba(20,184,201,.1), rgba(20,184,201,.03)); border-color:rgba(20,184,201,.25); }
     body.dark .lib-subject-panel{ background:rgba(20,184,201,.05); }
   `;
   document.head.appendChild(style);
 }
 
-/* بطاقة مجلد أو ملف (تُستخدم داخل الشبكة العادية وداخل قائمة المادة المنسدلة) */
+/* صفوف مجلدات/ملفات المادة داخل اللوحة المنسدلة (نفس أسلوب صفوف المواد، بلون مميّز) */
+function libraryFolderRowHtml(f, isAdmin){
+  const itemCount = libraryChildren(f.id).length;
+  return `
+  <div class="lib-child-row lib-folder-row" data-open-folder="${f.id}">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span class="lib-row-arrow">‹</span>
+      ${isAdmin ? `
+        <button class="btn edit small" data-edit-folder="${f.id}">${ICONS.edit}</button>
+        <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash}</button>
+      ` : ''}
+    </div>
+    <div class="lib-subject-main">
+      <span class="lib-child-badge">${itemCount}</span>
+      <span class="lib-subject-title i18n-skip">${escapeHtml(f.title)}</span>
+      <span class="lib-child-icon">📁</span>
+    </div>
+  </div>`;
+}
+function libraryFileRowHtml(f, isAdmin){
+  return `
+  <div class="lib-child-row lib-file-row">
+    <div style="display:flex; align-items:center; gap:8px;">
+      ${isAdmin ? `
+        <button class="btn edit small" data-edit-file="${f.id}">${ICONS.edit}</button>
+        <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash}</button>
+      ` : ''}
+      <a href="${escapeHtml(f.fileUrl)}" target="_blank" rel="noopener" class="btn teal small">${ICONS.download} فتح الملف</a>
+    </div>
+    <div class="lib-subject-main">
+      ${f.author ? `<span class="lib-file-author i18n-skip">✍️ ${escapeHtml(f.author)}</span>` : ''}
+      <span class="lib-subject-title i18n-skip">${escapeHtml(f.title)}</span>
+      <span class="lib-child-icon">${ICONS.book}</span>
+    </div>
+  </div>`;
+}
+
+/* بطاقة مجلد أو ملف (تُستخدم داخل الشبكة العادية عند التصفّح داخل مجلد فرعي) */
 function libraryFolderCardHtml(f, isAdmin){
   const itemCount = libraryChildren(f.id).length;
   return `
@@ -3437,8 +3485,8 @@ function pageLibrary(){
       const subChildren = libraryChildren(s.id);
       const subFolders = subChildren.filter(n=>n.type==='folder');
       const subFiles = subChildren.filter(n=>n.type==='file');
-      const subFolderCards = subFolders.map(f=>libraryFolderCardHtml(f, isAdmin)).join('');
-      const subFileCards = subFiles.map(f=>libraryFileCardHtml(f, isAdmin)).join('');
+      const subFolderRows = subFolders.map(f=>libraryFolderRowHtml(f, isAdmin)).join('');
+      const subFileRows = subFiles.map(f=>libraryFileRowHtml(f, isAdmin)).join('');
       const subAddToolbar = isAdmin ? `
         <div class="toolbar" style="justify-content:flex-end; gap:10px; margin-top:0;">
           <button class="btn small" id="addFolderBtn">${ICONS.plus} إضافة مجلد</button>
@@ -3449,7 +3497,7 @@ function pageLibrary(){
       const panelHtml = `
         <div class="lib-subject-panel">
           ${subAddToolbar}
-          ${(subFolders.length || subFiles.length) ? `<div class="course-canvas"><div class="course-grid">${subFolderCards}${subFileCards}</div></div>` : subEmptyHtml}
+          ${(subFolders.length || subFiles.length) ? `<div>${subFolderRows}${subFileRows}</div>` : subEmptyHtml}
         </div>`;
 
       return rowHtml + panelHtml;
