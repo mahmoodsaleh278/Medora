@@ -212,12 +212,17 @@
   .uni-row .uni-name{ font-weight:700; font-size:14.5px; }
   .uni-row .uni-loc{ font-size:12.5px; color:#b9d3dc; }
 
-  .stats-strip{ display:flex; justify-content:center; gap:clamp(28px,6vw,60px); flex-wrap:wrap; padding:34px 24px; background:var(--card); border-bottom:1px solid var(--border); }
-  .stat{ text-align:center; position:relative; padding-inline-end:clamp(28px,6vw,60px); }
+  .stats-strip{ display:flex; justify-content:center; flex-wrap:wrap; padding:34px 24px; background:var(--card); border-bottom:1px solid var(--border); }
+  .stat{ --stat-gap:clamp(20px,6vw,60px); text-align:center; position:relative; padding-inline-end:var(--stat-gap); }
   .stat:last-child{ padding-inline-end:0; }
-  .stat:not(:last-child)::after{ content:""; position:absolute; inset-inline-end:0; top:8%; bottom:8%; width:1px; background:var(--border); }
+  .stat:not(:last-child)::after{ content:""; position:absolute; inset-inline-end:calc(var(--stat-gap) / 2); top:8%; bottom:8%; width:1px; background:var(--border); }
   .stat b{ font-size:30px; color:var(--ink); display:block; font-variant-numeric:tabular-nums; }
   .stat span{ font-size:13.5px; color:var(--muted); }
+  @media (max-width:480px){
+    .stat{ --stat-gap:14px; }
+    .stat b{ font-size:22px; }
+    .stat span{ font-size:12px; }
+  }
 
   .grid-3{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; }
   .feature-card{
