@@ -3334,6 +3334,29 @@ function deleteLibraryNode(id){
   state.books = state.books.filter(n=>!idsToRemove.has(n.id));
 }
 
+/* حقن تنسيقات صفوف الأكورديون (مرة واحدة فقط) — لا يوجد ملف CSS خارجي بمتناولنا هنا */
+function libraryEnsureAccordionStyles(){
+  if(document.getElementById('libAccordionStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'libAccordionStyles';
+  style.textContent = `
+    .lib-subjects-list{ display:flex; flex-direction:column; }
+    .lib-subject-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-radius:14px; background:linear-gradient(180deg, rgba(20,184,201,.08), rgba(20,184,201,.02)); border:1px solid rgba(20,184,201,.18); cursor:pointer; margin-bottom:12px; transition:box-shadow .15s ease, background .15s ease, border-color .15s ease; }
+    .lib-subject-row:hover{ box-shadow:0 4px 16px rgba(20,184,201,.15); }
+    .lib-subject-row.open{ background:linear-gradient(180deg, rgba(20,184,201,.16), rgba(20,184,201,.05)); border-color:rgba(20,184,201,.4); margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; }
+    .lib-subject-row .lib-chevron{ font-size:16px; line-height:1; color:var(--muted,#7c93a3); transition:transform .2s ease; display:inline-block; }
+    .lib-subject-row.open .lib-chevron{ transform:rotate(180deg); color:var(--teal,#0f9d8f); }
+    .lib-subject-main{ display:flex; align-items:center; gap:10px; }
+    .lib-subject-title{ font-weight:800; font-size:15.5px; }
+    .lib-subject-icon{ color:var(--teal,#0f9d8f); font-size:18px; }
+    .lib-count-badge{ background:rgba(20,184,201,.16); color:var(--teal,#0f9d8f); font-weight:800; font-size:13px; padding:3px 12px; border-radius:999px; min-width:26px; text-align:center; }
+    .lib-subject-panel{ padding:16px 18px 20px; margin:0 0 12px; border-radius:0 0 14px 14px; background:rgba(20,184,201,.03); border:1px solid rgba(20,184,201,.4); border-top:1px dashed rgba(20,184,201,.3); }
+    body.dark .lib-subject-row{ background:linear-gradient(180deg, rgba(20,184,201,.1), rgba(20,184,201,.03)); border-color:rgba(20,184,201,.25); }
+    body.dark .lib-subject-panel{ background:rgba(20,184,201,.05); }
+  `;
+  document.head.appendChild(style);
+}
+
 /* بطاقة مجلد أو ملف (تُستخدم داخل الشبكة العادية وداخل قائمة المادة المنسدلة) */
 function libraryFolderCardHtml(f, isAdmin){
   const itemCount = libraryChildren(f.id).length;
@@ -3381,65 +3404,61 @@ function pageLibrary(){
   let currentNode = currentId ? libraryNode(currentId) : null;
   if(currentId && !currentNode){ currentId = null; state.libraryCurrentId = null; } // مجلد محذوف/غير موجود: رجوع للجذر
 
-  /* -------- المستوى الجذري: عرض المواد أفقيًا + قائمة منسدلة عند الضغط -------- */
+  /* -------- المستوى الجذري: قائمة مواد مرتّبة عموديًا (أكورديون) + توسّع مباشرة تحت المادة عند الضغط -------- */
   if(!currentId){
+    libraryEnsureAccordionStyles();
     const subjects = libraryChildren(null); // كل المواد (مجلدات على مستوى الجذر)
     let openId = state.libraryOpenSubjectId || null;
     let openSubject = openId ? libraryNode(openId) : null;
     if(openId && (!openSubject || openSubject.parentId)){ openId = null; openSubject = null; state.libraryOpenSubjectId = null; }
 
-    const subjectChips = subjects.map(s=>{
+    const rowsHtml = subjects.map(s=>{
       const itemCount = libraryChildren(s.id).length;
       const isOpen = s.id === openId;
-      return `
-      <div class="course-card${isOpen ? ' active' : ''}" data-toggle-subject="${s.id}"
-           style="cursor:pointer; flex:0 0 190px; scroll-snap-align:start; ${isOpen ? 'box-shadow:0 0 0 2px var(--teal, #0f9d8f) inset;' : ''}">
-        <div class="course-top"></div>
-        <div class="course-body">
-          <div class="course-emblem">📚</div>
-          <h3 class="i18n-skip">${escapeHtml(s.title)}</h3>
-          <p>${itemCount} عنصر</p>
-          <div style="text-align:center; font-size:14px; color:var(--teal, #0f9d8f); margin-top:4px;">${isOpen ? '▲ إخفاء المجلدات' : '▼ عرض المجلدات'}</div>
-          ${isAdmin ? `<div class="course-actions">
-            <button class="btn edit small" data-edit-folder="${s.id}">${ICONS.edit} تعديل</button>
-            <button class="btn danger small" data-del-node="${s.id}">${ICONS.trash} حذف</button>
-          </div>` : ''}
-        </div>
-      </div>`;
-    }).join('');
 
-    const subjectsRowHtml = `
-      <div class="lib-subjects-row" style="display:flex; gap:14px; overflow-x:auto; padding:8px 2px 16px; scroll-snap-type:x proximity;">
-        ${subjectChips}
-      </div>`;
+      const rowHtml = `
+        <div class="lib-subject-row${isOpen ? ' open' : ''}" data-toggle-subject="${s.id}">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="lib-chevron">▾</span>
+            ${isAdmin ? `
+              <button class="btn edit small" data-edit-folder="${s.id}">${ICONS.edit}</button>
+              <button class="btn danger small" data-del-node="${s.id}">${ICONS.trash}</button>
+            ` : ''}
+          </div>
+          <div class="lib-subject-main">
+            <span class="lib-count-badge">${itemCount}</span>
+            <span class="lib-subject-title i18n-skip">${escapeHtml(s.title)}</span>
+            <span class="lib-subject-icon">📁</span>
+          </div>
+        </div>`;
 
-    const addSubjectHtml = isAdmin ? `
-      <div class="toolbar" style="justify-content:flex-end;">
-        <button class="btn teal solid" id="addSubjectBtn">${ICONS.plus} إضافة مادة جديدة</button>
-      </div>` : '';
+      if(!isOpen) return rowHtml;
 
-    let dropdownHtml = '';
-    if(openSubject){
-      const subChildren = libraryChildren(openSubject.id);
+      const subChildren = libraryChildren(s.id);
       const subFolders = subChildren.filter(n=>n.type==='folder');
       const subFiles = subChildren.filter(n=>n.type==='file');
       const subFolderCards = subFolders.map(f=>libraryFolderCardHtml(f, isAdmin)).join('');
       const subFileCards = subFiles.map(f=>libraryFileCardHtml(f, isAdmin)).join('');
       const subAddToolbar = isAdmin ? `
-        <div class="toolbar" style="justify-content:flex-end; gap:10px;">
+        <div class="toolbar" style="justify-content:flex-end; gap:10px; margin-top:0;">
           <button class="btn small" id="addFolderBtn">${ICONS.plus} إضافة مجلد</button>
           <button class="btn teal solid small" id="addFileBtn">${ICONS.plus} إضافة ملف</button>
         </div>` : '';
       const subEmptyHtml = `<div class="empty-state"><h3>هذا المجلد فارغ</h3><p>${isAdmin ? 'أضف مجلدًا أو ملفًا جديدًا.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
-      dropdownHtml = `
-        <div class="lib-subject-dropdown" style="margin-top:4px; padding-top:16px; border-top:1px dashed var(--border, rgba(120,120,120,.3));">
-          <div class="toolbar" style="gap:8px;">
-            <span class="chip active">📁 ${escapeHtml(openSubject.title)}</span>
-          </div>
+
+      const panelHtml = `
+        <div class="lib-subject-panel">
           ${subAddToolbar}
           ${(subFolders.length || subFiles.length) ? `<div class="course-canvas"><div class="course-grid">${subFolderCards}${subFileCards}</div></div>` : subEmptyHtml}
         </div>`;
-    }
+
+      return rowHtml + panelHtml;
+    }).join('');
+
+    const addSubjectHtml = isAdmin ? `
+      <div class="toolbar" style="justify-content:flex-end;">
+        <button class="btn teal solid" id="addSubjectBtn">${ICONS.plus} إضافة مادة جديدة</button>
+      </div>` : '';
 
     const rootEmptyHtml = `<div class="empty-state"><h3>لا توجد مواد بعد</h3><p>${isAdmin ? 'أضف مادة جديدة لتبدأ.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
 
@@ -3453,8 +3472,7 @@ function pageLibrary(){
           </div>
         </div>
         ${addSubjectHtml}
-        ${subjects.length ? subjectsRowHtml : rootEmptyHtml}
-        ${dropdownHtml}
+        ${subjects.length ? `<div class="lib-subjects-list">${rowsHtml}</div>` : rootEmptyHtml}
       </div>
     </section>
     `;
