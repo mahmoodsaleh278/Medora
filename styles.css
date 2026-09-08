@@ -147,7 +147,8 @@
   .brand .wordmark{ font-family:'Playfair Display', serif; direction:ltr; font-weight:800; font-size:22px; letter-spacing:1px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .brand .wordmark span{ color:var(--teal); }
 
-  nav.links{ display:flex; align-items:center; gap:2px; flex-wrap:wrap; }
+  nav.links{ display:flex; align-items:center; gap:2px; flex-wrap:nowrap; overflow-x:auto; -ms-overflow-style:none; scrollbar-width:none; }
+  nav.links::-webkit-scrollbar{ display:none; }
   nav.links a, nav.links button.navlink{ position:relative; background:none; border:none; padding:9px 14px; border-radius:999px; font-size:14px; font-weight:600; color:var(--navy-2); transition:background .2s var(--ease), color .2s var(--ease); white-space:nowrap; }
   nav.links a:hover, nav.links button.navlink:hover{ background:var(--teal-light); color:var(--teal); }
   nav.links a.active, nav.links button.navlink.active{ background:var(--navy); color:#fff; box-shadow:var(--shadow-xs); }
@@ -795,7 +796,14 @@
     .mission-grid{ grid-template-columns:1fr; }
     .option-cards{ grid-template-columns:1fr; }
   }
-  @media (max-width: 1180px){
+  /* روابط عديدة ممكن تزيد مع الوقت (بنك أسئلة، مكتبة التمريض، لوحات الإدارة...)
+     فبنبكّر تحويل الشريط لقائمة همبرغر عند 1300px بدل 1180px، وبنضيّق المسافات
+     شوي بالنطاق يلي قبلها مباشرة (1300-1500px) عشان الروابط تضل مرتاحة بسطر
+     وحد بدون ما تحتاج سكرول أفقي على أغلب شاشات اللابتوب. */
+  @media (max-width: 1500px) and (min-width: 1301px){
+    nav.links a, nav.links button.navlink{ padding:9px 10px; font-size:13.5px; }
+  }
+  @media (max-width: 1300px){
     nav.links{ display:none; position:absolute; top:100%; right:0; left:0; background:#fff; flex-direction:column;
       align-items:stretch; padding:14px; border-bottom:1px solid var(--border); box-shadow:0 12px 20px rgba(0,0,0,0.06); max-height:70vh; overflow-y:auto; }
     nav.links.open{ display:flex; }
