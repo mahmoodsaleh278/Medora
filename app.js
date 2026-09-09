@@ -1144,7 +1144,7 @@ function renderNavState(){
     studentSpaceLink.classList.add('hidden');
     analyticsLink.classList.add('hidden');
     couponsLink.classList.add('hidden');
-    userArea.innerHTML = `<span class="user-pill"><span>👨‍🏫 ${escapeHtml(state.session.name)}</span> <span class="admin-tag">مدرّس</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
+    userArea.innerHTML = `<span class="user-pill"><span>${escapeHtml(state.session.name)}</span> <span class="admin-tag">مدرّس</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
   } else {
     loginLink.classList.remove('hidden');
     myCoursesLink.classList.add('hidden');
