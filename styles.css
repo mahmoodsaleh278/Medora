@@ -855,3 +855,23 @@
     .app-download-info{ flex-direction:column; text-align:center; }
     .app-download-text p{ max-width:none; }
   }
+
+  /* ---------------- بطاقة الترويج لمكتبة التمريض (الصفحة الرئيسية، تحت قسم "لماذا MEDORA") ---------------- */
+  .library-promo-box{
+    background:var(--card); border:1.5px solid var(--border); border-radius:var(--radius-lg);
+    padding:36px 34px; margin-top:36px; display:flex; align-items:center; justify-content:space-between;
+    gap:28px; flex-wrap:wrap; box-shadow:var(--shadow-sm); position:relative; overflow:hidden;
+  }
+  .library-promo-box::before{ content:""; position:absolute; inset-inline-start:0; inset-block:0; width:5px; background:linear-gradient(180deg, var(--teal), var(--navy)); }
+  .library-promo-info{ display:flex; align-items:center; gap:20px; flex:1; min-width:260px; }
+  .library-promo-icon{ font-size:32px; flex-shrink:0; background:var(--teal-light); width:68px; height:68px; border-radius:18px; display:flex; align-items:center; justify-content:center; }
+  .library-promo-text h2{ font-size:22px; font-weight:800; color:var(--ink); margin-bottom:6px; }
+  .library-promo-text p{ font-size:14.5px; color:var(--muted); max-width:460px; }
+  .library-promo-btn-wrap{ flex-shrink:0; }
+  body.dark .library-promo-box{ background:var(--card); }
+  @media (max-width:640px){
+    .library-promo-box{ flex-direction:column; text-align:center; padding:28px 22px; }
+    .library-promo-box::before{ inset-inline:0; inset-block-start:0; inset-block-end:auto; width:100%; height:5px; }
+    .library-promo-info{ flex-direction:column; text-align:center; }
+    .library-promo-text p{ max-width:none; }
+  }
