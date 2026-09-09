@@ -3316,7 +3316,39 @@ async function deleteStudent(phone){
    التنقّل بين المجلدات محلي بالواجهة (state.libraryOpenPath: سلسلة id لكل مستوى مفتوح) بدون
    تغيير الرابط، بنفس فكرة معالج بنك الأسئلة (quiz state). */
 function libraryNode(id){ return (state.books||[]).find(n=>n.id===id); }
-function libraryChildren(parentId){ return (state.books||[]).filter(n=>(n.parentId||null)===(parentId||null)); }
+/* بترجع أولاد مستوى معيّن مرتّبين حسب حقل order (وإذا مش موجود، حسب تاريخ الإنشاء كخيار احتياطي)
+   عشان يقدر الأدمن يتحكّم بترتيب المجلدات/الملفات (زر تحريك لأعلى/لأسفل). */
+function libraryChildren(parentId){
+  const arr = (state.books||[]).filter(n=>(n.parentId||null)===(parentId||null));
+  arr.sort((a,b)=> (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0));
+  return arr;
+}
+/* بتبدّل ترتيب عنصر مع جاره (لأعلى dir=-1 أو لأسفل dir=1) بين إخوته بنفس المستوى فقط. */
+function moveLibraryNodeOrder(id, dir){
+  const node = libraryNode(id); if(!node) return false;
+  const siblings = libraryChildren(node.parentId||null);
+  const idx = siblings.findIndex(n=>n.id===id);
+  const swapIdx = idx + dir;
+  if(idx<0 || swapIdx<0 || swapIdx>=siblings.length) return false;
+  siblings.forEach((n,i)=>{ if(typeof n.order !== 'number') n.order = i; });
+  const other = siblings[swapIdx];
+  const tmp = node.order; node.order = other.order; other.order = tmp;
+  return true;
+}
+/* بترجع قائمة كل المجلدات (بنية شجرية مسطّحة مع depth للمسافات البادئة) لاستخدامها
+   بقائمة اختيار "الوجهة" عند نقل عنصر. excludeIds بتستثني العنصر نفسه وكل أحفاده
+   (عشان ما نقدر ننقل مجلد جوا نفسه أو جوا مجلد فرعي تابع له). */
+function libraryFolderOptionsTree(excludeIds){
+  const acc = [];
+  function walk(parentId, depth){
+    libraryChildren(parentId).filter(n=>n.type==='folder' && !excludeIds.has(n.id)).forEach(f=>{
+      acc.push({ id:f.id, title:f.title, depth });
+      walk(f.id, depth+1);
+    });
+  }
+  walk(null, 0);
+  return acc;
+}
 function libraryBreadcrumb(id){
   const trail = [];
   let cur = id ? libraryNode(id) : null;
@@ -3332,6 +3364,50 @@ function libraryDescendantIds(id){
 function deleteLibraryNode(id){
   const idsToRemove = new Set([id, ...libraryDescendantIds(id)]);
   state.books = state.books.filter(n=>!idsToRemove.has(n.id));
+}
+
+/* نافذة نقل مجلد/ملف إلى مجلد آخر (أو إلى الجذر إذا كان مجلد). تبني قائمة اختيار
+   بكل المجلدات المتاحة كوجهة (باستثناء العنصر نفسه وأي مجلد فرعي تابع له، منعًا لحلقة لا نهائية). */
+function modalMoveNode(id){
+  const n = libraryNode(id); if(!n) return;
+  const excludeIds = new Set([id, ...(n.type==='folder' ? libraryDescendantIds(id) : [])]);
+  const folderOptions = libraryFolderOptionsTree(excludeIds);
+  const currentParentId = n.parentId || '';
+
+  const rootOptionHtml = n.type==='folder'
+    ? `<option value="" ${currentParentId===''?'selected':''}>📁 (الجذر — مستوى المواد الرئيسي)</option>`
+    : '';
+  const optionsHtml = folderOptions.map(f=>
+    `<option value="${f.id}" ${f.id===currentParentId?'selected':''}>${'&nbsp;&nbsp;'.repeat(f.depth)}📁 ${escapeHtml(f.title)}</option>`
+  ).join('');
+
+  if(!rootOptionHtml && !optionsHtml){
+    openModal(`<h3>${ICONS.edit} نقل ${n.type==='folder'?'المجلد':'الملف'}</h3><div class="empty-state"><h3>لا توجد وجهة متاحة</h3><p>أضف مجلدًا آخر أولًا حتى تقدر تنقل الملف إليه.</p></div><div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إغلاق</button></div>`);
+    document.getElementById('cancelModal').addEventListener('click', closeModal);
+    return;
+  }
+
+  openModal(`
+    <h3>${ICONS.edit} نقل ${n.type==='folder'?'المجلد':'الملف'} "${escapeHtml(n.title)}"</h3>
+    <form id="moveNodeForm">
+      <div class="field"><label>اختر الوجهة الجديدة</label>
+        <select name="destination">${rootOptionHtml}${optionsHtml}</select>
+      </div>
+      <div id="moveMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">نقل</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('moveNodeForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const destRaw = fd.get('destination');
+    const dest = destRaw ? destRaw : null;
+    n.parentId = dest;
+    n.order = Date.now(); // نحطّه بآخر ترتيب بالوجهة الجديدة
+    await setData('books', state.books, true);
+    state.libraryOpenPath = []; // نصفّر مسار الفتح لأن بنية الشجرة تغيّرت
+    closeModal(); render();
+  });
 }
 
 /* حقن تنسيقات صفوف الأكورديون (مرة واحدة فقط) — لا يوجد ملف CSS خارجي بمتناولنا هنا */
@@ -3354,7 +3430,7 @@ function libraryEnsureAccordionStyles(){
     .lib-child-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px; border-radius:12px; background:linear-gradient(180deg, rgba(124,92,246,.09), rgba(124,92,246,.02)); border:1px solid rgba(124,92,246,.2); margin-bottom:10px; transition:box-shadow .15s ease, background .15s ease; }
     .lib-child-row:last-child{ margin-bottom:0; }
     .lib-child-row.lib-folder-row{ cursor:pointer; }
-    .lib-child-row.lib-file-row{ cursor:pointer; }
+    .lib-child-row.lib-file-row{ cursor:default; }
     .lib-child-row:hover{ box-shadow:0 4px 14px rgba(124,92,246,.15); }
     .lib-child-row.open{ background:linear-gradient(180deg, rgba(124,92,246,.16), rgba(124,92,246,.05)); border-color:rgba(124,92,246,.45); margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; }
     .lib-child-row.open .lib-chevron{ transform:rotate(180deg); color:#7c5cf6; }
@@ -3374,11 +3450,21 @@ function libraryEnsureAccordionStyles(){
 }
 
 /* صف ملف داخل لوحة مادة/مجلد مفتوح (نفس أسلوب الصفوف، بلون مميّز) */
+/* أزرار التحكّم بترتيب/نقل عنصر (أدمن فقط) — نفس الشكل لأي عنصر (مجلد أو ملف) */
+function libraryOrderMoveButtonsHtml(id){
+  return `
+    <button class="btn small" data-move-node-up="${id}" title="تحريك لأعلى">⬆️</button>
+    <button class="btn small" data-move-node-down="${id}" title="تحريك لأسفل">⬇️</button>
+    <button class="btn small" data-move-node="${id}" title="نقل إلى مجلد آخر">📦</button>
+  `;
+}
+
 function libraryFileRowHtml(f, isAdmin){
   return `
-  <div class="lib-child-row lib-file-row" data-open-file="${f.id}">
-    <div style="display:flex; align-items:center; gap:8px;">
+  <div class="lib-child-row lib-file-row">
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
       ${isAdmin ? `
+        ${libraryOrderMoveButtonsHtml(f.id)}
         <button class="btn edit small" data-edit-file="${f.id}">${ICONS.edit}</button>
         <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash}</button>
       ` : ''}
@@ -3422,9 +3508,10 @@ function pageLibrary(){
 
       const rowHtml = `
         <div class="${rowClass}${isOpen ? ' open' : ''}" data-toggle-node="${f.id}" data-depth="${depth}">
-          <div style="display:flex; align-items:center; gap:8px;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
             <span class="lib-chevron">▾</span>
             ${isAdmin ? `
+              ${libraryOrderMoveButtonsHtml(f.id)}
               <button class="btn edit small" data-edit-folder="${f.id}">${ICONS.edit}</button>
               <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash}</button>
             ` : ''}
@@ -3468,9 +3555,10 @@ function pageLibrary(){
     const isOpen = s.id === (openPath[0] || null);
     const rowHtml = `
       <div class="lib-subject-row${isOpen ? ' open' : ''}" data-toggle-node="${s.id}" data-depth="0">
-        <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
           <span class="lib-chevron">▾</span>
           ${isAdmin ? `
+            ${libraryOrderMoveButtonsHtml(s.id)}
             <button class="btn edit small" data-edit-folder="${s.id}">${ICONS.edit}</button>
             <button class="btn danger small" data-del-node="${s.id}">${ICONS.trash}</button>
           ` : ''}
@@ -3543,7 +3631,7 @@ function modalAddFolder(parentId){
     const fd = new FormData(e.target);
     const title = fd.get('title').trim();
     if(!title){ document.getElementById('folderMsg').innerHTML = `<div class="form-msg error">يرجى إدخال الاسم.</div>`; return; }
-    state.books.push({ id:'fld'+Date.now(), type:'folder', parentId: parentId||null, title, createdAt: Date.now() });
+    state.books.push({ id:'fld'+Date.now(), type:'folder', parentId: parentId||null, title, createdAt: Date.now(), order: Date.now() });
     await setData('books', state.books, true);
     closeModal(); render();
   });
@@ -3587,7 +3675,7 @@ function modalAddFile(parentId){
     const title = fd.get('title').trim();
     const fileUrl = fd.get('fileUrl').trim();
     if(!title || !fileUrl){ document.getElementById('fileMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان ورابط الملف.</div>`; return; }
-    state.books.push({ id:'file'+Date.now(), type:'file', parentId: parentId||null, title, author: fd.get('author').trim(), fileUrl, createdAt: Date.now() });
+    state.books.push({ id:'file'+Date.now(), type:'file', parentId: parentId||null, title, author: fd.get('author').trim(), fileUrl, createdAt: Date.now(), order: Date.now() });
     await setData('books', state.books, true);
     closeModal(); render();
   });
@@ -6245,13 +6333,6 @@ function bindPageEvents(route){
         render();
       });
     });
-    document.querySelectorAll('[data-open-file]').forEach(el=>{
-      el.addEventListener('click', (e)=>{
-        if(e.target.closest('a,[data-edit-folder],[data-edit-file],[data-del-node]')) return;
-        const node = libraryNode(el.dataset.openFile);
-        if(node && node.fileUrl) window.open(node.fileUrl, '_blank', 'noopener');
-      });
-    });
     const addSubjectBtn = document.getElementById('addSubjectBtn');
     if(addSubjectBtn) addSubjectBtn.addEventListener('click', ()=> modalAddFolder(null));
     const librarySearchInput = document.getElementById('librarySearchInput');
@@ -6275,6 +6356,27 @@ function bindPageEvents(route){
     });
     document.querySelectorAll('[data-edit-file]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{ e.stopPropagation(); modalEditFile(btn.dataset.editFile); });
+    });
+    document.querySelectorAll('[data-move-node-up]').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        if(moveLibraryNodeOrder(btn.dataset.moveNodeUp, -1)){
+          await setData('books', state.books, true);
+          render();
+        }
+      });
+    });
+    document.querySelectorAll('[data-move-node-down]').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        if(moveLibraryNodeOrder(btn.dataset.moveNodeDown, 1)){
+          await setData('books', state.books, true);
+          render();
+        }
+      });
+    });
+    document.querySelectorAll('[data-move-node]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); modalMoveNode(btn.dataset.moveNode); });
     });
     document.querySelectorAll('[data-del-node]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{
