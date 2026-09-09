@@ -1024,13 +1024,9 @@ function majorEmblem(major){
   return major === 'طب الأسنان' ? '🦷' : '🩺';
 }
 
-/* مكتبة التمريض مقصورة على طلاب التمريض المسجّلين في جامعة مؤتة فقط
-   (الأدمن يشوفها دايمًا عشان يقدر يدير محتواها). */
+/* مكتبة التمريض صارت متاحة لكل الزوّار (بدون أي قيد جامعة/تخصص/تسجيل دخول) */
 function isLibraryAllowed(){
-  if(state.session && state.session.type === 'admin') return true;
-  return !!(state.session && state.session.type === 'student'
-    && state.session.university === 'جامعة مؤتة'
-    && state.session.major === 'التمريض');
+  return true;
 }
 
 function priceBadgeHtml(c, isAdmin){
@@ -1171,10 +1167,8 @@ function renderNavState(){
 
   const footerDesc = document.getElementById('footerDescText');
 
-  // مكتبة التمريض: تظهر فقط لطلاب التمريض بجامعة مؤتة (أو للأدمن لإدارتها)
+  // مكتبة التمريض: صارت متاحة للجميع، فرابط الفوتر بيظهر دايمًا لكل الزوّار
   const libAllowed = isLibraryAllowed();
-  const navLibraryLinkEl = document.getElementById('navLibraryLink');
-  if(navLibraryLinkEl) navLibraryLinkEl.classList.toggle('hidden', !libAllowed);
   const footerLibraryLinkEl = document.getElementById('footerLibraryLink');
   if(footerLibraryLinkEl) footerLibraryLinkEl.classList.toggle('hidden', !libAllowed);
 
@@ -1278,6 +1272,8 @@ const CONTENT_DEFAULTS = {
   app_desc: 'تابع كورساتك وبنك الأسئلة من هاتفك في أي وقت.',
   app_ios_url: '#',
   app_android_url: 'https://drive.google.com/file/d/12SB2OeQ49irLS1H39WqxIZwpHg3JJHxx/view?usp=drive_link',
+  library_promo_title: 'مكتبة التمريض — جامعة مؤتة',
+  library_promo_desc: 'مرجعك الدائم لكتب وملخصات مادة التمريض بجامعة مؤتة، منظّمة داخل مجلدات لكل مادة لتسهيل المراجعة والوصول السريع.',
 };
 const CONTENT_LABELS = {
   hero_title: 'عنوان الصفحة الرئيسية', hero_lead: 'وصف الصفحة الرئيسية', hero_card_title: 'عنوان بطاقة الجامعات',
@@ -1297,6 +1293,7 @@ const CONTENT_LABELS = {
   footer_desc: 'وصف الفوتر', footer_copy: 'نص حقوق النشر',
   app_title: 'عنوان نافذة تحميل التطبيق', app_desc: 'وصف نافذة تحميل التطبيق',
   app_ios_url: 'رابط App Store', app_android_url: 'رابط Google Play',
+  library_promo_title: 'عنوان قسم مكتبة التمريض بالصفحة الرئيسية', library_promo_desc: 'وصف قسم مكتبة التمريض بالصفحة الرئيسية',
 };
 function cval(key){ return (state.content && state.content[key] !== undefined) ? state.content[key] : CONTENT_DEFAULTS[key]; }
 function isAdminSession(){ return !!(state.session && state.session.type === 'admin'); }
@@ -1516,6 +1513,23 @@ function pageHome(){
     <div class="stat"><b>${state.questions.length}+</b><span>سؤال في البنك</span></div>
     <div class="stat"><b>${cval('stat_partners_value')}${editBtn('stat_partners_value')}</b><span>${cval('stat_partners_label')}${editBtn('stat_partners_label')}</span></div>
   </div>
+  <section class="section" style="padding-top:0;">
+    <div class="container">
+      <div class="app-download-box">
+        <div class="app-download-info">
+          <div class="app-download-icon">${ICONS.book}</div>
+          <div class="app-download-text">
+            <span class="eyebrow">لطلاب التمريض في جامعة مؤتة</span>
+            <h2>${cval('library_promo_title')}${editBtn('library_promo_title')}</h2>
+            <p>${cval('library_promo_desc')}${editBtn('library_promo_desc')}</p>
+          </div>
+        </div>
+        <div class="app-download-btn-wrap">
+          <a href="/library" class="btn teal solid app-download-btn">${ICONS.book} تصفّح المكتبة</a>
+        </div>
+      </div>
+    </div>
+  </section>
   <section class="section">
     <div class="container">
       <div class="section-head">
@@ -3478,12 +3492,6 @@ function libraryFileRowHtml(f, isAdmin){
 }
 
 function pageLibrary(){
-  if(!isLibraryAllowed()){
-    if(!state.session){
-      return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>مكتبة التمريض متاحة فقط لطلاب التمريض في جامعة مؤتة بعد تسجيل الدخول. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
-    }
-    return `<section class="section"><div class="container"><div class="empty-state"><h3>غير متاح لحسابك</h3><p>مكتبة التمريض متاحة حاليًا فقط لطلاب التمريض المسجّلين في جامعة مؤتة.</p></div></div></section>`;
-  }
   const isAdmin = state.session && state.session.type === 'admin';
   libraryEnsureAccordionStyles();
 
