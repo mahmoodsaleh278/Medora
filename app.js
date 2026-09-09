@@ -3430,7 +3430,7 @@ function libraryEnsureAccordionStyles(){
     .lib-child-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px; border-radius:12px; background:linear-gradient(180deg, rgba(124,92,246,.09), rgba(124,92,246,.02)); border:1px solid rgba(124,92,246,.2); margin-bottom:10px; transition:box-shadow .15s ease, background .15s ease; }
     .lib-child-row:last-child{ margin-bottom:0; }
     .lib-child-row.lib-folder-row{ cursor:pointer; }
-    .lib-child-row.lib-file-row{ cursor:default; }
+    .lib-child-row.lib-file-row{ cursor:pointer; }
     .lib-child-row:hover{ box-shadow:0 4px 14px rgba(124,92,246,.15); }
     .lib-child-row.open{ background:linear-gradient(180deg, rgba(124,92,246,.16), rgba(124,92,246,.05)); border-color:rgba(124,92,246,.45); margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; }
     .lib-child-row.open .lib-chevron{ transform:rotate(180deg); color:#7c5cf6; }
@@ -3461,14 +3461,13 @@ function libraryOrderMoveButtonsHtml(id){
 
 function libraryFileRowHtml(f, isAdmin){
   return `
-  <div class="lib-child-row lib-file-row">
+  <div class="lib-child-row lib-file-row" data-open-file="${escapeHtml(f.fileUrl)}">
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
       ${isAdmin ? `
         ${libraryOrderMoveButtonsHtml(f.id)}
         <button class="btn edit small" data-edit-file="${f.id}">${ICONS.edit}</button>
         <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash}</button>
       ` : ''}
-      <a href="${escapeHtml(f.fileUrl)}" target="_blank" rel="noopener" class="btn teal small">${ICONS.download} فتح الملف</a>
     </div>
     <div class="lib-subject-main">
       ${f.author ? `<span class="lib-file-author i18n-skip">✍️ ${escapeHtml(f.author)}</span>` : ''}
@@ -6350,6 +6349,12 @@ function bindPageEvents(route){
     });
     document.querySelectorAll('[data-add-file-to]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{ e.stopPropagation(); modalAddFile(btn.dataset.addFileTo); });
+    });
+    document.querySelectorAll('[data-open-file]').forEach(el=>{
+      el.addEventListener('click', (e)=>{
+        if(e.target.closest('[data-edit-file],[data-del-node],[data-move-node],[data-move-node-up],[data-move-node-down]')) return;
+        window.open(el.dataset.openFile, '_blank', 'noopener');
+      });
     });
     document.querySelectorAll('[data-edit-folder]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{ e.stopPropagation(); modalEditFolder(btn.dataset.editFolder); });
