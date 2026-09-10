@@ -3666,20 +3666,62 @@ function modalAddFile(parentId){
     <form id="fileForm">
       <div class="field"><label>عنوان الملف</label><input type="text" name="title" required maxlength="120" placeholder="مثال: ملخص المحاضرة الأولى"></div>
       <div class="field"><label>المؤلف (اختياري)</label><input type="text" name="author" maxlength="80" placeholder="اسم المؤلف"></div>
-      <div class="field"><label>رابط الملف (PDF)</label><input type="url" name="fileUrl" required placeholder="https://..." style="direction:ltr; text-align:start;"></div>
+      <div class="field">
+        <label>إرفاق ملف من جهازك</label>
+        <input type="file" name="fileAttach" id="libFileAttach" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png">
+        <div class="upload-progress hidden" id="libUploadProgress"><div class="upload-progress-fill" id="libUploadProgressFill"></div></div>
+        <div class="upload-status" id="libUploadStatus"></div>
+      </div>
+      <div class="field"><label>أو أدخل رابط ملف جاهز (اختياري إذا أرفقت ملفًا أعلاه)</label><input type="url" name="fileUrl" id="libFileUrlInput" placeholder="https://..." style="direction:ltr; text-align:start;"></div>
       <div id="fileMsg"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ الملف</button></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small" id="fileFormSubmitBtn">حفظ الملف</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
+
+  const fileInput = document.getElementById('libFileAttach');
+  const titleInput = document.querySelector('#fileForm input[name="title"]');
+  fileInput.addEventListener('change', ()=>{
+    if(fileInput.files[0] && !titleInput.value.trim()){
+      titleInput.value = fileInput.files[0].name.replace(/\.[^.]+$/, '');
+    }
+  });
+
   document.getElementById('fileForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
     const title = fd.get('title').trim();
-    const fileUrl = fd.get('fileUrl').trim();
-    if(!title || !fileUrl){ document.getElementById('fileMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان ورابط الملف.</div>`; return; }
-    state.books.push({ id:'file'+Date.now(), type:'file', parentId: parentId||null, title, author: fd.get('author').trim(), fileUrl, createdAt: Date.now(), order: Date.now() });
-    await setData('books', state.books, true);
-    closeModal(); render();
+    const manualUrl = fd.get('fileUrl').trim();
+    const attached = fileInput.files[0];
+    const msgBox = document.getElementById('fileMsg');
+    if(!title){ msgBox.innerHTML = `<div class="form-msg error">يرجى إدخال عنوان الملف.</div>`; return; }
+    if(!attached && !manualUrl){ msgBox.innerHTML = `<div class="form-msg error">أرفق ملفًا من جهازك أو أدخل رابطًا جاهزًا.</div>`; return; }
+
+    const submitBtn = document.getElementById('fileFormSubmitBtn');
+    let fileUrl = manualUrl, driveFileId = null;
+    try{
+      if(attached){
+        submitBtn.disabled = true;
+        const progWrap = document.getElementById('libUploadProgress');
+        const progFill = document.getElementById('libUploadProgressFill');
+        const statusEl = document.getElementById('libUploadStatus');
+        progWrap.classList.remove('hidden');
+        statusEl.textContent = 'جارِ رفع الملف... 0%';
+        const result = await uploadLibraryFileToDrive(attached, parentId, (pct)=>{
+          progFill.style.width = pct+'%';
+          statusEl.textContent = 'جارِ رفع الملف... '+pct+'%';
+        });
+        fileUrl = result.fileUrl;
+        driveFileId = result.driveFileId;
+        statusEl.textContent = 'اكتمل الرفع ✓';
+      }
+      state.books.push({ id:'file'+Date.now(), type:'file', parentId: parentId||null, title, author: fd.get('author').trim(), fileUrl, driveFileId, createdAt: Date.now(), order: Date.now() });
+      await setData('books', state.books, true);
+      closeModal(); render();
+    }catch(err){
+      console.error('فشل رفع ملف المكتبة', err);
+      if(submitBtn) submitBtn.disabled = false;
+      msgBox.innerHTML = `<div class="form-msg error">${escapeHtml(err.message || 'تعذّر رفع الملف، حاول مرة أخرى.')}</div>`;
+    }
   });
 }
 
@@ -3690,20 +3732,56 @@ function modalEditFile(id){
     <form id="fileEditForm">
       <div class="field"><label>عنوان الملف</label><input type="text" name="title" required maxlength="120" value="${escapeHtml(n.title)}"></div>
       <div class="field"><label>المؤلف (اختياري)</label><input type="text" name="author" maxlength="80" value="${escapeHtml(n.author||'')}"></div>
-      <div class="field"><label>رابط الملف (PDF)</label><input type="url" name="fileUrl" required value="${escapeHtml(n.fileUrl||'')}" style="direction:ltr; text-align:start;"></div>
+      <div class="field">
+        <label>استبدال الملف من جهازك (اختياري)</label>
+        <input type="file" name="fileAttach" id="libFileAttachEdit" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png">
+        <div class="upload-progress hidden" id="libUploadProgressEdit"><div class="upload-progress-fill" id="libUploadProgressFillEdit"></div></div>
+        <div class="upload-status" id="libUploadStatusEdit"></div>
+      </div>
+      <div class="field"><label>رابط الملف الحالي</label><input type="url" name="fileUrl" id="libFileUrlInputEdit" value="${escapeHtml(n.fileUrl||'')}" style="direction:ltr; text-align:start;"></div>
       <div id="fileMsg"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small" id="fileEditSubmitBtn">حفظ التعديلات</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
+
+  const fileInput = document.getElementById('libFileAttachEdit');
+
   document.getElementById('fileEditForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
     const title = fd.get('title').trim();
-    const fileUrl = fd.get('fileUrl').trim();
-    if(!title || !fileUrl){ document.getElementById('fileMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان ورابط الملف.</div>`; return; }
-    n.title = title; n.author = fd.get('author').trim(); n.fileUrl = fileUrl;
-    await setData('books', state.books, true);
-    closeModal(); render();
+    const manualUrl = fd.get('fileUrl').trim();
+    const attached = fileInput.files[0];
+    const msgBox = document.getElementById('fileMsg');
+    if(!title){ msgBox.innerHTML = `<div class="form-msg error">يرجى إدخال عنوان الملف.</div>`; return; }
+    if(!attached && !manualUrl){ msgBox.innerHTML = `<div class="form-msg error">لازم يبقى فيه رابط ملف أو ترفق ملفًا بديلًا.</div>`; return; }
+
+    const submitBtn = document.getElementById('fileEditSubmitBtn');
+    let fileUrl = manualUrl, driveFileId = n.driveFileId || null;
+    try{
+      if(attached){
+        submitBtn.disabled = true;
+        const progWrap = document.getElementById('libUploadProgressEdit');
+        const progFill = document.getElementById('libUploadProgressFillEdit');
+        const statusEl = document.getElementById('libUploadStatusEdit');
+        progWrap.classList.remove('hidden');
+        statusEl.textContent = 'جارِ رفع الملف... 0%';
+        const result = await uploadLibraryFileToDrive(attached, n.parentId, (pct)=>{
+          progFill.style.width = pct+'%';
+          statusEl.textContent = 'جارِ رفع الملف... '+pct+'%';
+        });
+        fileUrl = result.fileUrl;
+        driveFileId = result.driveFileId;
+        statusEl.textContent = 'اكتمل الرفع ✓';
+      }
+      n.title = title; n.author = fd.get('author').trim(); n.fileUrl = fileUrl; n.driveFileId = driveFileId;
+      await setData('books', state.books, true);
+      closeModal(); render();
+    }catch(err){
+      console.error('فشل رفع ملف المكتبة', err);
+      if(submitBtn) submitBtn.disabled = false;
+      msgBox.innerHTML = `<div class="form-msg error">${escapeHtml(err.message || 'تعذّر رفع الملف، حاول مرة أخرى.')}</div>`;
+    }
   });
 }
 
@@ -4600,6 +4678,82 @@ function uploadVideoToBunny(file, { courseId, title }, onProgress){
           },
         });
         upload.start();
+      }catch(e){ reject(e); }
+    })();
+  });
+}
+
+/* =========================================================
+   رفع ملفات مكتبة التمريض مباشرة إلى Google Drive:
+   - كل مجلد بمكتبة الموقع (مادة أو مجلد فرعي) له مجلد مطابق بنفس الاسم يتكوّن
+     تلقائيًا داخل مجلد Drive "العام" أول مرة يُرفع له ملف — ونفس المجلد
+     يُعاد استخدامه لاحقًا (بدون تكرار) لبقية الملفات اللي تنرفع لنفس المكان.
+   - الرفع يتم من متصفح الأدمن مباشرة إلى Drive عبر بروتوكول "Resumable Upload"
+     الرسمي من Google، بدون ما يمر محتوى الملف عبر خادمنا إطلاقًا — فقط "جلسة
+     رفع" قصيرة الصلاحية نطلبها من Supabase Edge Function (drive-upload) اللي
+     تحمل بيانات حساب خدمة Google (Service Account) بأمان على الخادم.
+     راجع ملف drive-upload/index.ts المرفق ودليل الإعداد لنشرها.
+   ========================================================= */
+const DRIVE_FUNCTION_ENDPOINT = SUPABASE_URL.startsWith('http') ? (SUPABASE_URL + '/functions/v1/drive-upload') : '';
+
+async function callDriveFunction(action, payload){
+  if(!DRIVE_FUNCTION_ENDPOINT) throw new Error('لم يتم إعداد الاتصال بخدمة رفع الملفات بعد.');
+  const res = await fetch(DRIVE_FUNCTION_ENDPOINT, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_ANON_KEY, 'apikey':SUPABASE_PUBLISHABLE_KEY },
+    body: JSON.stringify(Object.assign({ action }, payload))
+  });
+  if(!res.ok){
+    let detail = '';
+    try{
+      const errJson = await res.json();
+      detail = errJson.error || '';
+    }catch(e){}
+    throw new Error(detail || ('فشل الطلب (رمز ' + res.status + ')'));
+  }
+  return res.json();
+}
+
+/* بترجع أسماء كل الأجداد من الجذر وحتى مجلد معيّن بمكتبة الموقع (بترتيب من
+   الأعلى للأسفل: المادة ثم المجلدات الفرعية)، لتُستخدم كمسار مجلدات على Drive
+   مطابق تمامًا لمكان الملف بالمكتبة. parentId=null (رفع لمستوى المادة نفسها
+   مباشرة، نادرًا ما يصير لأن الملفات دايمًا جوا مادة/مجلد) بترجع مسار فاضي. */
+function libraryDrivePath(parentId){
+  return parentId ? libraryBreadcrumb(parentId).map(n=>n.title) : [];
+}
+
+/* يرفع ملفًا من جهاز الأدمن إلى Drive داخل المجلد المطابق لمكان الملف
+   بالمكتبة (وينشئ المجلد تلقائيًا إذا ما كان موجود)، ويرجّع رابط العرض
+   (webViewLink) بعد اكتمال الرفع لتخزينه بنفس حقل fileUrl المعتاد.
+   onProgress(percent) تُستدعى بشكل دوري أثناء الرفع. */
+function uploadLibraryFileToDrive(file, parentId, onProgress){
+  return new Promise((resolve, reject)=>{
+    (async ()=>{
+      try{
+        const { uploadUrl } = await callDriveFunction('create-upload-session', {
+          path: libraryDrivePath(parentId),
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+        });
+        if(!uploadUrl) throw new Error('تعذّر تجهيز رفع الملف، حاول مرة أخرى.');
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', uploadUrl, true);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.upload.onprogress = (e)=>{
+          if(e.lengthComputable && onProgress) onProgress(Math.round((e.loaded/e.total)*100));
+        };
+        xhr.onload = ()=>{
+          if(xhr.status>=200 && xhr.status<300){
+            try{
+              const data = JSON.parse(xhr.responseText);
+              resolve({ fileUrl: data.webViewLink || data.webContentLink || '', driveFileId: data.id || '' });
+            }catch(e){ reject(new Error('تعذّرت قراءة استجابة Drive بعد اكتمال الرفع.')); }
+          } else {
+            reject(new Error('فشل رفع الملف إلى Drive (رمز '+xhr.status+').'));
+          }
+        };
+        xhr.onerror = ()=> reject(new Error('تعذّر الاتصال بـ Drive أثناء الرفع، تحقق من اتصال الإنترنت.'));
+        xhr.send(file);
       }catch(e){ reject(e); }
     })();
   });
