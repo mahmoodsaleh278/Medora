@@ -4722,40 +4722,42 @@ function libraryDrivePath(parentId){
   return parentId ? libraryBreadcrumb(parentId).map(n=>n.title) : [];
 }
 
-/* يرفع ملفًا من جهاز الأدمن إلى Drive داخل المجلد المطابق لمكان الملف
-   بالمكتبة (وينشئ المجلد تلقائيًا إذا ما كان موجود)، ويرجّع رابط العرض
-   (webViewLink) بعد اكتمال الرفع لتخزينه بنفس حقل fileUrl المعتاد.
+/* يرفع ملفًا من جهاز الأدمن إلى Drive داخل المجلد المطابق لمكان الملف بالمكتبة
+   (وينشئ المجلد تلقائيًا إذا ما كان موجود)، ويرجّع رابط العرض (webViewLink)
+   بعد اكتمال الرفع لتخزينه بنفس حقل fileUrl المعتاد.
+   ملاحظة: الملف بيترفع أولًا من المتصفح إلى Edge Function عندنا (drive-upload)
+   وهي يلي بتكمّل تمريره لـ Google Drive من طرفها — بدل ما يرفعه المتصفح مباشرة
+   لـ Google، لأن Drive API ما بتسمح برفع مباشر من متصفح (قيد CORS من جوجل).
    onProgress(percent) تُستدعى بشكل دوري أثناء الرفع. */
 function uploadLibraryFileToDrive(file, parentId, onProgress){
   return new Promise((resolve, reject)=>{
-    (async ()=>{
-      try{
-        const { uploadUrl } = await callDriveFunction('create-upload-session', {
-          path: libraryDrivePath(parentId),
-          fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
-        });
-        if(!uploadUrl) throw new Error('تعذّر تجهيز رفع الملف، حاول مرة أخرى.');
-        const xhr = new XMLHttpRequest();
-        xhr.open('PUT', uploadUrl, true);
-        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-        xhr.upload.onprogress = (e)=>{
-          if(e.lengthComputable && onProgress) onProgress(Math.round((e.loaded/e.total)*100));
-        };
-        xhr.onload = ()=>{
-          if(xhr.status>=200 && xhr.status<300){
-            try{
-              const data = JSON.parse(xhr.responseText);
-              resolve({ fileUrl: data.webViewLink || data.webContentLink || '', driveFileId: data.id || '' });
-            }catch(e){ reject(new Error('تعذّرت قراءة استجابة Drive بعد اكتمال الرفع.')); }
-          } else {
-            reject(new Error('فشل رفع الملف إلى Drive (رمز '+xhr.status+').'));
-          }
-        };
-        xhr.onerror = ()=> reject(new Error('تعذّر الاتصال بـ Drive أثناء الرفع، تحقق من اتصال الإنترنت.'));
-        xhr.send(file);
-      }catch(e){ reject(e); }
-    })();
+    if(!DRIVE_FUNCTION_ENDPOINT){ reject(new Error('لم يتم إعداد الاتصال بخدمة رفع الملفات بعد.')); return; }
+    const path = libraryDrivePath(parentId);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', DRIVE_FUNCTION_ENDPOINT + '?action=upload-file', true);
+    xhr.setRequestHeader('Authorization', 'Bearer '+SUPABASE_ANON_KEY);
+    xhr.setRequestHeader('apikey', SUPABASE_PUBLISHABLE_KEY);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.setRequestHeader('x-drive-path', encodeURIComponent(JSON.stringify(path)));
+    xhr.setRequestHeader('x-drive-filename', encodeURIComponent(file.name || 'ملف'));
+    xhr.setRequestHeader('x-drive-action', 'upload-file'); // احتياطي، لو query string انحذفت بالطريق
+    xhr.upload.onprogress = (e)=>{
+      if(e.lengthComputable && onProgress) onProgress(Math.round((e.loaded/e.total)*100));
+    };
+    xhr.onload = ()=>{
+      if(xhr.status>=200 && xhr.status<300){
+        try{
+          const data = JSON.parse(xhr.responseText);
+          resolve({ fileUrl: data.webViewLink || data.webContentLink || '', driveFileId: data.id || '' });
+        }catch(e){ reject(new Error('تعذّرت قراءة استجابة الخادم بعد اكتمال الرفع.')); }
+      } else {
+        let detail = '';
+        try{ detail = JSON.parse(xhr.responseText).error || ''; }catch(e){}
+        reject(new Error(detail || ('فشل رفع الملف (رمز '+xhr.status+').')));
+      }
+    };
+    xhr.onerror = ()=> reject(new Error('تعذّر الاتصال بخدمة الرفع، تحقق من اتصال الإنترنت.'));
+    xhr.send(file);
   });
 }
 
