@@ -1024,9 +1024,12 @@ function majorEmblem(major){
   return major === 'طب الأسنان' ? '🦷' : '🩺';
 }
 
-/* مكتبة التمريض صارت متاحة لكل الزوّار (بدون أي قيد جامعة/تخصص/تسجيل دخول) */
+/* مكتبة التمريض متاحة لكل الزوّار (بدون أي قيد جامعة/تخصص/تسجيل دخول)،
+   إلا إذا عطّلها المشرف من "تصميم الموقع" (designVal('libraryEnabled')).
+   المشرف نفسه يقدر يدخلها دايمًا حتى وهي مخفية عن الطلاب، عشان يقدر يديرها. */
 function isLibraryAllowed(){
-  return true;
+  if(isAdminSession()) return true;
+  return designVal('libraryEnabled') !== false;
 }
 
 function priceBadgeHtml(c, isAdmin){
@@ -1310,7 +1313,7 @@ function editBtn(key){
    اللون الأساسي (وتُشتق منه درجاته الفاتحة/الغامقة تلقائيًا)، عرض المحتوى،
    وحجم الخط الافتراضي لكل زوار المنصة. تُخزَّن بشكل مشترك (Supabase) بحيث
    يراها كل مستخدم بنفس الشكل الذي يضبطه المشرف. */
-const DESIGN_DEFAULTS = { color:'#177a8c', width:1180, fontScale:'medium' };
+const DESIGN_DEFAULTS = { color:'#177a8c', width:1180, fontScale:'medium', libraryEnabled:true };
 const DESIGN_FONT_SCALE_MAP = { small:0.92, medium:1, large:1.14 };
 function clampNum(n, min, max){ return Math.min(max, Math.max(min, n)); }
 function shadeHexColor(hex, percent){
@@ -1357,13 +1360,20 @@ function modalEditDesign(){
           <option value="large" ${d.fontScale==='large'?'selected':''}>كبير</option>
         </select>
       </div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" name="libraryEnabled" ${d.libraryEnabled !== false ? 'checked' : ''} style="width:auto;">
+          <span>إظهار مكتبة التمريض للطلاب والزوّار</span>
+        </label>
+        <p style="color:var(--muted); font-size:12.5px; margin-top:4px;">عند إلغاء التفعيل، تختفي المكتبة من الفوتر والصفحة الرئيسية ولا يقدر أي طالب أو زائر يدخلها، وتبقى متاحة للمشرف فقط لإدارتها.</p>
+      </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ</button></div>
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   document.getElementById('designEditForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
-    state.design = { color: fd.get('color'), width: parseInt(fd.get('width'),10) || 1180, fontScale: fd.get('fontScale') || 'medium' };
+    state.design = { color: fd.get('color'), width: parseInt(fd.get('width'),10) || 1180, fontScale: fd.get('fontScale') || 'medium', libraryEnabled: fd.get('libraryEnabled') === 'on' };
     await setData('design', state.design, true);
     applyDesignVars(state.design);
     closeModal(); render();
@@ -1543,6 +1553,7 @@ function pageHome(){
           </div>
         </div>
       </div>
+      ${isLibraryAllowed() || isAdminSession() ? `
       <div class="library-promo-box">
         <div class="library-promo-info">
           <div class="library-promo-icon">${ICONS.book}</div>
@@ -1550,12 +1561,13 @@ function pageHome(){
             <span class="eyebrow">لطلاب التمريض في جامعة مؤتة</span>
             <h2>${cval('library_promo_title')}${editBtn('library_promo_title')}</h2>
             <p>${cval('library_promo_desc')}${editBtn('library_promo_desc')}</p>
+            ${isAdminSession() && !isLibraryAllowed() ? `<p style="color:var(--red,#d33); font-size:13px; font-weight:700; margin-top:6px;">⚠️ المكتبة مخفية حاليًا عن الطلاب</p>` : ''}
           </div>
         </div>
         <div class="library-promo-btn-wrap">
           <a href="/library" class="btn teal solid">${ICONS.book} تصفّح المكتبة</a>
         </div>
-      </div>
+      </div>` : ''}
     </div>
   </section>
   <section class="app-download-section">
@@ -3488,6 +3500,9 @@ function libraryFileRowHtml(f, isAdmin){
 
 function pageLibrary(){
   const isAdmin = state.session && state.session.type === 'admin';
+  if(!isAdmin && !isLibraryAllowed()){
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>المكتبة غير متاحة حاليًا</h3><p>تم إيقاف مكتبة التمريض مؤقتًا من قبل الإدارة، حاول لاحقًا.</p></div></div></section>`;
+  }
   libraryEnsureAccordionStyles();
 
   const openPath = Array.isArray(state.libraryOpenPath) ? state.libraryOpenPath : [];
