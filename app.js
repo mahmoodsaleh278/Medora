@@ -1520,7 +1520,7 @@ function pageHome(){
   </section>
   <div class="stats-strip">
     <div class="stat"><b>${state.courses.length}+</b><span>كورس متاح</span></div>
-    <div class="stat"><b>${state.questions.length}+</b><span>سؤال في البنك</span></div>
+    <div class="stat"><b>${Math.max(500, state.questions.length)}+</b><span>سؤال في البنك</span></div>
     <div class="stat"><b>${cval('stat_partners_value')}${editBtn('stat_partners_value')}</b><span>${cval('stat_partners_label')}${editBtn('stat_partners_label')}</span></div>
   </div>
   <section class="section">
