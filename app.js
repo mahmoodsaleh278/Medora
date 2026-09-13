@@ -1095,6 +1095,11 @@ function scrollToCourseCanvas(){
   const el = document.getElementById('courseCanvas') || document.querySelector('.courses-hero');
   if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
 }
+function scrollToLibraryTop(){
+  const el = document.querySelector('.lib-breadcrumb') || document.querySelector('.courses-hero');
+  if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+  else window.scrollTo({top:0, behavior:'smooth'});
+}
 function scrollToQuizTop(){
   const el = document.querySelector('.wizard-card') || document.querySelector('.wizard-wrap');
   if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
@@ -6481,7 +6486,7 @@ function bindPageEvents(route){
         const depth = parseInt(el.dataset.libCrumbDepth, 10) || 0;
         const path = Array.isArray(state.libraryOpenPath) ? state.libraryOpenPath : [];
         state.libraryOpenPath = path.slice(0, depth);
-        render();
+        render().then(()=> scrollToLibraryTop());
       });
     });
     document.querySelectorAll('[data-toggle-node]').forEach(el=>{
@@ -6496,7 +6501,7 @@ function bindPageEvents(route){
           path[depth] = id; // فتح: نبقي آباءه بالمسار ونقفل أي فرع أعمق كان مفتوحًا
           state.libraryOpenPath = path;
         }
-        render();
+        render().then(()=> scrollToLibraryTop());
       });
     });
     const addSubjectBtn = document.getElementById('addSubjectBtn');
