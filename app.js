@@ -3438,35 +3438,50 @@ function libraryEnsureAccordionStyles(){
   const style = document.createElement('style');
   style.id = 'libAccordionStyles';
   style.textContent = `
-    .lib-subjects-list{ display:flex; flex-direction:column; }
-    .lib-subject-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-radius:14px; background:linear-gradient(180deg, rgba(20,184,201,.08), rgba(20,184,201,.02)); border:1px solid rgba(20,184,201,.18); cursor:pointer; margin-bottom:12px; transition:box-shadow .15s ease, background .15s ease, border-color .15s ease; }
-    .lib-subject-row:hover{ box-shadow:0 4px 16px rgba(20,184,201,.15); }
-    .lib-subject-row.open{ background:linear-gradient(180deg, rgba(20,184,201,.16), rgba(20,184,201,.05)); border-color:rgba(20,184,201,.4); margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; }
-    .lib-subject-row .lib-chevron{ font-size:16px; line-height:1; color:var(--muted,#7c93a3); transition:transform .2s ease; display:inline-block; }
-    .lib-subject-row.open .lib-chevron{ transform:rotate(180deg); color:var(--teal,#0f9d8f); }
-    .lib-subject-main{ display:flex; align-items:center; gap:10px; }
-    .lib-subject-title{ font-weight:800; font-size:15.5px; direction:ltr; unicode-bidi:plaintext; text-align:left; }
-    .lib-subject-icon{ color:var(--teal,#0f9d8f); font-size:18px; }
-    .lib-count-badge{ background:rgba(20,184,201,.16); color:var(--teal,#0f9d8f); font-weight:800; font-size:13px; padding:3px 12px; border-radius:999px; min-width:26px; text-align:center; }
-    .lib-subject-panel{ padding:16px 18px 20px; margin:0 0 12px; border-radius:0 0 14px 14px; background:rgba(20,184,201,.03); border:1px solid rgba(20,184,201,.4); border-top:1px dashed rgba(20,184,201,.3); }
-    .lib-child-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px; border-radius:12px; background:linear-gradient(180deg, rgba(124,92,246,.09), rgba(124,92,246,.02)); border:1px solid rgba(124,92,246,.2); margin-bottom:10px; transition:box-shadow .15s ease, background .15s ease; }
-    .lib-child-row:last-child{ margin-bottom:0; }
-    .lib-child-row.lib-folder-row{ cursor:pointer; }
-    .lib-child-row.lib-file-row{ cursor:pointer; }
-    .lib-child-row:hover{ box-shadow:0 4px 14px rgba(124,92,246,.15); }
-    .lib-child-row.open{ background:linear-gradient(180deg, rgba(124,92,246,.16), rgba(124,92,246,.05)); border-color:rgba(124,92,246,.45); margin-bottom:0; border-bottom-left-radius:0; border-bottom-right-radius:0; }
-    .lib-child-row.open .lib-chevron{ transform:rotate(180deg); color:#7c5cf6; }
-    .lib-row-arrow{ font-size:15px; line-height:1; color:var(--muted,#7c93a3); }
-    .lib-child-row .lib-subject-title{ font-weight:700; font-size:14.5px; }
-    .lib-child-badge{ background:rgba(124,92,246,.18); color:#7c5cf6; font-weight:800; font-size:12.5px; padding:3px 11px; border-radius:999px; min-width:24px; text-align:center; }
-    .lib-child-icon{ color:#7c5cf6; font-size:17px; }
-    .lib-file-author{ font-size:12.5px; color:var(--muted,#7c93a3); font-weight:600; direction:ltr; unicode-bidi:plaintext; text-align:left; }
-    .lib-nested-panel{ padding:14px 16px 16px; margin:0 0 10px; border-radius:0 0 12px 12px; background:rgba(124,92,246,.04); border:1px solid rgba(124,92,246,.45); border-top:1px dashed rgba(124,92,246,.35); }
-    body.dark .lib-child-row{ background:linear-gradient(180deg, rgba(124,92,246,.14), rgba(124,92,246,.05)); border-color:rgba(124,92,246,.35); }
-    body.dark .lib-nested-panel{ background:rgba(124,92,246,.06); }
-    body.dark .lib-child-row{ background:linear-gradient(180deg, rgba(124,92,246,.14), rgba(124,92,246,.05)); border-color:rgba(124,92,246,.35); }
-    body.dark .lib-subject-row{ background:linear-gradient(180deg, rgba(20,184,201,.1), rgba(20,184,201,.03)); border-color:rgba(20,184,201,.25); }
-    body.dark .lib-subject-panel{ background:rgba(20,184,201,.05); }
+    /* ====== شريط المسار (Breadcrumb) ====== */
+    .lib-breadcrumb{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:20px; }
+    .lib-crumb{ padding:7px 16px; border-radius:999px; background:rgba(20,184,201,.08); border:1px solid rgba(20,184,201,.18); font-weight:700; font-size:13.5px; color:var(--muted,#7c93a3); cursor:pointer; transition:background .15s ease, color .15s ease, border-color .15s ease; white-space:nowrap; }
+    .lib-crumb:hover{ background:rgba(20,184,201,.16); color:var(--teal,#0f9d8f); }
+    .lib-crumb.home{ color:var(--teal,#0f9d8f); }
+    .lib-crumb.active{ background:var(--teal,#0f9d8f); border-color:var(--teal,#0f9d8f); color:#fff; cursor:default; }
+    .lib-crumb-sep{ color:var(--muted,#7c93a3); opacity:.5; font-size:14px; }
+
+    /* ====== شبكة المجلدات (بطاقات) ====== */
+    .lib-section-label{ font-size:13px; font-weight:800; color:var(--muted,#7c93a3); margin:4px 2px 12px; letter-spacing:.2px; }
+    .lib-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(168px, 1fr)); gap:16px; margin-bottom:28px; }
+    .lib-card{ position:relative; border-radius:20px; padding:26px 14px 18px; display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center; cursor:pointer; background:var(--card,#fff); border:1px solid rgba(20,184,201,.16); box-shadow:0 1px 3px rgba(15,23,42,.04); transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; overflow:hidden; }
+    .lib-card::before{ content:''; position:absolute; inset-inline-start:0; top:0; width:38%; height:8px; background:rgba(20,184,201,.35); border-radius:0 0 10px 0; }
+    .lib-card:hover{ transform:translateY(-5px); box-shadow:0 12px 28px rgba(20,184,201,.18); border-color:rgba(20,184,201,.4); }
+    .lib-card-folder::before{ background:rgba(124,92,246,.35); }
+    .lib-card-folder{ border-color:rgba(124,92,246,.18); }
+    .lib-card-folder:hover{ box-shadow:0 12px 28px rgba(124,92,246,.18); border-color:rgba(124,92,246,.4); }
+    .lib-card-icon-wrap{ width:60px; height:60px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:26px; background:linear-gradient(160deg, rgba(20,184,201,.18), rgba(20,184,201,.06)); color:var(--teal,#0f9d8f); }
+    .lib-card-folder .lib-card-icon-wrap{ background:linear-gradient(160deg, rgba(124,92,246,.18), rgba(124,92,246,.06)); color:#7c5cf6; }
+    .lib-card-title{ font-weight:800; font-size:14.5px; line-height:1.35; }
+    .lib-card-count{ font-size:11.5px; font-weight:700; color:var(--muted,#7c93a3); background:rgba(124,150,166,.12); padding:2px 10px; border-radius:999px; }
+    .lib-card-admin{ position:absolute; inset-inline-start:8px; top:8px; display:flex; gap:4px; opacity:0; transform:translateY(-4px); transition:opacity .15s ease, transform .15s ease; }
+    .lib-card:hover .lib-card-admin, .lib-card:focus-within .lib-card-admin{ opacity:1; transform:translateY(0); }
+    .lib-card-admin .btn{ padding:3px 7px; font-size:12px; }
+
+    /* ====== قائمة الملفات ====== */
+    .lib-files-list{ display:flex; flex-direction:column; gap:10px; }
+    .lib-file-item{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:13px 16px; border-radius:14px; background:var(--card,#fff); border:1px solid rgba(124,92,246,.16); cursor:pointer; transition:box-shadow .15s ease, border-color .15s ease, transform .15s ease; }
+    .lib-file-item:hover{ box-shadow:0 8px 20px rgba(124,92,246,.14); border-color:rgba(124,92,246,.4); transform:translateX(-2px); }
+    [dir="rtl"] .lib-file-item:hover{ transform:translateX(2px); }
+    .lib-file-main{ display:flex; align-items:center; gap:12px; min-width:0; }
+    .lib-file-icon-wrap{ width:40px; height:40px; flex:none; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:17px; background:linear-gradient(160deg, rgba(124,92,246,.18), rgba(124,92,246,.06)); color:#7c5cf6; }
+    .lib-file-text{ min-width:0; }
+    .lib-file-title{ font-weight:700; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lib-file-author{ font-size:12px; color:var(--muted,#7c93a3); font-weight:600; direction:ltr; unicode-bidi:plaintext; text-align:left; margin-top:2px; }
+    .lib-file-actions{ display:flex; align-items:center; gap:6px; flex:none; }
+    .lib-file-open-hint{ font-size:12.5px; font-weight:700; color:var(--teal,#0f9d8f); display:flex; align-items:center; gap:4px; }
+
+    body.dark .lib-crumb{ background:rgba(20,184,201,.1); border-color:rgba(20,184,201,.25); }
+    body.dark .lib-card, body.dark .lib-file-item{ background:rgba(255,255,255,.03); }
+    body.dark .lib-card{ border-color:rgba(20,184,201,.2); }
+    body.dark .lib-card-folder{ border-color:rgba(124,92,246,.25); }
+    body.dark .lib-file-item{ border-color:rgba(124,92,246,.22); }
+    body.dark .lib-card-count{ background:rgba(255,255,255,.06); }
   `;
   document.head.appendChild(style);
 }
@@ -3482,18 +3497,20 @@ function libraryOrderMoveButtonsHtml(id){
 
 function libraryFileRowHtml(f, isAdmin){
   return `
-  <div class="lib-child-row lib-file-row" data-open-file="${escapeHtml(f.fileUrl)}">
-    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+  <div class="lib-file-item" data-open-file="${escapeHtml(f.fileUrl)}">
+    <div class="lib-file-main">
+      <span class="lib-file-icon-wrap">${ICONS.book}</span>
+      <div class="lib-file-text">
+        <div class="lib-file-title i18n-skip">${escapeHtml(f.title)}</div>
+        ${f.author ? `<div class="lib-file-author i18n-skip">✍️ ${escapeHtml(f.author)}</div>` : ''}
+      </div>
+    </div>
+    <div class="lib-file-actions">
       ${isAdmin ? `
         ${libraryOrderMoveButtonsHtml(f.id)}
         <button class="btn edit small" data-edit-file="${f.id}">${ICONS.edit}</button>
         <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash}</button>
-      ` : ''}
-    </div>
-    <div class="lib-subject-main">
-      ${f.author ? `<span class="lib-file-author i18n-skip">✍️ ${escapeHtml(f.author)}</span>` : ''}
-      <span class="lib-subject-title i18n-skip">${escapeHtml(f.title)}</span>
-      <span class="lib-child-icon">${ICONS.book}</span>
+      ` : `<span class="lib-file-open-hint">فتح ⟵</span>`}
     </div>
   </div>`;
 }
@@ -3506,113 +3523,78 @@ function pageLibrary(){
   libraryEnsureAccordionStyles();
 
   const openPath = Array.isArray(state.libraryOpenPath) ? state.libraryOpenPath : [];
+  const currentId = openPath.length ? openPath[openPath.length - 1] : null;
+  const trail = currentId ? libraryBreadcrumb(currentId) : []; // عقد الأسلاف + العنصر الحالي، من الجذر للأعمق
+  const depthForNewChild = trail.length; // العمق الذي ستُفتح عنده أي بطاقة مجلد ضمن هذا المستوى
 
-  /* يبني صفوف مجلدات/ملفات مستوى معيّن، وإذا مجلد منها مفتوح (حسب openPath)
-     يبني تحته مباشرة لوحة فيها محتواه (بنفس الطريقة، بشكل متكرّر لأي عمق). */
-  function renderLevelRows(parentId, depth){
-    const children = libraryChildren(parentId);
-    const folders = children.filter(n=>n.type==='folder');
-    const files = children.filter(n=>n.type==='file');
-    const openIdHere = openPath[depth] || null;
-    const isRoot = depth === 0;
+  /* شريط المسار: الرئيسية دائمًا، ثم كل مستوى تحته قابل للنقر للرجوع له مباشرة */
+  const breadcrumbHtml = `
+    <div class="lib-breadcrumb">
+      <span class="lib-crumb home${!currentId ? ' active' : ''}" data-lib-crumb-depth="0">🏠 مكتبة التمريض</span>
+      ${trail.map((n, idx) => `
+        <span class="lib-crumb-sep">‹</span>
+        <span class="lib-crumb${idx === trail.length - 1 ? ' active' : ''}" data-lib-crumb-depth="${idx+1}">${escapeHtml(n.title)}</span>
+      `).join('')}
+    </div>`;
 
-    const folderRows = folders.map(f=>{
-      const itemCount = libraryChildren(f.id).length;
-      const isOpen = f.id === openIdHere;
-      const rowClass = isRoot ? 'lib-subject-row' : 'lib-child-row lib-folder-row';
-      const badgeClass = isRoot ? 'lib-count-badge' : 'lib-child-badge';
-      const iconClass = isRoot ? 'lib-subject-icon' : 'lib-child-icon';
+  const searchTerm = (state.librarySearch || '').trim().toLowerCase();
 
-      const rowHtml = `
-        <div class="${rowClass}${isOpen ? ' open' : ''}" data-toggle-node="${f.id}" data-depth="${depth}">
-          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span class="lib-chevron">▾</span>
-            ${isAdmin ? `
-              ${libraryOrderMoveButtonsHtml(f.id)}
-              <button class="btn edit small" data-edit-folder="${f.id}">${ICONS.edit}</button>
-              <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash}</button>
-            ` : ''}
-          </div>
-          <div class="lib-subject-main">
-            <span class="${badgeClass}">${itemCount}</span>
-            <span class="lib-subject-title i18n-skip">${escapeHtml(f.title)}</span>
-            <span class="${iconClass}">📁</span>
-          </div>
-        </div>`;
-
-      if(!isOpen) return rowHtml;
-
-      const nestedHtml = renderLevelRows(f.id, depth+1);
-      const addToolbar = isAdmin ? `
-        <div class="toolbar" style="justify-content:flex-end; gap:10px; margin-top:0;">
-          <button class="btn small" data-add-folder-to="${f.id}">${ICONS.plus} إضافة مجلد</button>
-          <button class="btn teal solid small" data-add-file-to="${f.id}">${ICONS.plus} إضافة ملف</button>
-        </div>` : '';
-      const emptyInner = nestedHtml ? '' : `<div class="empty-state"><h3>هذا المجلد فارغ</h3><p>${isAdmin ? 'أضف مجلدًا أو ملفًا جديدًا.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
-      const panelHtml = `
-        <div class="lib-subject-panel${isRoot ? '' : ' lib-nested-panel'}">
-          ${addToolbar}
-          ${nestedHtml || emptyInner}
-        </div>`;
-
-      return rowHtml + panelHtml;
-    }).join('');
-
-    const fileRows = files.map(f=>libraryFileRowHtml(f, isAdmin)).join('');
-    return folderRows + fileRows;
+  let folders, files;
+  if(!currentId){
+    // المستوى الجذري: مواد (مجلدات) فقط، قابلة للفلترة بالبحث
+    const allSubjects = libraryChildren(null).filter(n=>n.type==='folder');
+    folders = searchTerm ? allSubjects.filter(s => (s.title||'').toLowerCase().includes(searchTerm)) : allSubjects;
+    files = [];
+  } else {
+    const children = libraryChildren(currentId);
+    folders = children.filter(n=>n.type==='folder');
+    files = children.filter(n=>n.type==='file');
   }
 
-  const allSubjects = libraryChildren(null);
-  const searchTerm = (state.librarySearch || '').trim().toLowerCase();
-  const subjects = searchTerm ? allSubjects.filter(s => (s.title||'').toLowerCase().includes(searchTerm)) : allSubjects;
+  const isRoot = !currentId;
 
-  /* عند البحث، نبني صفوف المواد المطابقة فقط، لكن نحافظ على أي فرع مفتوح تابع لها */
-  const rowsHtml = subjects.map(s=>{
-    const itemCount = libraryChildren(s.id).length;
-    const isOpen = s.id === (openPath[0] || null);
-    const rowHtml = `
-      <div class="lib-subject-row${isOpen ? ' open' : ''}" data-toggle-node="${s.id}" data-depth="0">
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <span class="lib-chevron">▾</span>
-          ${isAdmin ? `
-            ${libraryOrderMoveButtonsHtml(s.id)}
-            <button class="btn edit small" data-edit-folder="${s.id}">${ICONS.edit}</button>
-            <button class="btn danger small" data-del-node="${s.id}">${ICONS.trash}</button>
-          ` : ''}
-        </div>
-        <div class="lib-subject-main">
-          <span class="lib-count-badge">${itemCount}</span>
-          <span class="lib-subject-title i18n-skip">${escapeHtml(s.title)}</span>
-          <span class="lib-subject-icon">📁</span>
-        </div>
-      </div>`;
+  const foldersGridHtml = folders.length ? `
+    ${!isRoot ? `<div class="lib-section-label">📁 المجلدات</div>` : ''}
+    <div class="lib-grid">
+      ${folders.map(f=>{
+        const itemCount = libraryChildren(f.id).length;
+        return `
+        <div class="lib-card${isRoot ? '' : ' lib-card-folder'}" data-toggle-node="${f.id}" data-depth="${depthForNewChild}">
+          ${isAdmin ? `<div class="lib-card-admin">
+            ${libraryOrderMoveButtonsHtml(f.id)}
+            <button class="btn edit small" data-edit-folder="${f.id}">${ICONS.edit}</button>
+            <button class="btn danger small" data-del-node="${f.id}">${ICONS.trash}</button>
+          </div>` : ''}
+          <span class="lib-card-icon-wrap">📁</span>
+          <span class="lib-card-title i18n-skip">${escapeHtml(f.title)}</span>
+          <span class="lib-card-count">${itemCount} عنصر</span>
+        </div>`;
+      }).join('')}
+    </div>` : '';
 
-    if(!isOpen) return rowHtml;
+  const filesListHtml = files.length ? `
+    ${!isRoot && folders.length ? `<div class="lib-section-label">📄 الملفات</div>` : ''}
+    <div class="lib-files-list">${files.map(f=>libraryFileRowHtml(f, isAdmin)).join('')}</div>` : '';
 
-    const nestedHtml = renderLevelRows(s.id, 1);
-    const addToolbar = isAdmin ? `
-      <div class="toolbar" style="justify-content:flex-end; gap:10px; margin-top:0;">
-        <button class="btn small" data-add-folder-to="${s.id}">${ICONS.plus} إضافة مجلد</button>
-        <button class="btn teal solid small" data-add-file-to="${s.id}">${ICONS.plus} إضافة ملف</button>
-      </div>` : '';
-    const emptyInner = nestedHtml ? '' : `<div class="empty-state"><h3>هذا المجلد فارغ</h3><p>${isAdmin ? 'أضف مجلدًا أو ملفًا جديدًا.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
-    const panelHtml = `
-      <div class="lib-subject-panel">
-        ${addToolbar}
-        ${nestedHtml || emptyInner}
-      </div>`;
-
-    return rowHtml + panelHtml;
-  }).join('');
-
-  const addSubjectHtml = isAdmin ? `
+  const addSubjectHtml = (isAdmin && isRoot) ? `
     <div class="toolbar" style="justify-content:flex-end;">
       <button class="btn teal solid" id="addSubjectBtn">${ICONS.plus} إضافة مادة جديدة</button>
     </div>` : '';
 
-  const rootEmptyHtml = searchTerm
-    ? `<div class="empty-state"><h3>لا توجد نتائج</h3><p>ما لقينا مادة باسم "${escapeHtml(state.librarySearch.trim())}"، جرّب اسمًا آخر.</p></div>`
-    : `<div class="empty-state"><h3>لا توجد مواد بعد</h3><p>${isAdmin ? 'أضف مادة جديدة لتبدأ.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`;
+  const addToolbarHtml = (isAdmin && !isRoot) ? `
+    <div class="toolbar" style="justify-content:flex-end; gap:10px;">
+      <button class="btn small" data-add-folder-to="${currentId}">${ICONS.plus} إضافة مجلد</button>
+      <button class="btn teal solid small" data-add-file-to="${currentId}">${ICONS.plus} إضافة ملف</button>
+    </div>` : '';
+
+  const isEmpty = !folders.length && !files.length;
+  const emptyHtml = isEmpty ? (
+    isRoot && searchTerm
+      ? `<div class="empty-state"><h3>لا توجد نتائج</h3><p>ما لقينا مادة باسم "${escapeHtml(state.librarySearch.trim())}"، جرّب اسمًا آخر.</p></div>`
+      : isRoot
+        ? `<div class="empty-state"><h3>لا توجد مواد بعد</h3><p>${isAdmin ? 'أضف مادة جديدة لتبدأ.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`
+        : `<div class="empty-state"><h3>هذا المجلد فارغ</h3><p>${isAdmin ? 'أضف مجلدًا أو ملفًا جديدًا.' : 'لا يوجد محتوى هنا حتى الآن.'}</p></div>`
+  ) : '';
 
   return `
   <section class="section">
@@ -3621,14 +3603,17 @@ function pageLibrary(){
         <div class="courses-hero-inner">
           <h2>مكتبة التمريض</h2>
           <p>مرجعك الدائم من كتب وملفات المواد، منظّمة داخل مجلدات لكل مادة</p>
+          ${isRoot ? `
           <div class="courses-search">
             <span class="search-icon">🔍</span>
             <input type="text" id="librarySearchInput" placeholder="ابحث عن مادة..." value="${escapeHtml(state.librarySearch||'')}">
-          </div>
+          </div>` : ''}
         </div>
       </div>
       ${addSubjectHtml}
-      ${subjects.length ? `<div class="lib-subjects-list">${rowsHtml}</div>` : rootEmptyHtml}
+      ${!isRoot ? breadcrumbHtml : ''}
+      ${!isRoot ? addToolbarHtml : ''}
+      ${isEmpty ? emptyHtml : (foldersGridHtml + filesListHtml)}
     </div>
   </section>
   `;
@@ -6491,6 +6476,14 @@ function bindPageEvents(route){
   }
 
   if(route === 'library'){
+    document.querySelectorAll('[data-lib-crumb-depth]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const depth = parseInt(el.dataset.libCrumbDepth, 10) || 0;
+        const path = Array.isArray(state.libraryOpenPath) ? state.libraryOpenPath : [];
+        state.libraryOpenPath = path.slice(0, depth);
+        render();
+      });
+    });
     document.querySelectorAll('[data-toggle-node]').forEach(el=>{
       el.addEventListener('click', (e)=>{
         if(e.target.closest('[data-edit-folder],[data-edit-file],[data-del-node]')) return;
