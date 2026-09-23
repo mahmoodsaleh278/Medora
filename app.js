@@ -495,8 +495,8 @@ function courseSections(courseId){
 /* كل هذه المفاتيح مخزّنة كصفوف منفصلة بنفس جدول medora_data (key/value)،
    فبدل 14 استعلام select منفصل (واحد لكل مفتاح عبر getData)، نجيبهم كلهم
    بطلب واحد via `.in('key', [...])` ثم نوزّع النتائج محليًا. */
-const INIT_DATA_KEYS = ['courses','lectures','questions','students','messages','enrollments',
-  'summaries','content','savedQuestions','design','coupons','notifications','teachers','books'];
+const INIT_DATA_KEYS = ['courses','lectures','questions','students','messages',
+  'summaries','content','savedQuestions','design','notifications','teachers','books'];
 async function fetchInitDataBulk(){
   if(!supabaseClient) return {};
   try{
@@ -519,16 +519,16 @@ async function initData(){
   ]);
   const pick = k => Object.prototype.hasOwnProperty.call(bulk, k) ? bulk[k] : FALLBACKS[k];
   state.courses = pick('courses').map(normalizeCourse); state.lectures = pick('lectures').map(normalizeLecture); state.questions = pick('questions');
-  state.students = pick('students'); state.messages = pick('messages'); state.enrollments = pick('enrollments'); state.summaries = pick('summaries');
+  state.students = pick('students'); state.messages = pick('messages'); state.enrollments = []; state.summaries = pick('summaries');
   state.teachers = Array.isArray(pick('teachers')) ? pick('teachers') : [];
   state.lectureProgress = [];
   state.savedQuestions = Array.isArray(pick('savedQuestions')) ? pick('savedQuestions') : [];
-  state.coupons = Array.isArray(pick('coupons')) ? pick('coupons') : [];
+  state.coupons = [];
   state.notifications = Array.isArray(pick('notifications')) ? pick('notifications') : [];
   state.books = Array.isArray(pick('books')) ? pick('books') : [];
   state.content = Object.assign({}, CONTENT_DEFAULTS, pick('content'));
   state.design = Object.assign({}, DESIGN_DEFAULTS, pick('design'));
-  await loadMyProgress();
+  await loadUserData();
   state.loaded = true;
 }
 
@@ -636,11 +636,15 @@ function enrollmentsForSection(courseId, section){
   return state.enrollments.filter(e=> e.courseId===courseId && (e.section===section || !e.section));
 }
 async function selfEnrollSection(courseId, section){
-  if(!state.session || state.session.type !== 'student') return;
+  if(!state.session || state.session.type !== 'student' || !supabaseClient) return;
   const phone = state.session.phone;
   if(isEnrolledSection(courseId, section)) return;
-  state.enrollments.push({ courseId, phone, section });
-  await setData('enrollments', state.enrollments, true);
+  try{
+    const { data, error } = await supabaseClient.rpc('self_enroll', { p_course_id: courseId, p_section: section });
+    if(error) throw error;
+    if(!data || !data.ok){ alert((data && data.msg) || 'تعذّر الاشتراك بهذا القسم.'); return; }
+    state.enrollments.push({ courseId, phone, section });
+  }catch(e){ console.error('self_enroll failed', e); alert('تعذّر إتمام الاشتراك حاليًا، حاول مرة ثانية.'); return; }
   render();
 }
 
@@ -687,67 +691,38 @@ async function redeemCoupon(rawCode, chosenCourseId){
   if(!state.session || state.session.type !== 'student') return { ok:false, msg:'سجّل الدخول كطالب أولًا لاستخدام كوبون.' };
   const code = (rawCode||'').trim().toUpperCase();
   if(!code) return { ok:false, msg:'أدخل كود الكوبون.' };
-  const coupon = findCouponByCode(code);
-  if(!coupon || !coupon.active) return { ok:false, msg:'كود الكوبون غير صحيح أو غير مفعّل.' };
-  if(isCouponExpired(coupon)) return { ok:false, msg:'انتهت صلاحية هذا الكوبون ولم يعد قابلًا للاستخدام.' };
-  if(couponUsesLeft(coupon) <= 0) return { ok:false, msg:'تم استنفاد عدد مرات استخدام هذا الكوبون.' };
   const phone = state.session.phone;
-  if(hasStudentUsedCoupon(coupon, phone)) return { ok:false, msg:'لقد استخدمت هذا الكوبون مسبقًا.' };
-
-  // كوبون "المادة من اختيار الطالب": ما فيه courseId مخزَّن على الكوبون نفسه،
-  // فلازم الطالب يحدد المادة أولًا قبل ما نكمل التفعيل
-  if(!coupon.courseId && !chosenCourseId){
-    return { ok:false, needsCourseChoice:true, msg:'هذا الكوبون يتيح لك اختيار المادة بنفسك — اختر المادة أدناه ثم أكمل التفعيل.' };
+  let res;
+  try{
+    const { data, error } = await supabaseClient.rpc('redeem_coupon', { p_code: code, p_course_id: chosenCourseId || null });
+    if(error) throw error;
+    res = data;
+  }catch(e){ console.error('redeem_coupon failed', e); return { ok:false, msg:'تعذّر الاتصال بالخادم حاليًا، حاول مرة ثانية بعد قليل.' }; }
+  if(!res || !res.ok){
+    if(res && res.needs_course_choice){
+      return { ok:false, needsCourseChoice:true, msg:'هذا الكوبون يتيح لك اختيار المادة بنفسك — اختر المادة أدناه ثم أكمل التفعيل.' };
+    }
+    return { ok:false, msg:(res && res.msg) || 'تعذّر تفعيل الكوبون.' };
   }
-  const targetCourseId = coupon.courseId || chosenCourseId;
-  const course = state.courses.find(c=>c.id===targetCourseId);
-  if(!course) return { ok:false, msg:'المادة المطلوبة لم تعد متاحة، اختر مادة أخرى.' };
-  if(!coupon.courseId){
-    // كوبون اختيار الطالب: تأكد أن المادة المختارة تتبع جامعة/تخصص الطالب فعلًا
-    const studentUni = state.session.university, studentMajor = state.session.major;
-    const matches = (!studentUni || course.university === studentUni || course.university === 'عام')
-      && (!studentMajor || (course.major || 'التمريض') === studentMajor);
-    if(!matches) return { ok:false, msg:'هذه المادة ليست ضمن جامعتك أو تخصصك.' };
-  }
-  // إذا كان الكوبون محدَّدًا بقسم معيّن (فيرست/ميد/فاينال)، تأكد أن المادة
-  // المستهدفة (سواء ثابتة أو من اختيار الطالب) فيها هذا القسم أصلًا
-  if(coupon.section && !courseSections(targetCourseId).includes(coupon.section)){
-    return { ok:false, msg:`قسم ${SECTION_LABELS[coupon.section]} غير متوفر في هذه المادة، جرّب مادة أخرى أو تواصل مع الإدارة.` };
-  }
-  const section = coupon.section || null;
-  const targetLabel = section ? `قسم ${SECTION_LABELS[section]} من مادة "${course.title}"` : `مادة "${course.title}" بكل أقسامها`;
+  const course = state.courses.find(c=>c.id===res.course_id);
+  const courseTitle = course ? course.title : '';
+  const section = res.section || null;
+  const targetLabel = section ? `قسم ${SECTION_LABELS[section]} من مادة "${courseTitle}"` : `مادة "${courseTitle}" بكل أقسامها`;
   let msg, card = null;
-  const usedAt = Date.now();
-  if(coupon.type === 'free'){
-    const sections = section ? [section] : courseSections(targetCourseId);
-    let addedAny = false;
-    sections.forEach(s=>{
-      if(!isEnrolledSection(targetCourseId, s)){
-        state.enrollments.push({ courseId: targetCourseId, phone, section: s });
-        addedAny = true;
+  if(res.type === 'free'){
+    (res.added_sections || []).forEach(sec=>{
+      if(!state.enrollments.some(e=> e.courseId===res.course_id && e.phone===phone && (!e.section || e.section===sec))){
+        state.enrollments.push({ courseId: res.course_id, phone, section: sec });
       }
     });
-    if(addedAny) await setData('enrollments', state.enrollments, true);
     msg = `🎉 تم فتح ${targetLabel} مجانًا في حسابك مباشرة!`;
   } else {
-    msg = `🏷️ كوبونك يمنحك خصم ${coupon.discountPercent}% على ${targetLabel}. حمّل بطاقة الخصم أدناه وأرسلها للدعم الفني لإتمام تفعيل اشتراكك بالخصم.`;
-    const serial = computeCouponSerial(coupon.code, phone, usedAt);
+    msg = `🏷️ كوبونك يمنحك خصم ${res.discount_percent}% على ${targetLabel}. حمّل بطاقة الخصم أدناه وأرسلها للدعم الفني لإتمام تفعيل اشتراكك بالخصم.`;
     card = {
-      studentName: state.session.name || '',
-      phone,
-      discountPercent: coupon.discountPercent,
-      courseTitle: course.title,
-      targetLabel,
-      serial,
-      code: coupon.code,
-      issuedAt: usedAt,
+      studentName: state.session.name || '', phone, discountPercent: res.discount_percent,
+      courseTitle, targetLabel, serial: res.serial, code, issuedAt: Number(res.used_at),
     };
   }
-  coupon.usedBy = coupon.usedBy || [];
-  const usedByEntry = { phone, usedAt, courseId: targetCourseId };
-  if(card) usedByEntry.serial = card.serial;
-  coupon.usedBy.push(usedByEntry);
-  await setData('coupons', state.coupons, true);
   return { ok:true, msg, card };
 }
 
@@ -1015,6 +990,61 @@ async function loadMyProgress(){
     state.lectureProgress = (data || []).map(r=> ({ phone, lectureId: r.lecture_id }));
   }catch(e){ console.error('loadMyProgress failed', e); }
 }
+/* ---------- تحميل/كتابة التفعيلات والكوبونات (جداول مستقلة) ----------
+   enrollments: الطالب يقرأ صفوفه فقط (RLS)، والأدمن/المدرّس يقرؤون الكل. الطالب ما بيكتب عليها مباشرة،
+   بل عبر دوال السيرفر self_enroll و redeem_coupon اللي بتتحقق من كل شي.
+   coupons/coupon_uses: للأدمن فقط، وأكواد الكوبونات ما بتوصل لمتصفح الطلاب أبدًا. */
+async function fetchAllRows(table, columns, orderCol){
+  const out = [], PAGE = 1000;
+  for(let from = 0; ; from += PAGE){
+    const { data, error } = await supabaseClient.from(table).select(columns).order(orderCol).range(from, from + PAGE - 1);
+    if(error) throw error;
+    out.push(...(data || []));
+    if(!data || data.length < PAGE) break;
+  }
+  return out;
+}
+async function loadEnrollments(){
+  state.enrollments = [];
+  if(!supabaseClient || !state.session) return;
+  try{
+    const rows = await fetchAllRows('enrollments', 'id,phone,course_id,section', 'id');
+    state.enrollments = rows.map(r=> ({ courseId: r.course_id, phone: r.phone, section: r.section || null }));
+  }catch(e){ console.error('loadEnrollments failed', e); }
+}
+async function loadCoupons(){
+  state.coupons = [];
+  if(!supabaseClient || !state.session || state.session.type !== 'admin') return;
+  try{
+    const [cps, uses] = await Promise.all([
+      fetchAllRows('coupons', '*', 'created_at'),
+      fetchAllRows('coupon_uses', '*', 'id'),
+    ]);
+    const byCoupon = {};
+    uses.forEach(u=>{
+      (byCoupon[u.coupon_id] = byCoupon[u.coupon_id] || []).push(
+        Object.assign({ phone: u.phone, usedAt: Number(u.used_at), courseId: u.course_id }, u.serial ? { serial: u.serial } : {}));
+    });
+    state.coupons = cps.map(c=> ({
+      id: c.id, code: c.code, type: c.type, discountPercent: c.discount_percent, courseId: c.course_id,
+      section: c.section, maxUses: c.max_uses, expiresAt: c.expires_at == null ? null : Number(c.expires_at),
+      active: c.active, note: c.note || '', createdAt: Number(c.created_at), usedBy: byCoupon[c.id] || [],
+    }));
+  }catch(e){ console.error('loadCoupons failed', e); }
+}
+async function loadUserData(){
+  await Promise.all([ loadMyProgress(), loadEnrollments(), loadCoupons() ]);
+}
+async function dbAddEnrollments(list){
+  const rows = list.map(e=> ({ phone: e.phone, course_id: e.courseId, section: e.section || '' }));
+  const { error } = await supabaseClient.from('enrollments').upsert(rows, { onConflict: 'phone,course_id,section', ignoreDuplicates: true });
+  return error || null;
+}
+async function dbRemoveEnrollments(courseId, phones, section){
+  const secs = section ? [section, ''] : [''];
+  const { error } = await supabaseClient.from('enrollments').delete().eq('course_id', courseId).in('phone', phones).in('section', secs);
+  return error || null;
+}
 async function toggleLectureWatched(lectureId){
   if(!state.session || state.session.type !== 'student' || !supabaseClient) return;
   const phone = state.session.phone;
@@ -1227,6 +1257,8 @@ async function logout(){
   if(supabaseClient) await supabaseClient.auth.signOut();
   state.session = null;
   state.lectureProgress = [];
+  state.enrollments = [];
+  state.coupons = [];
   navigate('home'); render();
 }
 
@@ -3187,11 +3219,19 @@ function modalCreateCoupon(){
     if(expiresAtRaw && expiresAt <= Date.now()){
       msgBox.innerHTML = `<div class="form-msg error">تاريخ انتهاء الصلاحية يجب أن يكون في المستقبل.</div>`; return;
     }
-    state.coupons.push({
+    const newCoupon = {
       id:'cp'+Date.now(), code, type, discountPercent, courseId, section,
       maxUses, expiresAt, usedBy: [], active:true, note:(fd.get('note')||'').trim(), createdAt: Date.now(),
+    };
+    const { error: cpErr } = await supabaseClient.from('coupons').insert({
+      id: newCoupon.id, code, type, discount_percent: discountPercent, course_id: courseId, section,
+      max_uses: maxUses, expires_at: expiresAt, active: true, note: newCoupon.note, created_at: newCoupon.createdAt,
     });
-    await setData('coupons', state.coupons, true);
+    if(cpErr){
+      msgBox.innerHTML = `<div class="form-msg error">${cpErr.code==='23505' ? 'هذا الكود مستخدم مسبقًا، اختر كودًا مختلفًا.' : 'تعذّر حفظ الكوبون، تأكد من صلاحياتك وحاول مرة ثانية.'}</div>`;
+      console.error('coupon insert failed', cpErr); return;
+    }
+    state.coupons.push(newCoupon);
     closeModal(); navigate('admin-coupons'); render();
   });
 }
@@ -3338,12 +3378,12 @@ async function deleteTeacher(teacherId){
 async function deleteStudent(phone){
   state.students = state.students.filter(s=>s.phone!==phone);
   await setData('students', state.students, true);
-  let enrollmentsChanged = false, summariesChanged = false, progressChanged = false, savedQChanged = false;
-  if(state.enrollments.some(e=>e.phone===phone)){ state.enrollments = state.enrollments.filter(e=>e.phone!==phone); enrollmentsChanged = true; }
+  let summariesChanged = false, progressChanged = false, savedQChanged = false;
+  state.enrollments = state.enrollments.filter(e=>e.phone!==phone);
+  try{ await supabaseClient.from('enrollments').delete().eq('phone', phone); }catch(e){ console.error(e); }
   if(state.summaries.some(s=>s.phone===phone)){ state.summaries = state.summaries.filter(s=>s.phone!==phone); summariesChanged = true; }
   if(state.lectureProgress.some(p=>p.phone===phone)){ state.lectureProgress = state.lectureProgress.filter(p=>p.phone!==phone); progressChanged = true; }
   if(state.savedQuestions.some(q=>q.phone===phone)){ state.savedQuestions = state.savedQuestions.filter(q=>q.phone!==phone); savedQChanged = true; }
-  if(enrollmentsChanged) await setData('enrollments', state.enrollments, true);
   if(summariesChanged) await setData('summaries', state.summaries, true);
   // تقدّم الطالب بجدول lecture_progress بينحذف تلقائيًا (on delete cascade) مع حذف حسابه
   if(savedQChanged) await setData('savedQuestions', state.savedQuestions, true);
@@ -4256,19 +4296,28 @@ function modalEnrollStudent(courseId){
     const sections = secs.filter(s=>fd.get('section_'+s));
     if(!sections.length){ msgBox.innerHTML = `<div class="form-msg error">اختر قسمًا واحدًا على الأقل.</div>`; return; }
     submitBtn.disabled = true;
-    const success = [], notFound = [], already = [];
+    const success = [], notFound = [], already = [], newRows = [];
     phones.forEach(phone=>{
       const student = state.students.find(s=>s.phone===phone);
       if(!student){ notFound.push(phone); return; }
       let addedAny = false;
       sections.forEach(section=>{
         if(state.enrollments.some(en=>en.courseId===courseId && en.phone===phone && (en.section===section || !en.section))) return;
-        state.enrollments.push({ courseId, phone, section });
+        const row = { courseId, phone, section };
+        state.enrollments.push(row); newRows.push(row);
         addedAny = true;
       });
       if(addedAny) success.push(phone); else already.push(phone);
     });
-    if(success.length) await setData('enrollments', state.enrollments, true);
+    if(newRows.length){
+      const dbErr = await dbAddEnrollments(newRows);
+      if(dbErr){
+        console.error('enroll failed', dbErr);
+        state.enrollments = state.enrollments.filter(en=> !newRows.includes(en));
+        msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ التفعيل، ما تم تفعيل أي طالب. حاول مرة ثانية.</div>`;
+        submitBtn.disabled = false; return;
+      }
+    }
     submitBtn.disabled = false;
     let html = '';
     if(success.length) html += `<div class="form-msg ok">✅ تم تفعيل ${success.length} طالب بنجاح: ${success.map(escapeHtml).join('، ')}</div>`;
@@ -4397,6 +4446,19 @@ function modalImportEnrollments(courseId){
       document.getElementById('confirmSyncBtn').addEventListener('click', async ()=>{
         const confirmBtn = document.getElementById('confirmSyncBtn');
         confirmBtn.disabled = true;
+        const bySection = {};
+        toRemove.forEach(({ phone, section })=>{ (bySection[section] = bySection[section] || []).push(phone); });
+        let dbErr = null;
+        for(const [sec, phs] of Object.entries(bySection)){
+          dbErr = dbErr || await dbRemoveEnrollments(courseId, phs, sec);
+        }
+        if(!dbErr && toAdd.length) dbErr = await dbAddEnrollments(toAdd.map(x=> ({ courseId, phone: x.phone, section: x.section })));
+        if(dbErr){
+          console.error('sync failed', dbErr);
+          confirmBtn.disabled = false;
+          msgBox.insertAdjacentHTML('beforeend', `<div class="form-msg error">تعذّرت المزامنة، لم يُحفظ أي تغيير كامل. أعد المحاولة.</div>`);
+          return;
+        }
         toRemove.forEach(({ phone, section })=>{
           state.enrollments = state.enrollments.filter(en=> !(en.courseId===courseId && en.phone===phone && (en.section===section || !en.section)));
         });
@@ -4405,7 +4467,6 @@ function modalImportEnrollments(courseId){
             state.enrollments.push({ courseId, phone, section });
           }
         });
-        await setData('enrollments', state.enrollments, true);
         closeModal();
         render();
       });
@@ -6664,8 +6725,9 @@ function bindPageEvents(route){
       btn.addEventListener('click', async ()=>{
         const phone = btn.dataset.unenroll;
         const section = btn.dataset.unenrollSection;
+        const dbErr = await dbRemoveEnrollments(courseId, [phone], section);
+        if(dbErr){ console.error(dbErr); alert('تعذّر إلغاء التفعيل، حاول مرة ثانية.'); return; }
         state.enrollments = state.enrollments.filter(e=> !(e.courseId===courseId && e.phone===phone && (e.section===section || !e.section)));
-        await setData('enrollments', state.enrollments, true);
         render();
       });
     });
@@ -6961,8 +7023,9 @@ function bindPageEvents(route){
       btn.addEventListener('click', async ()=>{
         const coupon = state.coupons.find(c=>c.id===btn.dataset.toggleCoupon);
         if(!coupon) return;
+        const { error } = await supabaseClient.from('coupons').update({ active: !coupon.active }).eq('id', coupon.id);
+        if(error){ console.error(error); alert('تعذّر تحديث حالة الكوبون.'); return; }
         coupon.active = !coupon.active;
-        await setData('coupons', state.coupons, true);
         render();
       });
     });
@@ -6970,8 +7033,9 @@ function bindPageEvents(route){
       btn.addEventListener('click', ()=>{
         const id = btn.dataset.delCoupon;
         confirmDelete('سيتم حذف هذا الكوبون نهائيًا. هل أنت متأكد؟', async ()=>{
+          const { error } = await supabaseClient.from('coupons').delete().eq('id', id);
+          if(error){ console.error(error); alert('تعذّر حذف الكوبون.'); return; }
           state.coupons = state.coupons.filter(c=>c.id!==id);
-          await setData('coupons', state.coupons, true);
         });
       });
     });
@@ -7172,7 +7236,7 @@ async function handleAuthSubmit(e){
       state.students.push({ phone, fullName, university, major });
       await setData('students', state.students, true);
       state.session = { type:'student', phone, name: fullName, university, major, avatar: null };
-      await loadMyProgress();
+      await loadUserData();
       state.courseFilter = university;
       state.majorFilter = major;
       watchDeviceLock(phone);
@@ -7196,7 +7260,7 @@ async function handleAuthSubmit(e){
         return;
       }
       state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null, major: meta.major||null, avatar: meta.avatar||null };
-      await loadMyProgress();
+      await loadUserData();
       if(state.session.university) state.courseFilter = state.session.university;
       if(state.session.major) state.majorFilter = state.session.major;
       watchDeviceLock(finalPhone);
@@ -7235,6 +7299,7 @@ async function handleAdminSubmit(e){
   } else {
     state.session = { type:'admin', username: meta.username||username, name: meta.fullName || 'مشرف المنصة' };
   }
+  await loadUserData();
   navigate('home'); render();
 }
 
