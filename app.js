@@ -495,8 +495,8 @@ function courseSections(courseId){
 /* كل هذه المفاتيح مخزّنة كصفوف منفصلة بنفس جدول medora_data (key/value)،
    فبدل 14 استعلام select منفصل (واحد لكل مفتاح عبر getData)، نجيبهم كلهم
    بطلب واحد via `.in('key', [...])` ثم نوزّع النتائج محليًا. */
-const INIT_DATA_KEYS = ['courses','lectures','questions','students','messages',
-  'summaries','content','savedQuestions','design','notifications','teachers','books'];
+const INIT_DATA_KEYS = ['courses','lectures','questions',
+  'content','design','notifications','teachers','books'];
 async function fetchInitDataBulk(){
   if(!supabaseClient) return {};
   try{
@@ -519,10 +519,10 @@ async function initData(){
   ]);
   const pick = k => Object.prototype.hasOwnProperty.call(bulk, k) ? bulk[k] : FALLBACKS[k];
   state.courses = pick('courses').map(normalizeCourse); state.lectures = pick('lectures').map(normalizeLecture); state.questions = pick('questions');
-  state.students = pick('students'); state.messages = pick('messages'); state.enrollments = []; state.summaries = pick('summaries');
+  state.students = []; state.messages = []; state.enrollments = []; state.summaries = []; state.summariesCount = null;
   state.teachers = Array.isArray(pick('teachers')) ? pick('teachers') : [];
   state.lectureProgress = [];
-  state.savedQuestions = Array.isArray(pick('savedQuestions')) ? pick('savedQuestions') : [];
+  state.savedQuestions = [];
   state.coupons = [];
   state.notifications = Array.isArray(pick('notifications')) ? pick('notifications') : [];
   state.books = Array.isArray(pick('books')) ? pick('books') : [];
@@ -921,10 +921,18 @@ function isQuestionSaved(questionId){
 async function toggleSaveQuestion(questionId){
   if(!state.session || state.session.type !== 'student') return;
   const phone = state.session.phone;
+  if(!supabaseClient) return;
   const idx = state.savedQuestions.findIndex(s=> s.phone===phone && s.questionId===questionId);
-  if(idx > -1) state.savedQuestions.splice(idx, 1);
-  else state.savedQuestions.push({ phone, questionId, savedAt: Date.now() });
-  await setData('savedQuestions', state.savedQuestions, true);
+  if(idx > -1){
+    const removed = state.savedQuestions.splice(idx, 1)[0];
+    const { error } = await supabaseClient.from('saved_questions').delete().eq('question_id', questionId);
+    if(error){ console.error('unsave failed', error); state.savedQuestions.push(removed); }
+  } else {
+    const item = { phone, questionId, savedAt: Date.now() };
+    state.savedQuestions.push(item);
+    const { error } = await supabaseClient.from('saved_questions').insert({ question_id: questionId, created_at: item.savedAt });
+    if(error && error.code !== '23505'){ console.error('save failed', error); state.savedQuestions = state.savedQuestions.filter(x=>x!==item); }
+  }
 }
 function mySavedQuestions(){
   if(!state.session || state.session.type !== 'student') return [];
@@ -1032,8 +1040,45 @@ async function loadCoupons(){
     }));
   }catch(e){ console.error('loadCoupons failed', e); }
 }
+/* الطلاب: للأدمن/المدرّس فقط. الطالب ما بيحمّل أي قائمة طلاب. */
+async function loadStudents(){
+  state.students = [];
+  if(!supabaseClient || !state.session || (state.session.type !== 'admin' && state.session.type !== 'teacher')) return;
+  try{
+    const rows = await fetchAllRows('students', 'user_id,phone,full_name,university,major,avatar', 'created_at');
+    state.students = rows.map(r=> ({ phone: r.phone, fullName: r.full_name, university: r.university, major: r.major, avatar: r.avatar }));
+  }catch(e){ console.error('loadStudents failed', e); }
+}
+async function loadMessages(){
+  state.messages = [];
+  if(!supabaseClient || !state.session || state.session.type !== 'admin') return;
+  try{
+    const rows = await fetchAllRows('messages', '*', 'created_at');
+    state.messages = rows.map(r=> ({ id: r.id, name: r.name, email: r.email, message: r.message }));
+  }catch(e){ console.error('loadMessages failed', e); }
+}
+/* الأسئلة المحفوظة والملخصات: الطالب يحمّل الخاص فيه فقط. الأدمن يحمّل عدد الملخصات فقط (بدون محتواها). */
+async function loadMyStudentContent(){
+  state.savedQuestions = []; state.summaries = []; state.summariesCount = null;
+  if(!supabaseClient || !state.session) return;
+  try{
+    if(state.session.type === 'student'){
+      const phone = state.session.phone;
+      const [sq, sm] = await Promise.all([
+        fetchAllRows('saved_questions', 'question_id,created_at', 'created_at'),
+        fetchAllRows('summaries', '*', 'created_at'),
+      ]);
+      state.savedQuestions = sq.map(r=> ({ phone, questionId: r.question_id, savedAt: Number(r.created_at) }));
+      state.summaries = sm.map(r=> ({ id: r.id, phone, title: r.title, content: r.content, createdAt: Number(r.created_at),
+        aiGenerated: r.ai_generated || undefined, courseId: r.course_id || undefined, lectureId: r.lecture_id || undefined }));
+    } else if(state.session.type === 'admin'){
+      const { count, error } = await supabaseClient.from('summaries').select('id', { count:'exact', head:true });
+      if(!error) state.summariesCount = count;
+    }
+  }catch(e){ console.error('loadMyStudentContent failed', e); }
+}
 async function loadUserData(){
-  await Promise.all([ loadMyProgress(), loadEnrollments(), loadCoupons() ]);
+  await Promise.all([ loadMyProgress(), loadEnrollments(), loadCoupons(), loadStudents(), loadMessages(), loadMyStudentContent() ]);
 }
 async function dbAddEnrollments(list){
   const rows = list.map(e=> ({ phone: e.phone, course_id: e.courseId, section: e.section || '' }));
@@ -1259,6 +1304,7 @@ async function logout(){
   state.lectureProgress = [];
   state.enrollments = [];
   state.coupons = [];
+  state.students = []; state.messages = []; state.summaries = []; state.savedQuestions = []; state.summariesCount = null;
   navigate('home'); render();
 }
 
@@ -2915,7 +2961,7 @@ function pageAdminAnalytics(){
   const totalLectures = state.lectures.length;
   const totalQuestions = state.questions.length;
   const totalEnrollments = state.enrollments.length;
-  const totalSummaries = state.summaries.length;
+  const totalSummaries = state.summariesCount != null ? state.summariesCount : state.summaries.length;
 
   const engagedPhones = new Set(state.enrollments.map(e=>e.phone));
   const engagedCount = state.students.filter(s=>engagedPhones.has(s.phone)).length;
@@ -3377,16 +3423,13 @@ async function deleteTeacher(teacherId){
    لأن مفتاح service role لا يوضع أبدًا بهذا الملف الأمامي. */
 async function deleteStudent(phone){
   state.students = state.students.filter(s=>s.phone!==phone);
-  await setData('students', state.students, true);
-  let summariesChanged = false, progressChanged = false, savedQChanged = false;
+  try{ await supabaseClient.from('students').delete().eq('phone', phone); }catch(e){ console.error(e); }
+  // الملخصات والأسئلة المحفوظة والتقدّم بتنحذف تلقائيًا (on delete cascade) مع حذف حساب الطالب من Auth
+  state.summaries = state.summaries.filter(s=>s.phone!==phone);
+  state.savedQuestions = state.savedQuestions.filter(q=>q.phone!==phone);
   state.enrollments = state.enrollments.filter(e=>e.phone!==phone);
   try{ await supabaseClient.from('enrollments').delete().eq('phone', phone); }catch(e){ console.error(e); }
-  if(state.summaries.some(s=>s.phone===phone)){ state.summaries = state.summaries.filter(s=>s.phone!==phone); summariesChanged = true; }
-  if(state.lectureProgress.some(p=>p.phone===phone)){ state.lectureProgress = state.lectureProgress.filter(p=>p.phone!==phone); progressChanged = true; }
-  if(state.savedQuestions.some(q=>q.phone===phone)){ state.savedQuestions = state.savedQuestions.filter(q=>q.phone!==phone); savedQChanged = true; }
-  if(summariesChanged) await setData('summaries', state.summaries, true);
-  // تقدّم الطالب بجدول lecture_progress بينحذف تلقائيًا (on delete cascade) مع حذف حسابه
-  if(savedQChanged) await setData('savedQuestions', state.savedQuestions, true);
+  state.lectureProgress = state.lectureProgress.filter(p=>p.phone!==phone);
   try{
     const { error } = await supabaseClient.functions.invoke('delete-student', { body: { phone } });
     if(error) console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', error);
@@ -5895,8 +5938,12 @@ function wireAiSummaryPage(){
         if(!title || !editorEl.textContent.trim()){
           saveMsg.innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان والمحتوى.</div>`; return;
         }
-        state.summaries.push({ id:'sm'+Date.now(), phone: state.session.phone, title, content, createdAt: Date.now(), aiGenerated:true, courseId, lectureId });
-        await setData('summaries', state.summaries, true);
+        const newSummary = { id:'sm'+Date.now()+Math.random().toString(36).slice(2,6), phone: state.session.phone, title, content, createdAt: Date.now(), aiGenerated:true, courseId, lectureId };
+        const { error: smErr } = await supabaseClient.from('summaries').insert({
+          id: newSummary.id, title, content, created_at: newSummary.createdAt, ai_generated: true,
+          course_id: courseId || null, lecture_id: lectureId || null });
+        if(smErr){ console.error('summary save failed', smErr); saveMsg.innerHTML = `<div class="form-msg error">تعذّر حفظ الملخص، حاول مرة ثانية.</div>`; return; }
+        state.summaries.push(newSummary);
         navigate('my-summaries');
       }, { once:true });
     }catch(err){
@@ -5933,8 +5980,10 @@ function modalAddSummary(){
     if(!title || !(hasText || hasMedia)){
       document.getElementById('summaryMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان والمحتوى.</div>`; return;
     }
-    state.summaries.push({ id:'sm'+Date.now(), phone: state.session.phone, title, content, createdAt: Date.now() });
-    await setData('summaries', state.summaries, true);
+    const newSummary = { id:'sm'+Date.now()+Math.random().toString(36).slice(2,6), phone: state.session.phone, title, content, createdAt: Date.now() };
+    const { error: smErr } = await supabaseClient.from('summaries').insert({ id: newSummary.id, title, content, created_at: newSummary.createdAt });
+    if(smErr){ console.error('summary save failed', smErr); document.getElementById('summaryMsg').innerHTML = `<div class="form-msg error">تعذّر حفظ الملخص، حاول مرة ثانية.</div>`; return; }
+    state.summaries.push(newSummary);
     closeModal(); render();
   });
 }
@@ -5963,8 +6012,9 @@ function modalEditSummary(summaryId){
     if(!title || !(hasText || hasMedia)){
       document.getElementById('summaryMsg').innerHTML = `<div class="form-msg error">يرجى تعبئة العنوان والمحتوى.</div>`; return;
     }
+    const { error: smErr } = await supabaseClient.from('summaries').update({ title, content }).eq('id', s.id);
+    if(smErr){ console.error('summary update failed', smErr); document.getElementById('summaryMsg').innerHTML = `<div class="form-msg error">تعذّر حفظ التعديلات، حاول مرة ثانية.</div>`; return; }
     s.title = title; s.content = content;
-    await setData('summaries', state.summaries, true);
     closeModal(); render();
   });
 }
@@ -6242,8 +6292,10 @@ async function saveAvatar(avatarUrl){
   const { error } = await supabaseClient.auth.updateUser({ data: { avatar: avatarUrl } });
   if(error){ if(msgBox) msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ الصورة، حاول بصورة أصغر.</div>`; return; }
   state.session.avatar = avatarUrl || null;
-  const student = state.students.find(s=>s.phone===state.session.phone);
-  if(student){ student.avatar = avatarUrl || null; await setData('students', state.students, true); }
+  try{
+    const { error: stErr } = await supabaseClient.from('students').update({ avatar: avatarUrl || null }).eq('phone', state.session.phone);
+    if(stErr) console.error('students avatar update failed', stErr);
+  }catch(e){ console.error(e); }
   render();
 }
 
@@ -6281,12 +6333,12 @@ function modalResetPassword(){
 function confirmDeleteAccount(){
   confirmDelete('سيتم حذف حسابك نهائيًا ولن تتمكن من الدخول به مرة أخرى. هل أنت متأكد؟', async ()=>{
     if(supabaseClient){
+      try{ await supabaseClient.from('students').delete().eq('phone', state.session.phone); }catch(e){ console.error(e); }
       await supabaseClient.auth.updateUser({ data: { accountDeleted: true } });
       await supabaseClient.auth.signOut();
     }
-    state.students = state.students.filter(s=>s.phone !== state.session.phone);
-    await setData('students', state.students, true);
     state.session = null;
+    state.lectureProgress = []; state.enrollments = []; state.summaries = []; state.savedQuestions = [];
     navigate('home');
   });
 }
@@ -6675,8 +6727,9 @@ function bindPageEvents(route){
       btn.addEventListener('click', ()=>{
         const id = btn.dataset.delSummary;
         confirmDelete('سيتم حذف هذا الملخص نهائيًا. هل أنت متأكد؟', async ()=>{
+          const { error } = await supabaseClient.from('summaries').delete().eq('id', id);
+          if(error){ console.error('summary delete failed', error); alert('تعذّر حذف الملخص، حاول مرة ثانية.'); return; }
           state.summaries = state.summaries.filter(s=>s.id!==id);
-          await setData('summaries', state.summaries, true);
         });
       });
     });
@@ -6923,8 +6976,14 @@ function bindPageEvents(route){
     if(form) form.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const fd = new FormData(e.target);
-      state.messages.push({ id:'m'+Date.now(), name:fd.get('name').trim(), email:fd.get('email').trim(), message:fd.get('message').trim() });
-      await setData('messages', state.messages, true);
+      const msgRow = { id:'m'+Date.now()+Math.random().toString(36).slice(2,6), name:fd.get('name').trim(), email:fd.get('email').trim(), message:fd.get('message').trim() };
+      const { error: mErr } = await supabaseClient.from('messages').insert(msgRow);   // بدون select: الزائر ما عنده صلاحية قراءة
+      if(mErr){
+        console.error('contact insert failed', mErr);
+        document.getElementById('contactMsg').innerHTML = `<div class="form-msg error">تعذّر إرسال رسالتك حاليًا، حاول مرة ثانية بعد قليل.</div>`;
+        return;
+      }
+      if(state.session && state.session.type === 'admin') state.messages.push(msgRow);
       document.getElementById('contactMsg').innerHTML = `<div class="form-msg ok">تم إرسال رسالتك بنجاح، سنتواصل معك قريبًا.</div>`;
       e.target.reset();
     });
@@ -6932,8 +6991,9 @@ function bindPageEvents(route){
       btn.addEventListener('click', ()=>{
         const id = btn.dataset.delMessage;
         confirmDelete('سيتم حذف هذه الرسالة نهائيًا. هل أنت متأكد؟', async ()=>{
+          const { error } = await supabaseClient.from('messages').delete().eq('id', id);
+          if(error){ console.error(error); alert('تعذّر حذف الرسالة.'); return; }
           state.messages = state.messages.filter(m=>m.id!==id);
-          await setData('messages', state.messages, true);
         });
       });
     });
@@ -7233,9 +7293,9 @@ async function handleAuthSubmit(e){
         msgBox.innerHTML = `<div class="form-msg error">تم إنشاء الحساب، لكن يبدو أن تأكيد البريد مفعّل في إعدادات Supabase. عطّل خيار "Confirm email" من Authentication → Providers → Email ثم أعد المحاولة.</div>`; return;
       }
       await enforceDeviceLock(phone, data.user.id); // أول تسجيل للحساب، يربط هذا الجهاز به تلقائيًا
-      state.students.push({ phone, fullName, university, major });
-      await setData('students', state.students, true);
       state.session = { type:'student', phone, name: fullName, university, major, avatar: null };
+      const { error: stErr } = await supabaseClient.from('students').insert({ phone, full_name: fullName, university, major });
+      if(stErr) console.error('students insert failed', stErr);
       await loadUserData();
       state.courseFilter = university;
       state.majorFilter = major;
