@@ -496,7 +496,7 @@ function courseSections(courseId){
    فبدل 14 استعلام select منفصل (واحد لكل مفتاح عبر getData)، نجيبهم كلهم
    بطلب واحد via `.in('key', [...])` ثم نوزّع النتائج محليًا. */
 const INIT_DATA_KEYS = ['courses','lectures','questions','students','messages','enrollments',
-  'summaries','lectureProgress','content','savedQuestions','design','coupons','notifications','teachers','books'];
+  'summaries','content','savedQuestions','design','coupons','notifications','teachers','books'];
 async function fetchInitDataBulk(){
   if(!supabaseClient) return {};
   try{
@@ -521,13 +521,14 @@ async function initData(){
   state.courses = pick('courses').map(normalizeCourse); state.lectures = pick('lectures').map(normalizeLecture); state.questions = pick('questions');
   state.students = pick('students'); state.messages = pick('messages'); state.enrollments = pick('enrollments'); state.summaries = pick('summaries');
   state.teachers = Array.isArray(pick('teachers')) ? pick('teachers') : [];
-  state.lectureProgress = pick('lectureProgress');
+  state.lectureProgress = [];
   state.savedQuestions = Array.isArray(pick('savedQuestions')) ? pick('savedQuestions') : [];
   state.coupons = Array.isArray(pick('coupons')) ? pick('coupons') : [];
   state.notifications = Array.isArray(pick('notifications')) ? pick('notifications') : [];
   state.books = Array.isArray(pick('books')) ? pick('books') : [];
   state.content = Object.assign({}, CONTENT_DEFAULTS, pick('content'));
   state.design = Object.assign({}, DESIGN_DEFAULTS, pick('design'));
+  await loadMyProgress();
   state.loaded = true;
 }
 
@@ -1001,13 +1002,36 @@ async function toggleLectureHidden(lectureId){
   await setData('lectures', state.lectures, true);
   render();
 }
+/* تقدّم الطالب صار بجدول مستقل lecture_progress (صف لكل طالب/محاضرة)، بدل مصفوفة مشتركة
+   لكل الطلاب. الـ RLS بترجّع للطالب صفوفه فقط، وكل ضغطة = insert أو delete لصف واحد
+   فما في تعارض ولا ضياع بيانات مع تعدّد الطلاب بنفس الوقت. */
+async function loadMyProgress(){
+  state.lectureProgress = [];
+  if(!supabaseClient || !state.session || state.session.type !== 'student') return;
+  try{
+    const { data, error } = await supabaseClient.from('lecture_progress').select('lecture_id').limit(5000);
+    if(error) throw error;
+    const phone = state.session.phone;
+    state.lectureProgress = (data || []).map(r=> ({ phone, lectureId: r.lecture_id }));
+  }catch(e){ console.error('loadMyProgress failed', e); }
+}
 async function toggleLectureWatched(lectureId){
-  if(!state.session || state.session.type !== 'student') return;
+  if(!state.session || state.session.type !== 'student' || !supabaseClient) return;
   const phone = state.session.phone;
   const idx = state.lectureProgress.findIndex(p=> p.phone===phone && p.lectureId===lectureId);
-  if(idx > -1) state.lectureProgress.splice(idx, 1);
-  else state.lectureProgress.push({ phone, lectureId });
-  await setData('lectureProgress', state.lectureProgress, true);
+  if(idx > -1){
+    state.lectureProgress.splice(idx, 1);
+    const { error } = await supabaseClient.from('lecture_progress').delete().eq('lecture_id', lectureId);
+    if(error){ console.error('progress delete failed', error); state.lectureProgress.push({ phone, lectureId }); }
+  } else {
+    state.lectureProgress.push({ phone, lectureId });
+    const { error } = await supabaseClient.from('lecture_progress').insert({ lecture_id: lectureId, phone });
+    // 23505 = مسجّل مسبقًا (ضغطة مكررة) فنعتبره نجاح
+    if(error && error.code !== '23505'){
+      console.error('progress insert failed', error);
+      state.lectureProgress = state.lectureProgress.filter(p=> !(p.phone===phone && p.lectureId===lectureId));
+    }
+  }
 }
 /* نسبة تقدّم الطالب الحالي بدورة معيّنة: عدد المحاضرات المشاهَدة من إجمالي محاضرات الدورة */
 function courseProgress(courseId){
@@ -1202,6 +1226,7 @@ async function logout(){
   stopDeviceLockWatch();
   if(supabaseClient) await supabaseClient.auth.signOut();
   state.session = null;
+  state.lectureProgress = [];
   navigate('home'); render();
 }
 
@@ -3320,7 +3345,7 @@ async function deleteStudent(phone){
   if(state.savedQuestions.some(q=>q.phone===phone)){ state.savedQuestions = state.savedQuestions.filter(q=>q.phone!==phone); savedQChanged = true; }
   if(enrollmentsChanged) await setData('enrollments', state.enrollments, true);
   if(summariesChanged) await setData('summaries', state.summaries, true);
-  if(progressChanged) await setData('lectureProgress', state.lectureProgress, true);
+  // تقدّم الطالب بجدول lecture_progress بينحذف تلقائيًا (on delete cascade) مع حذف حسابه
   if(savedQChanged) await setData('savedQuestions', state.savedQuestions, true);
   try{
     const { error } = await supabaseClient.functions.invoke('delete-student', { body: { phone } });
@@ -7147,6 +7172,7 @@ async function handleAuthSubmit(e){
       state.students.push({ phone, fullName, university, major });
       await setData('students', state.students, true);
       state.session = { type:'student', phone, name: fullName, university, major, avatar: null };
+      await loadMyProgress();
       state.courseFilter = university;
       state.majorFilter = major;
       watchDeviceLock(phone);
@@ -7170,6 +7196,7 @@ async function handleAuthSubmit(e){
         return;
       }
       state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null, major: meta.major||null, avatar: meta.avatar||null };
+      await loadMyProgress();
       if(state.session.university) state.courseFilter = state.session.university;
       if(state.session.major) state.majorFilter = state.session.major;
       watchDeviceLock(finalPhone);
