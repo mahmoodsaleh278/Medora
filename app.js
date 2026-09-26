@@ -3431,7 +3431,7 @@ async function deleteStudent(phone){
   try{ await supabaseClient.from('enrollments').delete().eq('phone', phone); }catch(e){ console.error(e); }
   state.lectureProgress = state.lectureProgress.filter(p=>p.phone!==phone);
   try{
-    const { error } = await supabaseClient.functions.invoke('delete-student', { body: { phone } });
+    const { error } = await supabaseClient.functions.invoke('deleteStudent-phone-', { body: { phone } });
     if(error){
       console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', error);
       alert('تنبيه: تم حذف الطالب من قوائم الموقع، لكن حسابه الفعلي على Supabase Auth لم يُحذف (خطأ: ' + (error.message||error) + '). راجعي الأمر يدويًا.');
