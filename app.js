@@ -4568,9 +4568,10 @@ function modalEnrollStudent(courseId){
    تصدير قائمة المسجّلين بمادة معينة إلى ملف إكسيل
    (اسم الطالب / رقم الهاتف / اسم المادة / القسم)
    ========================================================= */
-function exportEnrollmentsExcel(courseId){
+async function exportEnrollmentsExcel(courseId){
   const course = state.courses.find(c=>c.id===courseId);
   if(!course) return;
+  try{ await ensureXlsxLib(); }catch(e){}
   if(typeof XLSX === 'undefined'){ alert('تعذّر تحميل مكتبة الإكسيل، تأكد من اتصالك بالإنترنت وحاول مجددًا.'); return; }
   const list = enrollmentsFor(courseId).slice().sort((a,b)=>{
     const sa = state.students.find(s=>s.phone===a.phone);
@@ -4628,6 +4629,7 @@ function modalImportEnrollments(courseId){
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   document.getElementById('importEnrollForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
+    try{ await ensureXlsxLib(); }catch(e){}
     if(typeof XLSX === 'undefined'){ document.getElementById('importEnrollMsg').innerHTML = `<div class="form-msg error">تعذّر تحميل مكتبة الإكسيل، تأكد من اتصالك بالإنترنت وحاول مجددًا.</div>`; return; }
     const fd = new FormData(e.target);
     const file = fd.get('file');
@@ -4966,6 +4968,7 @@ function uploadVideoToBunny(file, { courseId, title }, onProgress){
   return new Promise((resolve, reject)=>{
     (async ()=>{
       try{
+        try{ await ensureTusLib(); }catch(e){}
         if(typeof tus === 'undefined') throw new Error('مكتبة الرفع لم يتم تحميلها، تحقق من الاتصال بالإنترنت وأعد المحاولة.');
         const course = state.courses.find(c=>c.id===courseId);
         if(!course) throw new Error('لم يتم العثور على المادة المرتبطة بهذه المحاضرة.');
@@ -5575,6 +5578,20 @@ function loadScriptOnce(src, isLoaded){
 async function ensureMammothLib(){
   await loadScriptOnce('https://cdn.jsdelivr.net/npm/mammoth@1.7.2/mammoth.browser.min.js', ()=>!!window.mammoth);
 }
+/* ---------------- تحميل كسول (Lazy) لمكتبات ثقيلة نادرة الاستخدام ----------------
+   xlsx / html2pdf / tus كانت تتحمّل إجباريًا بكل صفحة لكل زائر (بما فيهم الطلاب
+   اللي أصلاً ما بيستخدموها أبدًا)، مع إنها مطلوبة فقط للأدمن/المدرّس بلحظات محددة
+   (تصدير/استيراد إكسيل، تصدير PDF، رفع فيديو). هلأ بتتحمّل فقط أول مرة تُستخدم فعليًا،
+   بنفس أسلوب ensurePdfJsLib/ensureMammothLib أعلاه، فيخف حجم أول تحميل لكل طالب كثير. */
+async function ensureXlsxLib(){
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', ()=>!!window.XLSX);
+}
+async function ensureHtml2PdfLib(){
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js', ()=>!!window.html2pdf);
+}
+async function ensureTusLib(){
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/tus-js-client@3/dist/tus.min.js', ()=>!!window.tus);
+}
 async function ensurePdfJsLib(){
   await loadScriptOnce('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', ()=>!!window.pdfjsLib);
   if(window.pdfjsLib && !window.pdfjsLib.GlobalWorkerOptions.workerSrc){
@@ -6000,6 +6017,9 @@ async function downloadSummaryAsPdf(title, htmlContent, meta){
   document.body.appendChild(overlay);
   document.body.appendChild(wrap);
   try{
+    // نحمّل مكتبة html2pdf أول مرة تُستخدم فقط (بدل ما تكون محمّلة إجباريًا بكل صفحة)
+    await ensureHtml2PdfLib();
+    if(typeof html2pdf === 'undefined') throw new Error('تعذّر تحميل مكتبة تصدير PDF.');
     // ننتظر تحميل كل الصور (الشعار وأي صور داخل الملخص) قبل التقاط الصفحة،
     // وإلا يلتقط html2canvas العنصر قبل اكتمال الرسم فيطلع فارغ/ناقص
     const imgs = Array.from(wrap.querySelectorAll('img'));
@@ -7655,4 +7675,3 @@ function applyFontScale(size){
   await render();
   window.__PRERENDER_READY__ = true; /* إشارة لسكربت الـ prerender إن الصفحة جاهزة */
 })();
-     
