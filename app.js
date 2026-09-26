@@ -495,7 +495,7 @@ function courseSections(courseId){
 /* كل هذه المفاتيح مخزّنة كصفوف منفصلة بنفس جدول medora_data (key/value)،
    فبدل 14 استعلام select منفصل (واحد لكل مفتاح عبر getData)، نجيبهم كلهم
    بطلب واحد via `.in('key', [...])` ثم نوزّع النتائج محليًا. */
-const INIT_DATA_KEYS = ['courses','lectures','questions',
+const INIT_DATA_KEYS = ['courses','lectures',
   'content','design','notifications','teachers','books'];
 async function fetchInitDataBulk(){
   if(!supabaseClient) return {};
@@ -518,7 +518,8 @@ async function initData(){
     syncSessionFromAuth(),
   ]);
   const pick = k => Object.prototype.hasOwnProperty.call(bulk, k) ? bulk[k] : FALLBACKS[k];
-  state.courses = pick('courses').map(normalizeCourse); state.lectures = pick('lectures').map(normalizeLecture); state.questions = pick('questions');
+  state.courses = pick('courses').map(normalizeCourse); state.lectures = pick('lectures').map(normalizeLecture);
+  state.questions = supabaseClient ? [] : SEED_QUESTIONS;   // بتتعبى فعليًا من loadQuestions() تحت
   state.students = []; state.messages = []; state.enrollments = []; state.summaries = []; state.summariesCount = null;
   state.teachers = Array.isArray(pick('teachers')) ? pick('teachers') : [];
   state.lectureProgress = [];
@@ -1020,6 +1021,37 @@ async function loadEnrollments(){
     state.enrollments = rows.map(r=> ({ courseId: r.course_id, phone: r.phone, section: r.section || null }));
   }catch(e){ console.error('loadEnrollments failed', e); }
 }
+/* ---------- بنك الأسئلة: جدول questions حقيقي (بدل صف JSON واحد بـ medora_data) ----------
+   كل جلسة تسحب بس الأسئلة يلي تخصّها: الطالب حسب كورساته المشترك فيها، المدرّس حسب
+   موادّه، والأدمن يسحب البنك كامل لأغراض الإدارة. */
+function mapQuestionRow(r){
+  return { id: r.id, courseId: r.course_id, lectureId: r.lecture_id, nature: r.nature,
+    question: r.question, options: r.options, correctIndex: r.correct_index, explanation: r.explanation };
+}
+async function loadQuestions(){
+  state.questions = [];
+  if(!supabaseClient || !state.session) return;
+  try{
+    if(state.session.type === 'admin'){
+      const rows = await fetchAllRows('questions', '*', 'created_at');
+      state.questions = rows.map(mapQuestionRow);
+    } else if(state.session.type === 'teacher'){
+      const myCourseIds = state.courses.filter(c=>c.teacherId===state.session.teacherId).map(c=>c.id);
+      if(!myCourseIds.length) return;
+      const { data, error } = await supabaseClient.from('questions').select('*').in('course_id', myCourseIds);
+      if(error) throw error;
+      state.questions = (data||[]).map(mapQuestionRow);
+    } else if(state.session.type === 'student'){
+      const { data: enr, error: e1 } = await supabaseClient.from('enrollments').select('course_id').eq('phone', state.session.phone);
+      if(e1) throw e1;
+      const courseIds = [...new Set((enr||[]).map(r=>r.course_id))];
+      if(!courseIds.length) return;
+      const { data, error } = await supabaseClient.from('questions').select('*').in('course_id', courseIds);
+      if(error) throw error;
+      state.questions = (data||[]).map(mapQuestionRow);
+    }
+  }catch(e){ console.error('loadQuestions failed', e); }
+}
 async function loadCoupons(){
   state.coupons = [];
   if(!supabaseClient || !state.session || state.session.type !== 'admin') return;
@@ -1078,7 +1110,7 @@ async function loadMyStudentContent(){
   }catch(e){ console.error('loadMyStudentContent failed', e); }
 }
 async function loadUserData(){
-  await Promise.all([ loadMyProgress(), loadEnrollments(), loadCoupons(), loadStudents(), loadMessages(), loadMyStudentContent() ]);
+  await Promise.all([ loadMyProgress(), loadEnrollments(), loadCoupons(), loadStudents(), loadMessages(), loadMyStudentContent(), loadQuestions() ]);
 }
 async function dbAddEnrollments(list){
   const rows = list.map(e=> ({ phone: e.phone, course_id: e.courseId, section: e.section || '' }));
