@@ -2562,10 +2562,14 @@ function injectBankQuestionStyles(){
       font-size: 14px;
       line-height: 1.75;
       color: var(--ink);
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .q-explain-box table, .q-text table, .quiz-q-text table{
       border-collapse: collapse;
-      width: 100%;
+      width: max-content;
+      min-width: 100%;
       margin: 10px 0;
     }
     .q-explain-box table td, .q-explain-box table th,
@@ -7651,3 +7655,4 @@ function applyFontScale(size){
   await render();
   window.__PRERENDER_READY__ = true; /* إشارة لسكربت الـ prerender إن الصفحة جاهزة */
 })();
+     
