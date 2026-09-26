@@ -1026,7 +1026,16 @@ async function loadEnrollments(){
    موادّه، والأدمن يسحب البنك كامل لأغراض الإدارة. */
 function mapQuestionRow(r){
   return { id: r.id, courseId: r.course_id, lectureId: r.lecture_id, nature: r.nature,
-    question: r.question, options: r.options, correctIndex: r.correct_index, explanation: r.explanation };
+    question: r.question, type: r.type || 'mcq',
+    options: r.options, correctIndex: r.correct_index,
+    pairs: r.pairs, modelAnswer: r.model_answer,
+    explanation: r.explanation };
+}
+function questionToRow(q){
+  return { id: q.id, course_id: q.courseId, lecture_id: q.lectureId, nature: q.nature,
+    question: q.question, explanation: q.explanation, type: q.type || 'mcq',
+    options: q.options ?? null, correct_index: (q.correctIndex ?? null),
+    pairs: q.pairs ?? null, model_answer: q.modelAnswer ?? null };
 }
 async function loadQuestions(){
   state.questions = [];
@@ -5339,7 +5348,8 @@ function modalAddQuestion(defaults){
       base.options = r.options; base.correctIndex = r.correctIndex;
     }
     state.questions.push(base);
-    await setData('questions', state.questions, true);
+    const { error } = await supabaseClient.from('questions').insert(questionToRow(base));
+    if(error){ console.error('add question failed', error); state.questions = state.questions.filter(x=>x!==base); msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ السؤال، حاول مرة أخرى.</div>`; return; }
     closeModal(); render();
   });
 }
@@ -5381,7 +5391,8 @@ function modalEditQuestion(questionId){
     q.type = type;
     delete q.options; delete q.correctIndex; delete q.pairs; delete q.modelAnswer;
     Object.assign(q, payload);
-    await setData('questions', state.questions, true);
+    const { error } = await supabaseClient.from('questions').update(questionToRow(q)).eq('id', questionId);
+    if(error){ console.error('edit question failed', error); msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ التعديلات، حاول مرة أخرى.</div>`; return; }
     closeModal(); render();
   });
 }
@@ -5677,7 +5688,8 @@ async function handleImportSave(){
     return;
   }
   state.questions.push(...toAdd);
-  await setData('questions', state.questions, true);
+  const { error } = await supabaseClient.from('questions').insert(toAdd.map(questionToRow));
+  if(error){ console.error('bulk import failed', error); alert('تعذّر حفظ الأسئلة المستوردة، حاول مرة أخرى.'); state.questions = state.questions.filter(x=>!toAdd.includes(x)); return; }
   closeModal();
   render();
 }
@@ -6648,7 +6660,7 @@ function bindPageEvents(route){
           state.questions = state.questions.filter(q=>q.courseId!==id);
           await setData('courses', state.courses, true);
           await setData('lectures', state.lectures, true);
-          await setData('questions', state.questions, true);
+          await supabaseClient.from('questions').delete().eq('course_id', id);
         });
       });
     });
@@ -6875,7 +6887,7 @@ function bindPageEvents(route){
           const id = btn.dataset.delQuestion;
           confirmDelete('سيتم حذف هذا السؤال نهائيًا. هل أنت متأكد؟', async ()=>{
             state.questions = state.questions.filter(q=>q.id!==id);
-            await setData('questions', state.questions, true);
+            await supabaseClient.from('questions').delete().eq('id', id);
           });
         });
       });
