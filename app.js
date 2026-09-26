@@ -2563,6 +2563,22 @@ function injectBankQuestionStyles(){
       line-height: 1.75;
       color: var(--ink);
     }
+    .q-explain-box table, .q-text table, .quiz-q-text table{
+      border-collapse: collapse;
+      width: 100%;
+      margin: 10px 0;
+    }
+    .q-explain-box table td, .q-explain-box table th,
+    .q-text table td, .q-text table th,
+    .quiz-q-text table td, .quiz-q-text table th{
+      border: 1px solid var(--border);
+      padding: 7px 10px;
+      text-align: left;
+    }
+    .q-explain-box table th{
+      background: color-mix(in srgb, var(--teal) 12%, var(--card));
+      font-weight: 800;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -2579,7 +2595,7 @@ function quizOptionBadgeHtml(i, optText, stateCls){
 function explainBoxHtml(contentHtml, label){
   label = label || 'Explanation:';
   const icon = /model/i.test(label) ? '📝' : '💡';
-  return `<div class="q-explain-box i18n-skip" dir="ltr" style="text-align:left;"><div class="q-explain-head">${icon} <span>${label}</span></div><div class="q-explain-body">${contentHtml}</div></div>`;
+  return `<div class="q-explain-box q-explain i18n-skip" dir="ltr" style="text-align:left;"><div class="q-explain-head">${icon} <span>${label}</span></div><div class="q-explain-body">${contentHtml}</div></div>`;
 }
 
 /* واجهة توليد عشوائي مستقر (نفس السؤال يعطي نفس الترتيب دائمًا)، تُستخدم لخلط خيارات
