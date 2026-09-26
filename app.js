@@ -2461,6 +2461,127 @@ function pageCourseDetail(courseId){
    ========================================================= */
 function natureLabel(n){ return n === 'ref' ? 'أسئلة مراجع' : 'أسئلة سنوات سابقة'; }
 
+/* ---------------- تصميم بنك الأسئلة: شارات دائرية ملوّنة للخيارات + صندوق تفسير بأيقونة ----------------
+   نحقن CSS مرة وحدة عند تحميل التطبيق بدل الاعتماد على styles.css، حتى يبقى التصميم
+   شغّال بغض النظر عن الملف الخارجي. يستخدم نفس متغيرات الألوان الموجودة بالموقع
+   (--teal, --good, --danger, --border...) حتى ينسجم مع باقي الواجهة تلقائيًا. */
+function injectBankQuestionStyles(){
+  if(document.getElementById('bankQuestionStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'bankQuestionStyles';
+  style.textContent = `
+    .quiz-q-text, .q-text{
+      background: color-mix(in srgb, var(--teal) 6%, var(--card));
+      border: 1px solid var(--teal-light);
+      border-radius: 16px;
+      padding: 16px 18px;
+      font-weight: 700;
+      font-size: 15.5px;
+      line-height: 1.75;
+      margin-bottom: 14px;
+    }
+    .q-options.quiz-options, .quiz-options{
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .q-opt-badge{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 13px 16px;
+      border-radius: 14px;
+      border: 1.5px solid var(--border);
+      background: var(--card);
+      font-family: inherit;
+      font-size: 14.5px;
+      line-height: 1.6;
+      color: var(--ink);
+      text-align: left;
+      transition: border-color .15s, background-color .15s;
+      cursor: default;
+      margin-bottom: 10px;
+    }
+    .q-opt-badge:last-child{ margin-bottom: 0; }
+    .q-opt-badge.clickable{ cursor: pointer; }
+    .q-opt-badge.clickable:hover{ border-color: var(--teal); }
+    .q-opt-badge .opt-letter{
+      flex-shrink: 0;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 13px;
+      border: 2px solid var(--border);
+      color: var(--muted);
+      background: var(--bg);
+    }
+    .q-opt-badge .opt-text{ flex: 1; }
+    .q-opt-badge.selected{
+      border-color: var(--teal);
+      background: color-mix(in srgb, var(--teal) 8%, var(--card));
+    }
+    .q-opt-badge.selected .opt-letter{
+      background: var(--teal); border-color: var(--teal); color: #fff;
+    }
+    .q-opt-badge.correct{
+      border-color: var(--good);
+      background: color-mix(in srgb, var(--good) 10%, var(--card));
+    }
+    .q-opt-badge.correct .opt-letter{
+      background: var(--good); border-color: var(--good); color: #fff;
+    }
+    .q-opt-badge.wrong{
+      border-color: var(--danger);
+      background: color-mix(in srgb, var(--danger) 10%, var(--card));
+    }
+    .q-opt-badge.wrong .opt-letter{
+      background: var(--danger); border-color: var(--danger); color: #fff;
+    }
+    .q-explain-box{
+      background: color-mix(in srgb, var(--teal) 5%, var(--card));
+      border: 1px solid var(--teal-light);
+      border-radius: 16px;
+      padding: 16px 18px;
+      margin-top: 14px;
+    }
+    .q-explain-box .q-explain-head{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      color: var(--teal-2, var(--teal));
+      font-size: 14.5px;
+      margin-bottom: 8px;
+    }
+    .q-explain-box .q-explain-body{
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--ink);
+    }
+  `;
+  document.head.appendChild(style);
+}
+injectBankQuestionStyles();
+
+/* شارة الخيار الدائرية (A/B/C/D) — تُستخدم بكل مكان تُعرض فيه خيارات سؤال اختيار من متعدد */
+function quizOptionBadgeHtml(i, optText, stateCls){
+  const letter = String.fromCharCode(65 + i);
+  return `<span class="opt-letter">${letter}</span><span class="opt-text">${escapeHtml(optText)}</span>`;
+}
+
+/* صندوق التفسير الموحّد (تفسير الإجابة الصحيحة، أو نموذج الإجابة للأسئلة الكتابية) —
+   بأيقونة مناسبة وخلفية مميزة بدل نص عادي فقط */
+function explainBoxHtml(contentHtml, label){
+  label = label || 'Explanation:';
+  const icon = /model/i.test(label) ? '📝' : '💡';
+  return `<div class="q-explain-box i18n-skip" dir="ltr" style="text-align:left;"><div class="q-explain-head">${icon} <span>${label}</span></div><div class="q-explain-body">${contentHtml}</div></div>`;
+}
+
 /* واجهة توليد عشوائي مستقر (نفس السؤال يعطي نفس الترتيب دائمًا)، تُستخدم لخلط خيارات
    الطرف الأيمن في سؤال التوصيل بحيث ما تكون بنفس ترتيب اليسار */
 function shuffledIndices(n, seed){
@@ -2479,13 +2600,13 @@ function shuffledIndices(n, seed){
 function questionContentHtml(q){
   const type = q.type || 'mcq';
   if(type === 'written'){
-    return `<div class="q-type-tag">✍️ سؤال كتابي</div>${q.modelAnswer ? `<div class="q-explain i18n-skip" dir="ltr" style="text-align:left;"><b>Model Answer:</b> ${escapeHtml(q.modelAnswer)}</div>` : `<p class="hint" style="margin:0;">بدون نموذج إجابة محفوظ.</p>`}`;
+    return `<div class="q-type-tag">✍️ سؤال كتابي</div>${q.modelAnswer ? explainBoxHtml(escapeHtml(q.modelAnswer), 'Model Answer:') : `<p class="hint" style="margin:0;">بدون نموذج إجابة محفوظ.</p>`}`;
   }
   if(type === 'matching'){
     const rows = (q.pairs||[]).map((p,i)=>`<div class="q-opt" style="display:flex; justify-content:space-between; gap:10px;"><span><b>${i+1}.</b> ${escapeHtml(p.left)}</span><span>↔ ${escapeHtml(p.right)}</span></div>`).join('');
     return `<div class="q-type-tag">🔗 سؤال توصيل</div><div class="q-options i18n-skip" dir="ltr" style="text-align:left; grid-template-columns:1fr;">${rows}</div>`;
   }
-  return `<div class="q-options i18n-skip" dir="ltr" style="text-align:left;">${(q.options||[]).map((opt,i)=>`<div class="q-opt ${i===q.correctIndex?'correct':''}"><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</div>`).join('')}</div>`;
+  return `<div class="q-options i18n-skip" dir="ltr" style="text-align:left;">${(q.options||[]).map((opt,i)=>`<div class="q-opt-badge ${i===q.correctIndex?'correct':''}">${quizOptionBadgeHtml(i, opt)}</div>`).join('')}</div>`;
 }
 
 function bankManageQuestionCard(q){
@@ -2496,7 +2617,7 @@ function bankManageQuestionCard(q){
     ${lec ? `<span class="q-tag" style="background:var(--teal-light); color:var(--teal);">${escapeHtml(lec.title)}</span>` : `<span class="q-tag" style="background:var(--bg); color:var(--muted);">سؤال عام</span>`}
     <div class="q-text i18n-skip" dir="ltr" style="text-align:left;">${renderRichContent(q.question)}</div>
     ${questionContentHtml(q)}
-    ${q.explanation ? `<div class="q-explain i18n-skip" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${renderRichContent(q.explanation)}</div>` : ''}
+    ${q.explanation ? explainBoxHtml(renderRichContent(q.explanation)) : ''}
     <div class="q-card-foot"><button class="btn edit small" data-edit-question="${q.id}">${ICONS.edit} تعديل</button><button class="btn danger small" data-del-question="${q.id}">${ICONS.trash} حذف السؤال</button></div>
   </div>
 `;
@@ -2773,7 +2894,7 @@ function pageMyNotes(){
       </div>
       <div class="q-text i18n-skip" dir="ltr" style="text-align:left;">${renderRichContent(q.question)}</div>
       ${questionContentHtml(q)}
-      ${q.explanation ? `<div class="q-explain i18n-skip" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${renderRichContent(q.explanation)}</div>` : ''}
+      ${q.explanation ? explainBoxHtml(renderRichContent(q.explanation)) : ''}
     </div>`;
   }).join('');
 
@@ -2822,15 +2943,15 @@ function pageBankRunning(){
   if(type === 'mcq'){
     revealed = quiz.mode === 'study' && answered !== undefined;
     const optionsHtml = (q.options||[]).map((opt, i) => {
-      let cls = 'q-opt clickable';
+      let cls = 'q-opt-badge clickable';
       if(revealed){
-        cls = 'q-opt';
+        cls = 'q-opt-badge';
         if(i === q.correctIndex) cls += ' correct';
         else if(i === answered) cls += ' wrong';
       } else if(answered === i){
-        cls += ' correct';
+        cls += ' selected';
       }
-      return `<button class="${cls} i18n-skip" data-answer="${i}" dir="ltr" style="text-align:left;" ${revealed ? 'disabled' : ''}><b>${String.fromCharCode(65+i)}.</b> ${escapeHtml(opt)}</button>`;
+      return `<button type="button" class="${cls} i18n-skip" data-answer="${i}" dir="ltr" ${revealed ? 'disabled' : ''}>${quizOptionBadgeHtml(i, opt)}</button>`;
     }).join('');
     bodyHtml = `<div class="quiz-options i18n-skip" dir="ltr">${optionsHtml}</div>`;
   } else if(type === 'written'){
@@ -2840,7 +2961,7 @@ function pageBankRunning(){
         <textarea id="writtenAnswerInput" class="i18n-skip" dir="ltr" style="text-align:left;" placeholder="Type your answer here...">${escapeHtml(typeof answered==='string' ? answered : '')}</textarea>
       </div>
       ${q.modelAnswer ? `<button type="button" class="btn small" id="revealWrittenBtn">${showModel ? '🙈 إخفاء نموذج الإجابة' : '👁 إظهار نموذج الإجابة'}</button>` : ''}
-      ${showModel && q.modelAnswer ? `<div class="q-explain i18n-skip" dir="ltr" style="text-align:left; margin-top:10px;"><b>Model Answer:</b> ${escapeHtml(q.modelAnswer)}</div>` : ''}
+      ${showModel && q.modelAnswer ? explainBoxHtml(escapeHtml(q.modelAnswer), 'Model Answer:') : ''}
       <div style="margin-bottom:10px;"></div>
     `;
   } else if(type === 'matching'){
@@ -2880,7 +3001,7 @@ function pageBankRunning(){
         </div>
         <div class="quiz-q-text i18n-skip" dir="ltr" style="text-align:left;">${renderRichContent(q.question)}</div>
         ${bodyHtml}
-        ${revealed && q.explanation ? `<div class="q-explain i18n-skip" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${renderRichContent(q.explanation)}</div>` : ''}
+        ${revealed && q.explanation ? explainBoxHtml(renderRichContent(q.explanation)) : ''}
         <div class="wizard-nav">
           <button class="btn small" id="quitQuizBtn">إنهاء والخروج</button>
           <button class="btn teal solid" id="quizNextBtn" ${canProceed ? '' : 'disabled'}>${isLast ? 'إنهاء وعرض النتيجة' : 'السؤال التالي'}</button>
@@ -2924,7 +3045,7 @@ function pageBankResults(){
       const a = quiz.answers[q.id];
       statusTag = `<span class="ans-tag review">مراجعة ذاتية</span>`;
       bodyHtml = `<div class="i18n-skip" style="font-size:13.5px; color:var(--muted); direction:ltr; text-align:left;">إجابتك: ${a && a.trim() ? escapeHtml(a) : 'لم تُجب'}</div>
-        ${q.modelAnswer ? `<div class="q-explain i18n-skip" dir="ltr" style="text-align:left;"><b>Model Answer:</b> ${escapeHtml(q.modelAnswer)}</div>` : ''}`;
+        ${q.modelAnswer ? explainBoxHtml(escapeHtml(q.modelAnswer), 'Model Answer:') : ''}`;
     } else if(type === 'matching'){
       const a = quiz.answers[q.id] || {};
       const isRight = isQuestionCorrect(q);
@@ -2939,7 +3060,13 @@ function pageBankResults(){
       const chosen = quiz.answers[q.id];
       const isRight = chosen === q.correctIndex;
       statusTag = `<span class="ans-tag ${isRight?'right':'wrong'}">${isRight ? 'صحيح' : 'خاطئ'}</span>`;
-      bodyHtml = `<div class="i18n-skip" style="font-size:13.5px; color:var(--muted); direction:ltr; text-align:left;">إجابتك: ${chosen!==undefined ? escapeHtml(q.options[chosen]) : 'لم تُجب'} ${!isRight ? ' — الصحيحة: ' + escapeHtml(q.options[q.correctIndex]) : ''}</div>`;
+      const optsHtml = (q.options||[]).map((opt,oi)=>{
+        let cls = 'q-opt-badge';
+        if(oi === q.correctIndex) cls += ' correct';
+        else if(oi === chosen) cls += ' wrong';
+        return `<div class="${cls}">${quizOptionBadgeHtml(oi, opt)}</div>`;
+      }).join('');
+      bodyHtml = `<div class="quiz-options i18n-skip" dir="ltr" style="margin-top:8px;">${optsHtml}</div>`;
     }
 
     return `
@@ -2952,7 +3079,7 @@ function pageBankResults(){
         </div>
       </div>
       ${bodyHtml}
-      ${q.explanation ? `<div class="q-explain i18n-skip" dir="ltr" style="text-align:left;"><b>Explanation:</b> ${renderRichContent(q.explanation)}</div>` : ''}
+      ${q.explanation ? explainBoxHtml(renderRichContent(q.explanation)) : ''}
     </div>`;
   }).join('');
 
