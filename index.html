@@ -70,10 +70,11 @@
 <link rel="preconnect" href="https://mihbguavqplpwaabwbbu.supabase.co">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-<!-- مكتبة tus لرفع الفيديوهات مباشرة من المتصفح إلى Bunny Stream عبر بروتوكول رفع متجزّئ قابل للاستئناف -->
-<script src="https://cdn.jsdelivr.net/npm/tus-js-client@3/dist/tus.min.js"></script>
+<!-- ملاحظة: xlsx.js / html2pdf.js / tus.min.js انشالت من هون — كانت تتحمّل إجباريًا
+     لكل زائر رغم إنها تُستخدم فقط بلحظات محددة بلوحة التحكم (تصدير/استيراد إكسيل،
+     تصدير PDF، رفع فيديو). هلأ بتتحمّل تلقائيًا وكسوليًا من app.js فقط أول مرة
+     تُستخدم فعليًا (عبر ensureXlsxLib/ensureHtml2PdfLib/ensureTusLib)، فيخف حجم
+     أول تحميل بشكل ملموس لكل الطلاب اللي أصلاً ما بيستخدموها. -->
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="notranslate" translate="no">
