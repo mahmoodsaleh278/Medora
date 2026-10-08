@@ -228,7 +228,7 @@ function watchDeviceLock(phone){
 
 /* ---------------- App state ---------------- */
 let state = {
-  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], notifications: [], books: [],
+  courses: [], lectures: [], questions: [], students: [], messages: [], enrollments: [], summaries: [], lectureProgress: [], savedQuestions: [], coupons: [], bankCoupons: [], bankAccess: [], notifications: [], books: [],
   session: null, loaded: false, courseFilter: 'الكل', majorFilter: 'الكل', courseSearch: '', coursePage: 1, bankAdminView: false, bankNotesView: false, content: {}, teachers: [],
   bankManageCourseId: null, bankManageLectureId: '',
   libraryOpenPath: [], librarySearch: '',
@@ -556,7 +556,7 @@ async function initData(){
   state.teachers = Array.isArray(pick('teachers')) ? pick('teachers') : [];
   state.lectureProgress = [];
   state.savedQuestions = [];
-  state.coupons = [];
+  state.coupons = []; state.bankCoupons = []; state.bankAccess = [];
   state.notifications = Array.isArray(pick('notifications')) ? pick('notifications') : [];
   state.books = Array.isArray(pick('books')) ? pick('books') : [];
   state.content = Object.assign({}, CONTENT_DEFAULTS, pick('content'));
@@ -665,6 +665,21 @@ function sectionUnlocked(courseId, section){
   if(isTeacherSession() && isCourseOwnerTeacher(state.courses.find(c=>c.id===courseId))) return true;
   return isEnrolledSection(courseId, section);
 }
+/* وصول بنك الأسئلة: اشتراك الكورس العادي أو وصول بنك فقط (من كوبون بنك أسئلة).
+   وصول البنك لا يفتح المحاضرات ولا يظهر بصفحات الكورس. section فارغ = كل الأقسام. */
+function isBankAccessSection(courseId, section){
+  if(!state.session || state.session.type !== 'student') return false;
+  const phone = state.session.phone;
+  return state.bankAccess.some(b=> b.courseId===courseId && b.phone===phone && (!b.section || b.section===section));
+}
+function bankSectionUnlocked(courseId, section){
+  return sectionUnlocked(courseId, section) || isBankAccessSection(courseId, section);
+}
+function bankCourseUnlocked(courseId){
+  if(courseUnlocked(courseId)) return true;
+  if(!state.session || state.session.type !== 'student') return false;
+  return state.bankAccess.some(b=> b.courseId===courseId && b.phone===state.session.phone);
+}
 function enrollmentsForSection(courseId, section){
   return state.enrollments.filter(e=> e.courseId===courseId && (e.section===section || !e.section));
 }
@@ -679,6 +694,52 @@ async function selfEnrollSection(courseId, section){
     state.enrollments.push({ courseId, phone, section });
   }catch(e){ console.error('self_enroll failed', e); alert('تعذّر إتمام الاشتراك حاليًا، حاول مرة ثانية.'); return; }
   render();
+}
+
+/* ---------------- كوبونات بنك الأسئلة ----------------
+   تفتح قسمًا (أو كل الأقسام) من مادة أو أكثر داخل بنك الأسئلة فقط، بدون فتح المحاضرات. */
+function findBankCouponByCode(code){
+  const norm = (code||'').trim().toUpperCase();
+  return state.bankCoupons.find(c=>c.code===norm);
+}
+function bankTargetLabel(t){
+  const course = state.courses.find(c=>c.id===t.courseId);
+  const title = course ? course.title : t.courseId;
+  return t.section ? `${title} — ${SECTION_LABELS[t.section] || t.section}` : `${title} — كل الأقسام`;
+}
+async function redeemBankCoupon(rawCode){
+  if(!state.session || state.session.type !== 'student') return { ok:false, msg:'سجّل الدخول كطالب أولًا لاستخدام كوبون.' };
+  const code = (rawCode||'').trim().toUpperCase();
+  if(!code) return { ok:false, msg:'أدخل كود الكوبون.' };
+  const phone = state.session.phone;
+  let res;
+  try{
+    const { data, error } = await supabaseClient.rpc('redeem_bank_coupon', { p_code: code });
+    if(error){
+      // الدالة غير موجودة بعد (ما انشغّل ملف SQL) → كأنه مش كوبون بنك، نكمل بالكوبونات العادية
+      if(error.code === 'PGRST202' || error.code === '42883') return { ok:false, notFound:true };
+      throw error;
+    }
+    res = data;
+  }catch(e){ console.error('redeem_bank_coupon failed', e); return { ok:false, msg:'تعذّر الاتصال بالخادم حاليًا، حاول مرة ثانية بعد قليل.' }; }
+  if(res && res.not_found) return { ok:false, notFound:true };
+  if(!res || !res.ok) return { ok:false, msg:(res && res.msg) || 'تعذّر تفعيل الكوبون.' };
+  const targets = (res.targets||[]).map(t=>({ courseId: t.course_id, section: t.section || null }));
+  targets.forEach(t=>{
+    if(!state.bankAccess.some(b=> b.courseId===t.courseId && b.phone===phone && b.section===t.section)){
+      state.bankAccess.push({ courseId: t.courseId, phone, section: t.section });
+    }
+  });
+  // الأسئلة تُسحب حسب الكورسات المتاحة، فنعيد تحميلها بعد فتح مواد جديدة
+  await loadQuestions();
+  const list = targets.map(t=>`• ${escapeHtml(bankTargetLabel(t))}`).join('<br>');
+  return { ok:true, msg:`🎉 تم فتح بنك الأسئلة للمواد التالية في حسابك:<br>${list}<br><span style="font-size:13px;">ادخل على «بنك الأسئلة» وابدأ اختبارك.</span>` };
+}
+/* يجرّب كود بنك الأسئلة أولًا، وإذا الكود مش كوبون بنك يكمل بمسار الكوبونات العادية */
+async function redeemAnyCoupon(rawCode){
+  const bank = await redeemBankCoupon(rawCode);
+  if(!bank.notFound) return bank;
+  return redeemCoupon(rawCode);
 }
 
 /* ---------------- Coupons (كوبونات الخصم/الفتح المجاني) ----------------
@@ -1085,7 +1146,12 @@ async function loadQuestions(){
     } else if(state.session.type === 'student'){
       const { data: enr, error: e1 } = await supabaseClient.from('enrollments').select('course_id').eq('phone', state.session.phone);
       if(e1) throw e1;
-      const courseIds = [...new Set((enr||[]).map(r=>r.course_id))];
+      let bankCourseIds = [];
+      try{
+        const { data: ba, error: eb } = await supabaseClient.from('bank_access').select('course_id').eq('phone', state.session.phone);
+        if(!eb) bankCourseIds = (ba||[]).map(r=>r.course_id);
+      }catch(_){ /* جدول bank_access غير موجود بعد */ }
+      const courseIds = [...new Set([...(enr||[]).map(r=>r.course_id), ...bankCourseIds])];
       if(!courseIds.length) return;
       const { data, error } = await supabaseClient.from('questions').select('*').in('course_id', courseIds);
       if(error) throw error;
@@ -1112,6 +1178,36 @@ async function loadCoupons(){
       active: c.active, note: c.note || '', createdAt: Number(c.created_at), usedBy: byCoupon[c.id] || [],
     }));
   }catch(e){ console.error('loadCoupons failed', e); }
+}
+/* ---------- كوبونات بنك الأسئلة + وصول الطالب للبنك ----------
+   bank_access: الطالب يقرأ صفوفه فقط (RLS). bank_coupons: للأدمن فقط.
+   لو الجداول مش موجودة بعد (ما انشغّل ملف bank_coupons.sql) نتجاهل الخطأ بصمت. */
+async function loadBankAccess(){
+  state.bankAccess = [];
+  if(!supabaseClient || !state.session || state.session.type !== 'student') return;
+  try{
+    const { data, error } = await supabaseClient.from('bank_access').select('course_id,section').eq('phone', state.session.phone);
+    if(error) throw error;
+    const phone = state.session.phone;
+    state.bankAccess = (data||[]).map(r=> ({ courseId: r.course_id, phone, section: r.section || null }));
+  }catch(e){ console.warn('loadBankAccess skipped', e); }
+}
+async function loadBankCoupons(){
+  state.bankCoupons = [];
+  if(!supabaseClient || !state.session || state.session.type !== 'admin') return;
+  try{
+    const [cps, uses] = await Promise.all([
+      fetchAllRows('bank_coupons', '*', 'created_at'),
+      fetchAllRows('bank_coupon_uses', '*', 'id'),
+    ]);
+    const byCoupon = {};
+    uses.forEach(u=>{ (byCoupon[u.coupon_id] = byCoupon[u.coupon_id] || []).push({ phone: u.phone, usedAt: Number(u.used_at) }); });
+    state.bankCoupons = cps.map(c=> ({
+      id: c.id, code: c.code, targets: Array.isArray(c.targets) ? c.targets.map(t=>({ courseId: t.course_id, section: t.section || null })) : [],
+      maxUses: c.max_uses, expiresAt: c.expires_at == null ? null : Number(c.expires_at),
+      active: c.active, note: c.note || '', createdAt: Number(c.created_at), usedBy: byCoupon[c.id] || [],
+    }));
+  }catch(e){ console.warn('loadBankCoupons skipped', e); }
 }
 /* الطلاب: للأدمن/المدرّس فقط. الطالب ما بيحمّل أي قائمة طلاب. */
 async function loadStudents(){
@@ -1151,7 +1247,7 @@ async function loadMyStudentContent(){
   }catch(e){ console.error('loadMyStudentContent failed', e); }
 }
 async function loadUserData(){
-  await Promise.all([ loadMyProgress(), loadEnrollments(), loadCoupons(), loadStudents(), loadMessages(), loadMyStudentContent(), loadQuestions() ]);
+  await Promise.all([ loadMyProgress(), loadEnrollments(), loadBankAccess(), loadCoupons(), loadBankCoupons(), loadStudents(), loadMessages(), loadMyStudentContent(), loadQuestions() ]);
 }
 async function dbAddEnrollments(list){
   const rows = list.map(e=> ({ phone: e.phone, course_id: e.courseId, section: e.section || '' }));
@@ -1376,7 +1472,7 @@ async function logout(){
   state.session = null;
   state.lectureProgress = [];
   state.enrollments = [];
-  state.coupons = [];
+  state.coupons = []; state.bankCoupons = []; state.bankAccess = [];
   state.students = []; state.messages = []; state.summaries = []; state.savedQuestions = []; state.summariesCount = null;
   navigate('home'); render();
 }
@@ -1948,7 +2044,7 @@ function pageStudentSpace(){
 
       <div class="card-panel" style="margin-top:24px; padding:26px;">
         <h3 style="font-size:17px; margin-bottom:6px;">🎟️ عندك كود كوبون؟</h3>
-        <p class="sub" style="margin-bottom:16px;">أدخل كود الكوبون هنا للحصول على فتح مجاني أو خصم على إحدى المواد.</p>
+        <p class="sub" style="margin-bottom:16px;">أدخل كود الكوبون هنا للحصول على فتح مجاني أو خصم على إحدى المواد، أو لفتح مواد داخل بنك الأسئلة.</p>
         <form id="couponRedeemForm" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
           <input type="text" name="couponCode" required placeholder="مثال: ABC12345" style="flex:1; min-width:200px; direction:ltr; font-family:monospace; letter-spacing:1px; text-transform:uppercase; padding:12px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--card); color:var(--text); font-size:14px;">
           <button type="submit" class="btn teal solid">تفعيل الكوبون</button>
@@ -2762,7 +2858,7 @@ function isLectureAccessibleForBank(lid){
   if(!l) return false;
   const course = state.courses.find(c=>c.id===l.courseId);
   if(l.hidden && !isAdminSession() && !isCourseOwnerTeacher(course)) return false;
-  return sectionUnlocked(l.courseId, l.section);
+  return bankSectionUnlocked(l.courseId, l.section);
 }
 
 function pageBankSetup(){
@@ -2817,7 +2913,7 @@ function pageBankSetup(){
       </div>`;
     }
     eligibleCourses = (quiz.university && quiz.major)
-      ? state.courses.filter(c => (c.university === quiz.university || c.university === 'عام') && (c.major || 'التمريض') === quiz.major && courseUnlocked(c.id))
+      ? state.courses.filter(c => (c.university === quiz.university || c.university === 'عام') && (c.major || 'التمريض') === quiz.major && bankCourseUnlocked(c.id))
       : [];
   }
 
@@ -2846,7 +2942,7 @@ function pageBankSetup(){
     /* الطالب لا يرى إلا محاضرات الأقسام (فيرست/ميد/فاينال) المفعّلة لديه فعليًا لهذا الكورس؛
        الأدمن يرى الجميع لأن sectionUnlocked تعتبره مفعّلًا بكل الأقسام دائمًا. */
     const allCourseLectures = state.lectures.filter(l=>l.courseId===quiz.courseId && (isAdmin || !l.hidden));
-    const lectures = allCourseLectures.filter(l=> sectionUnlocked(quiz.courseId, l.section));
+    const lectures = allCourseLectures.filter(l=> bankSectionUnlocked(quiz.courseId, l.section));
     const lockedLecturesCount = allCourseLectures.length - lectures.length;
     const countFor = (lid) => state.questions.filter(q=>q.courseId===quiz.courseId && q.lectureId===lid && (quiz.nature==='both' || (q.nature||'past')===quiz.nature)).length;
     const generalCount = state.questions.filter(q=>q.courseId===quiz.courseId && !q.lectureId && (quiz.nature==='both' || (q.nature||'past')===quiz.nature)).length;
@@ -2878,7 +2974,7 @@ function pageBankSetup(){
       <div class="bank-block-label">المحاضرات <button type="button" class="link-btn" id="toggleAllLectures">تحديد / إلغاء الكل</button></div>
       ${lectures.length ? lectureGroupsHtml : `<p class="hint" style="margin:0;">لا توجد محاضرات متاحة لك بعد ضمن الأقسام المفعّلة لهذا الكورس.</p>`}
       ${generalCount ? `<p class="hint" style="margin:12px 0 0; text-align:start;">+ ${generalCount} سؤال عام غير مرتبط بمحاضرة محددة (يُضاف تلقائيًا)</p>` : ''}
-      ${!isAdmin && lockedLecturesCount ? `<p class="hint" style="margin:12px 0 0; text-align:start;">🔒 توجد ${lockedLecturesCount} محاضرة ضمن أقسام غير مفعّلة لديك، اشترك بقسمها من صفحة الكورس لتظهر أسئلتها هنا.</p>` : ''}
+      ${!isAdmin && lockedLecturesCount ? `<p class="hint" style="margin:12px 0 0; text-align:start;">🔒 توجد ${lockedLecturesCount} محاضرة ضمن أقسام غير مفعّلة لديك، اشترك بقسمها من صفحة الكورس أو فعّل كوبون بنك أسئلة لتظهر أسئلتها هنا.</p>` : ''}
     </div>`;
 
     const available = state.questions.filter(q=>q.courseId===quiz.courseId)
@@ -3366,20 +3462,140 @@ function couponCardHtml(coupon){
       ${serialsHtml}
     </div>`;
 }
+function bankCouponCardHtml(coupon){
+  const usesText = coupon.maxUses==null ? `${(coupon.usedBy||[]).length} استخدام (بدون حد أقصى)` : `${(coupon.usedBy||[]).length} / ${coupon.maxUses} استخدام`;
+  const expired = isCouponExpired(coupon);
+  const expiryTag = coupon.expiresAt ? (expired
+      ? `<span class="lecture-tier-tag locked" style="background:var(--danger); color:#fff;">⏰ منتهي الصلاحية</span>`
+      : `<span class="lecture-tier-tag" style="margin-inline-start:6px;">⏳ ينتهي: ${new Date(coupon.expiresAt).toLocaleString('ar-JO',{dateStyle:'medium',timeStyle:'short'})}</span>`)
+    : '';
+  return `
+    <div class="message-card">
+      <div class="m-head">
+        <b style="direction:ltr; font-family:monospace; letter-spacing:1px;">${escapeHtml(coupon.code)}</b>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn small ${coupon.active?'teal':''}" data-toggle-bank-coupon="${coupon.id}">${coupon.active ? '✅ مفعّل' : '⏸️ متوقف'}</button>
+          <button class="btn danger small" data-del-bank-coupon="${coupon.id}">${ICONS.trash} حذف</button>
+        </div>
+      </div>
+      <p style="margin-top:4px;"><span class="lecture-tier-tag">🏦 بنك الأسئلة</span>${expiryTag}</p>
+      <div class="i18n-skip" style="margin-top:8px; display:flex; flex-direction:column; gap:3px; font-size:13.5px;">
+        ${(coupon.targets||[]).map(t=>`<span>• ${escapeHtml(bankTargetLabel(t))}</span>`).join('')}
+      </div>
+      <p style="margin-top:6px; font-size:13px; color:var(--muted);">الاستخدام: ${usesText}${coupon.note ? ` • ${escapeHtml(coupon.note)}` : ''}</p>
+    </div>`;
+}
+
+function modalCreateBankCoupon(){
+  if(!state.courses.length){ alert('أضف مادة واحدة على الأقل أولًا.'); return; }
+  const courseOptionsHtml = state.courses.map(c=>`<option class="i18n-skip" value="${c.id}">${escapeHtml(c.title)} — ${escapeHtml(c.university)} / ${escapeHtml(c.major || 'التمريض')}</option>`).join('');
+  const sectionOptionsFor = (courseId)=> `<option value="">كل الأقسام</option>` + courseSections(courseId).map(s=>`<option value="${s}">${SECTION_LABELS[s]}</option>`).join('');
+  const rowHtml = ()=> `
+    <div class="bank-target-row" style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+      <select class="bt-course" style="flex:2; min-width:180px;">${courseOptionsHtml}</select>
+      <select class="bt-section" style="flex:1; min-width:110px;">${sectionOptionsFor(state.courses[0].id)}</select>
+      <button type="button" class="btn danger small bt-remove" title="إزالة">✕</button>
+    </div>`;
+  openModal(`
+    <h3>🏦 إنشاء كوبون بنك أسئلة</h3>
+    <form id="bankCouponForm">
+      <div class="field">
+        <label>كود الكوبون</label>
+        <div style="display:flex; gap:8px;">
+          <input type="text" name="code" id="bankCouponCodeInput" required value="${generateCouponCode()}" style="direction:ltr; font-family:monospace; letter-spacing:1px; text-transform:uppercase;">
+          <button type="button" class="btn small" id="regenBankCouponCodeBtn">🎲 توليد</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>المواد والأقسام اللي بينفتح لها بنك الأسئلة</label>
+        <div id="bankTargetsList">${rowHtml()}</div>
+        <button type="button" class="btn small" id="addBankTargetBtn">${ICONS.plus} إضافة مادة / قسم آخر</button>
+        <p class="hint" style="margin-top:6px;">يفتح الأسئلة فقط (بدون محاضرات). اختر «كل الأقسام» لفتح كل أقسام المادة.</p>
+      </div>
+      <div class="field">
+        <label>الحد الأقصى لعدد مرات الاستخدام (اتركه فارغًا لعدد غير محدود)</label>
+        <input type="number" name="maxUses" min="1" placeholder="بدون حد أقصى">
+      </div>
+      <div class="field">
+        <label>تاريخ ووقت انتهاء الصلاحية (اختياري)</label>
+        <input type="datetime-local" name="expiresAt">
+      </div>
+      <div class="field"><label>ملاحظة داخلية (اختياري)</label><input type="text" name="note" placeholder="مثال: باقة بنك الفاينال"></div>
+      <div id="bankCouponMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ الكوبون</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  const codeInput = document.getElementById('bankCouponCodeInput');
+  document.getElementById('regenBankCouponCodeBtn').addEventListener('click', ()=>{ codeInput.value = generateCouponCode(); });
+  const list = document.getElementById('bankTargetsList');
+  document.getElementById('addBankTargetBtn').addEventListener('click', ()=> list.insertAdjacentHTML('beforeend', rowHtml()));
+  list.addEventListener('change', (e)=>{
+    if(e.target.classList.contains('bt-course')){
+      const row = e.target.closest('.bank-target-row');
+      row.querySelector('.bt-section').innerHTML = sectionOptionsFor(e.target.value);
+    }
+  });
+  list.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.bt-remove');
+    if(!btn) return;
+    if(list.querySelectorAll('.bank-target-row').length > 1) btn.closest('.bank-target-row').remove();
+  });
+  document.getElementById('bankCouponForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const msgBox = document.getElementById('bankCouponMsg');
+    const code = (fd.get('code')||'').trim().toUpperCase();
+    if(!code){ msgBox.innerHTML = `<div class="form-msg error">أدخل كود الكوبون.</div>`; return; }
+    if(findCouponByCode(code) || findBankCouponByCode(code)){ msgBox.innerHTML = `<div class="form-msg error">هذا الكود مستخدم مسبقًا لكوبون آخر، اختر كودًا مختلفًا.</div>`; return; }
+    const seen = new Set();
+    const targets = [];
+    list.querySelectorAll('.bank-target-row').forEach(row=>{
+      const courseId = row.querySelector('.bt-course').value;
+      const section = row.querySelector('.bt-section').value || null;
+      const key = courseId + '|' + (section || '');
+      if(courseId && !seen.has(key)){ seen.add(key); targets.push({ courseId, section }); }
+    });
+    if(!targets.length){ msgBox.innerHTML = `<div class="form-msg error">اختر مادة واحدة على الأقل.</div>`; return; }
+    const maxUsesRaw = fd.get('maxUses');
+    const maxUses = maxUsesRaw ? Number(maxUsesRaw) : null;
+    const expiresAtRaw = fd.get('expiresAt');
+    const expiresAt = expiresAtRaw ? new Date(expiresAtRaw).getTime() : null;
+    if(expiresAtRaw && expiresAt <= Date.now()){ msgBox.innerHTML = `<div class="form-msg error">تاريخ انتهاء الصلاحية يجب أن يكون في المستقبل.</div>`; return; }
+    const newCoupon = { id:'bcp'+Date.now(), code, targets, maxUses, expiresAt, usedBy:[], active:true, note:(fd.get('note')||'').trim(), createdAt: Date.now() };
+    const { error } = await supabaseClient.from('bank_coupons').insert({
+      id: newCoupon.id, code, targets: targets.map(t=>({ course_id: t.courseId, section: t.section || '' })),
+      max_uses: maxUses, expires_at: expiresAt, active: true, note: newCoupon.note, created_at: newCoupon.createdAt,
+    });
+    if(error){
+      msgBox.innerHTML = `<div class="form-msg error">${error.code==='23505' ? 'هذا الكود مستخدم مسبقًا، اختر كودًا مختلفًا.' : (error.code==='42P01' || error.code==='PGRST205') ? 'جداول كوبونات البنك غير موجودة بعد — شغّل ملف bank_coupons.sql من Supabase أولًا.' : 'تعذّر حفظ الكوبون، تأكد من صلاحياتك وحاول مرة ثانية.'}</div>`;
+      console.error('bank coupon insert failed', error); return;
+    }
+    state.bankCoupons.push(newCoupon);
+    closeModal(); navigate('admin-coupons'); render();
+  });
+}
+
 function pageAdminCoupons(){
   if(!isAdminSession()){
     return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
   }
   const coupons = state.coupons.slice().sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+  const bankCoupons = state.bankCoupons.slice().sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
   return `
   <section class="section">
     <div class="container">
       <div class="toolbar">
         <h2>🎟️ كوبونات الخصم والفتح المجاني</h2>
-        <button class="btn teal solid" id="addCouponBtn">${ICONS.plus} إنشاء كوبون جديد</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn teal solid" id="addCouponBtn">${ICONS.plus} إنشاء كوبون جديد</button>
+          <button class="btn teal solid" id="addBankCouponBtn">🏦 إنشاء كوبون بنك أسئلة</button>
+        </div>
       </div>
       <p class="hint" style="margin:-10px 0 20px;">كوبون "الفتح المجاني" يفعّل الوصول للطالب مباشرة عند إدخاله. كوبون "الخصم بنسبة" لا يخصم مبلغًا آليًا (لا يوجد دفع إلكتروني بالمنصة)، بل يولّد للطالب بطاقة خصم فيها اسمه ورقمه ونسبة الخصم ورقم تسلسلي فريد، ليحمّلها ويرسلها للدعم الفني فيتحقق المشرف من الرقم التسلسلي (من قائمة "الأرقام التسلسلية" أسفل كل كوبون) ويكمل التفعيل يدويًا. يمكن أيضًا ضبط تاريخ انتهاء صلاحية لأي كوبون.</p>
       ${coupons.length ? coupons.map(couponCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>لا توجد كوبونات بعد.</p></div>`}
+      <h2 style="margin:34px 0 8px; font-size:20px;">🏦 كوبونات بنك الأسئلة</h2>
+      <p class="hint" style="margin:0 0 16px;">تفتح للطالب قسمًا (أو كل الأقسام) من مادة أو أكثر داخل بنك الأسئلة فقط، بدون فتح المحاضرات.</p>
+      ${bankCoupons.length ? bankCoupons.map(bankCouponCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>لا توجد كوبونات بنك أسئلة بعد.</p></div>`}
     </div>
   </section>`;
 }
@@ -3466,7 +3682,7 @@ function modalCreateCoupon(){
     const msgBox = document.getElementById('couponMsg');
     const code = (fd.get('code')||'').trim().toUpperCase();
     if(!code){ msgBox.innerHTML = `<div class="form-msg error">أدخل كود الكوبون.</div>`; return; }
-    if(findCouponByCode(code)){ msgBox.innerHTML = `<div class="form-msg error">هذا الكود مستخدم مسبقًا لكوبون آخر، اختر كودًا مختلفًا.</div>`; return; }
+    if(findCouponByCode(code) || findBankCouponByCode(code)){ msgBox.innerHTML = `<div class="form-msg error">هذا الكود مستخدم مسبقًا لكوبون آخر، اختر كودًا مختلفًا.</div>`; return; }
     const studentChooses = studentChooseCheckbox.checked;
     let courseId = null;
     if(!studentChooses){
@@ -7317,7 +7533,7 @@ function bindPageEvents(route){
       const code = fd.get('couponCode');
       const submitBtn = e.target.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
-      const result = await redeemCoupon(code);
+      const result = await redeemAnyCoupon(code);
       submitBtn.disabled = false;
       if(result.needsCourseChoice){ showCourseChoiceStep(code); return; }
       await showCouponResult(result);
@@ -7327,6 +7543,28 @@ function bindPageEvents(route){
   if(route === 'admin-coupons'){
     const addBtn = document.getElementById('addCouponBtn');
     if(addBtn) addBtn.addEventListener('click', modalCreateCoupon);
+    const addBankBtn = document.getElementById('addBankCouponBtn');
+    if(addBankBtn) addBankBtn.addEventListener('click', modalCreateBankCoupon);
+    document.querySelectorAll('[data-toggle-bank-coupon]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const coupon = state.bankCoupons.find(c=>c.id===btn.dataset.toggleBankCoupon);
+        if(!coupon) return;
+        const { error } = await supabaseClient.from('bank_coupons').update({ active: !coupon.active }).eq('id', coupon.id);
+        if(error){ console.error(error); alert('تعذّر تحديث حالة الكوبون.'); return; }
+        coupon.active = !coupon.active;
+        render();
+      });
+    });
+    document.querySelectorAll('[data-del-bank-coupon]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.delBankCoupon;
+        confirmDelete('سيتم حذف كوبون بنك الأسئلة نهائيًا (الطلاب اللي فعّلوه بيحتفظوا بالوصول). هل أنت متأكد؟', async ()=>{
+          const { error } = await supabaseClient.from('bank_coupons').delete().eq('id', id);
+          if(error){ console.error(error); alert('تعذّر حذف الكوبون.'); return; }
+          state.bankCoupons = state.bankCoupons.filter(c=>c.id!==id);
+        });
+      });
+    });
     document.querySelectorAll('[data-toggle-coupon]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const coupon = state.coupons.find(c=>c.id===btn.dataset.toggleCoupon);
