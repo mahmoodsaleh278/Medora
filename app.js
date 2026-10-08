@@ -368,12 +368,15 @@ const I18N_PAIRS = [
   ['حفظ في ملخصاتي','Save to My Summaries'],
 ];
 const AR2EN_SORTED = I18N_PAIRS.slice().sort((a,b)=>b[0].length-a[0].length);
-const EN2AR_SORTED = I18N_PAIRS.map(([ar,en])=>[en,ar]).sort((a,b)=>b[0].length-a[0].length);
+/* ملاحظة: ما في ترجمة عكسية (إنجليزي ← عربي) بالقاموس إطلاقًا — كانت تحوّل أي كلمة إنجليزية
+   بمحتوى المستخدم (مثل Nursing بصفحتي "موادي" و"مساحة الطالب") لكلمة عربية تلقائيًا.
+   بدالها: بنحفظ النص الأصلي لكل عقدة ترجمناها نحن للإنجليزي، وبنرجّعه هو نفسه عند العودة للعربي. */
+const I18N_ORIG_TEXT = new WeakMap(); // عقدة نص -> { orig, translated }
+const I18N_ORIG_ATTR = new WeakMap(); // عنصر -> { attrName: { orig, translated } }
 function localize(str){
-  if(!str) return str;
-  const pairs = LANG === 'en' ? AR2EN_SORTED : EN2AR_SORTED;
+  if(!str || LANG !== 'en') return str;
   let out = str;
-  for(const [from,to] of pairs){
+  for(const [from,to] of AR2EN_SORTED){
     if(from && out.indexOf(from) !== -1) out = out.split(from).join(to);
   }
   return out;
@@ -392,16 +395,45 @@ function translateSubtree(root){
     const tag = node.parentElement ? node.parentElement.tagName : '';
     if(tag === 'SCRIPT' || tag === 'STYLE') return;
     if(node.parentElement && node.parentElement.closest('.i18n-skip')) return;
+    const rec = I18N_ORIG_TEXT.get(node);
+    if(LANG !== 'en'){
+      // عربي: رجّع فقط النصوص اللي ترجمناها إحنا، وما تلمس أي نص إنجليزي آخر
+      if(rec){
+        if(node.nodeValue === rec.translated) node.nodeValue = rec.orig;
+        I18N_ORIG_TEXT.delete(node);
+      }
+      return;
+    }
     if(!node.nodeValue || !node.nodeValue.trim()) return;
+    if(rec && node.nodeValue === rec.translated) return; // مترجمة أصلًا
     const localized = localize(node.nodeValue);
-    if(localized !== node.nodeValue) node.nodeValue = localized;
+    if(localized !== node.nodeValue){
+      I18N_ORIG_TEXT.set(node, { orig: node.nodeValue, translated: localized });
+      node.nodeValue = localized;
+    }
   });
   root.querySelectorAll('[placeholder],[aria-label],[title]').forEach(el=>{
     if(el.closest('.i18n-skip')) return;
+    const store = I18N_ORIG_ATTR.get(el) || {};
     ['placeholder','aria-label','title'].forEach(attr=>{
       const v = el.getAttribute(attr);
-      if(v){ const lv = localize(v); if(lv !== v) el.setAttribute(attr, lv); }
+      if(v === null) return;
+      const rec = store[attr];
+      if(LANG !== 'en'){
+        if(rec){
+          if(v === rec.translated) el.setAttribute(attr, rec.orig);
+          delete store[attr];
+        }
+        return;
+      }
+      if(!v || (rec && v === rec.translated)) return;
+      const lv = localize(v);
+      if(lv !== v){
+        store[attr] = { orig: v, translated: lv };
+        el.setAttribute(attr, lv);
+      }
     });
+    I18N_ORIG_ATTR.set(el, store);
   });
 }
 async function setLanguage(lang){
