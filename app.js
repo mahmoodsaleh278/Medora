@@ -2267,9 +2267,10 @@ function pageCourseDetail(courseId){
   }
   const lectures = state.lectures.filter(l=>l.courseId===courseId && (canManageLectures || !l.hidden));
   /* الأدمن يشوف الأقسام المفعّلة لهذه المادة تحديدًا (بعض المواد فيها ميد وفاينال بس مثلًا)،
-     والطالب يشوف بس الأقسام اللي فيها محاضرات فعليًا من ضمنها */
+     والطالب يشوف الأقسام اللي فيها محاضرات فعليًا، وكمان الأقسام المجانية حتى لو فاضية
+     (عشان يقدر يشترك فيها مسبقًا وتنفتح له المحاضرات أول ما تنزل) */
   const courseSecs = courseSections(courseId);
-  const sectionsToShow = canManageLectures ? courseSecs : courseSecs.filter(s => lectures.some(l=>l.section===s));
+  const sectionsToShow = canManageLectures ? courseSecs : courseSecs.filter(s => lectures.some(l=>l.section===s) || !!course.pricing[s]);
 
   function lectureRowHtml(l, i, unlocked, lockMsg){
     const videos = l.videos || [];
@@ -2358,7 +2359,7 @@ function pageCourseDetail(courseId){
     const lockMsg = unlocked ? '' : (isFree ? `اشترك مجانًا بقسم ${SECTION_LABELS[section]} لفتح هذه المحاضرة` : 'قسم مدفوع');
     const rowsHtml = secLectures.length
       ? `${!canManageLectures && actionHtml ? actionHtml : ''}<div class="lecture-list">${secLectures.map((l,i)=>lectureRowHtml(l,i,unlocked,lockMsg)).join('')}</div>`
-      : `<div class="section-group-empty">${canManageLectures ? 'لا توجد محاضرات بهذا القسم بعد.' : 'سيتم إضافة محاضرات هذا القسم قريبًا.'}</div>`;
+      : `${!canManageLectures && actionHtml ? actionHtml : ''}<div class="section-group-empty">${canManageLectures ? 'لا توجد محاضرات بهذا القسم بعد.' : 'سيتم إضافة محاضرات هذا القسم قريبًا.'}</div>`;
 
     return `
     <details class="section-group">
