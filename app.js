@@ -2379,7 +2379,7 @@ function pageCourseDetail(courseId){
         const libraryId = libMatch ? libMatch[1] : '';
         return `
           <button type="button" class="lecture-action-btn watch watch-secure"
-            data-library-id="${escapeHtml(libraryId)}" data-video-guid="${escapeHtml(v.bunnyGuid)}">
+            data-library-id="${escapeHtml(libraryId)}" data-video-guid="${escapeHtml(v.bunnyGuid)}" data-embed-url="${escapeHtml(v.url)}">
             <span class="action-icon">${ICONS.play}</span>
             <span><span class="label-main">${label}</span><span class="label-sub">تشغيل الفيديو</span></span>
           </button>
@@ -5187,6 +5187,19 @@ async function toggleSecurePlayer(btn){
     });
   }catch(err){
     console.error('فشل تجهيز رابط المشاهدة', err);
+    /* لو فشل جلب التوكن (مثلاً الفيديو من مكتبة Bunny ثانية أو الحماية بالتوكن مش مفعّلة)،
+       نجرّب الـ embed العادي مباشرة */
+    const plainUrl = btn.dataset.embedUrl;
+    if(plainUrl && /^https:\/\/iframe\.mediadelivery\.net\/embed\//.test(plainUrl)){
+      slot.innerHTML = `
+        <div class="video-player-wrap">
+          <iframe src="${escapeHtml(plainUrl)}" loading="lazy"
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>
+        </div>`;
+      slot.dataset.open = '1';
+      return;
+    }
     slot.innerHTML = `<div class="video-player-loading" style="color:var(--danger);">تعذّر تحميل الفيديو، حاول مرة أخرى.</div>`;
   }
 }
@@ -5355,10 +5368,54 @@ function videoExistingRowHtml(label, url, bunnyGuid){
   return `<div class="video-row video-row-done" data-url="${escapeHtml(url)}" ${bunnyGuid ? `data-bunny-guid="${escapeHtml(bunnyGuid)}"` : ''}>
     <div class="video-row-main">
       <input type="text" class="link-label" placeholder="اسم الفيديو (اختياري)" value="${escapeHtml(label||'')}">
-      <span class="video-row-badge">${bunnyGuid ? (ICONS.play+' فيديو مرفوع على Bunny') : (ICONS.play+' رابط فيديو خارجي')}</span>
+      <span class="video-row-badge">${bunnyGuid ? (ICONS.play+' فيديو Bunny') : (ICONS.play+' رابط فيديو خارجي')}</span>
     </div>
     <button type="button" class="video-row-remove" title="حذف">✕</button>
   </div>`;
+}
+/* ===== إضافة فيديو من مكتبة Bunny عبر كود الـ Embed (أدمن فقط) =====
+   بيقبل: كود <iframe ...> كامل، أو رابط embed/play/directplay من Bunny.
+   لو طلع الرابط من Bunny بنستخرج رقم المكتبة والـ GUID ونخزّنه كفيديو Bunny عادي (bunnyGuid)
+   فبيتشغّل بنفس المشغّل الآمن (توكن مشاهدة) جوا الصفحة. أي رابط ثاني بيتخزّن كرابط خارجي. */
+function parseBunnyEmbed(input){
+  const raw = (input||'').trim();
+  if(!raw) return null;
+  const srcMatch = raw.match(/src\s*=\s*["']([^"']+)["']/i);
+  const candidate = (srcMatch ? srcMatch[1] : raw).trim();
+  const m = candidate.match(/mediadelivery\.net\/(?:embed|play|directplay)\/(\d+)\/([0-9a-fA-F-]{20,40})/i);
+  if(m) return { libraryId:m[1], guid:m[2], url:`https://iframe.mediadelivery.net/embed/${m[1]}/${m[2]}` };
+  return { external:true, url:candidate };
+}
+function videoEmbedRowHtml(label, code){
+  return `<div class="video-row video-row-embed">
+    <div class="video-row-main">
+      <input type="text" class="link-label" placeholder="اسم الفيديو (اختياري)" value="${escapeHtml(label||'')}">
+      <textarea class="embed-code" dir="ltr" rows="2" style="width:100%;min-width:0;font-size:12.5px;" placeholder="الصق كود الـ Embed من Bunny (&lt;iframe ...&gt;) أو رابط الـ Embed">${escapeHtml(code||'')}</textarea>
+    </div>
+    <button type="button" class="video-row-remove" title="حذف">✕</button>
+  </div>`;
+}
+function addVideoEmbedRow(containerId){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  container.insertAdjacentHTML('beforeend', videoEmbedRowHtml());
+  const ta = container.lastElementChild.querySelector('.embed-code');
+  if(ta) ta.focus();
+}
+/* يتأكد إن صفوف الـ embed المعبّاة فيها رابط صالح قبل الحفظ */
+function validateEmbedRows(containerId){
+  const rows = Array.from(document.querySelectorAll('#'+containerId+' .video-row-embed'));
+  for(const row of rows){
+    const val = row.querySelector('.embed-code').value.trim();
+    if(!val) continue;
+    const parsed = parseBunnyEmbed(val);
+    if(!parsed || !/^https?:\/\//i.test(parsed.url)){
+      alert('كود الـ Embed غير صالح. الصق كود <iframe> كامل أو رابط يبدأ بـ https://');
+      row.querySelector('.embed-code').focus();
+      return false;
+    }
+  }
+  return true;
 }
 function videoManualRowHtml(label, url){
   return `<div class="video-row video-row-manual">
@@ -5423,7 +5480,14 @@ function collectVideoRows(containerId){
   rows.forEach(row=>{
     const labelInput = row.querySelector('.link-label');
     const label = labelInput ? labelInput.value.trim() : '';
-    if(row.classList.contains('video-row-manual')){
+    if(row.classList.contains('video-row-embed')){
+      const parsed = parseBunnyEmbed(row.querySelector('.embed-code').value);
+      if(parsed && /^https?:\/\//i.test(parsed.url)){
+        const item = { label, url: parsed.url };
+        if(parsed.guid) item.bunnyGuid = parsed.guid;
+        result.push(item);
+      }
+    } else if(row.classList.contains('video-row-manual')){
       const url = row.querySelector('.link-url').value.trim();
       if(url) result.push({ label, url });
     } else if(row.dataset.url){
@@ -5455,6 +5519,7 @@ function modalAddLecture(courseId){
         <label>فيديو المحاضرة (يمكن رفع أكثر من فيديو لنفس المحاضرة)</label>
         <div class="link-rows" id="videoRows"></div>
         <button type="button" class="btn small teal solid" id="addVideoUploadRow">${ICONS.plus} رفع فيديو من الجهاز</button>
+        ${admin ? `<button type="button" class="btn small" id="addVideoEmbedRow">🎬 إضافة فيديو من Bunny (Embed)</button>` : ''}
         ${admin ? `
         <details class="manual-link-details">
           <summary>إلصاق رابط فيديو يدويًا (اختياري)</summary>
@@ -5474,6 +5539,7 @@ function modalAddLecture(courseId){
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   bindVideoRowsContainer('videoRows');
+  if(admin){ document.getElementById('addVideoEmbedRow').addEventListener('click', ()=> addVideoEmbedRow('videoRows')); }
   document.getElementById('addVideoUploadRow').addEventListener('click', ()=> addVideoUploadRow('videoRows', courseId));
   bindLinkRows('fileRows', 'addFileRow');
   document.getElementById('addFileRow').click();
@@ -5484,6 +5550,7 @@ function modalAddLecture(courseId){
     e.preventDefault();
     const stillUploading = document.querySelector('#videoRows .video-row-uploading');
     if(stillUploading){ alert('في فيديو لسا قيد الرفع، انتظر يخلص أو احذفه قبل الحفظ.'); return; }
+    if(!validateEmbedRows('videoRows')) return;
     const fd = new FormData(e.target);
     const manualVideos = admin ? collectLinkRows('videoManualRows') : [];
     state.lectures.push({
@@ -5516,6 +5583,7 @@ function modalEditLecture(lectureId){
         <label>فيديو المحاضرة (يمكن رفع أكثر من فيديو لنفس المحاضرة)</label>
         <div class="link-rows" id="videoRows">${existingVideos.map(v=>videoExistingRowHtml(v.label, v.url, v.bunnyGuid)).join('')}</div>
         <button type="button" class="btn small teal solid" id="addVideoUploadRow">${ICONS.plus} رفع فيديو من الجهاز</button>
+        ${admin ? `<button type="button" class="btn small" id="addVideoEmbedRow">🎬 إضافة فيديو من Bunny (Embed)</button>` : ''}
         ${admin ? `
         <details class="manual-link-details">
           <summary>إلصاق رابط فيديو يدويًا (اختياري)</summary>
@@ -5535,6 +5603,7 @@ function modalEditLecture(lectureId){
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   bindVideoRowsContainer('videoRows');
+  if(admin){ document.getElementById('addVideoEmbedRow').addEventListener('click', ()=> addVideoEmbedRow('videoRows')); }
   document.getElementById('addVideoUploadRow').addEventListener('click', ()=> addVideoUploadRow('videoRows', lecture.courseId));
   bindLinkRows('fileRows', 'addFileRow');
   if(admin){
@@ -5544,6 +5613,7 @@ function modalEditLecture(lectureId){
     e.preventDefault();
     const stillUploading = document.querySelector('#videoRows .video-row-uploading');
     if(stillUploading){ alert('في فيديو لسا قيد الرفع، انتظر يخلص أو احذفه قبل الحفظ.'); return; }
+    if(!validateEmbedRows('videoRows')) return;
     const fd = new FormData(e.target);
     const manualVideos = admin ? collectLinkRows('videoManualRows') : [];
     lecture.title = fd.get('title').trim(); lecture.description = (fd.get('description')||'').trim();
