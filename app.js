@@ -8129,7 +8129,25 @@ function modalCreateExam(){
     const { error } = await supabaseClient.from('exams').insert(row);
     if(error){
       console.error('exam insert failed', error);
-      msg.innerHTML = `<div class="form-msg error">${error.code === '42P01' || error.code === 'PGRST205' ? 'جداول الاختبارات غير موجودة — شغّل ملف exams.sql من Supabase أولًا.' : 'تعذّر حفظ الاختبار، تأكد من صلاحياتك وحاول مرة ثانية.'}</div>`;
+      let reason;
+      if(error.code === '42P01' || error.code === 'PGRST205'){
+        reason = 'جداول الاختبارات غير موجودة — شغّل ملف exams.sql من Supabase أولًا.';
+      } else if(error.code === '42501'){
+        reason = 'ما عندك صلاحية إضافة اختبار (سياسة RLS ترفض الإدخال). تأكد أنك مسجّل دخول كأدمن، وأن سياسة INSERT على جدول exams مفعّلة.';
+      } else if(error.code === '22003'){
+        reason = 'عمود created_at في جدول exams نوعه integer وصغير على الوقت الحالي — لازم يصير bigint.';
+      } else if(error.code === '22P02'){
+        reason = 'نوع عمود id في جدول exams غير مطابق (غالبًا uuid) — لازم يكون text.';
+      } else if(error.code === '42703' || error.code === 'PGRST204'){
+        reason = 'جدول exams ناقصه أعمدة مطلوبة — أعد تشغيل exams.sql كاملًا.';
+      } else if(error.code === '23505'){
+        reason = 'يوجد اختبار بنفس المعرّف، حاول مرة ثانية.';
+      } else if(error.code === '23502'){
+        reason = 'حقل إلزامي فاضي في جدول exams: ' + escapeHtml(error.message || '');
+      } else {
+        reason = 'تعذّر حفظ الاختبار.';
+      }
+      msg.innerHTML = `<div class="form-msg error">${reason}<br><span class="hint" dir="ltr" style="display:block;margin-top:6px;">${escapeHtml((error.code || '') + ' — ' + (error.message || ''))}</span></div>`;
       btn.disabled = false; return;
     }
     examAdmin.exams.push(mapExamRow(row)); examAdmin.view = 'list';
