@@ -1391,6 +1391,7 @@ function renderNavState(){
   const studentSpaceLink = document.getElementById('navStudentSpaceLink');
   const analyticsLink = document.getElementById('navAnalyticsLink');
   const couponsLink = document.getElementById('navCouponsLink');
+  const examsLink = document.getElementById('navExamsLink');
 
   if(state.session && state.session.type === 'student'){
     loginLink.classList.add('hidden');
@@ -1400,6 +1401,7 @@ function renderNavState(){
     studentSpaceLink.classList.remove('hidden');
     analyticsLink.classList.add('hidden');
     couponsLink.classList.add('hidden');
+    if(examsLink) examsLink.classList.add('hidden');
     const uniSuffix = state.session.university ? ` — ${state.session.university}` : '';
     const avatarImg = state.session.avatar ? `<img src="${state.session.avatar}" class="user-pill-avatar" alt="">` : '👋';
     userArea.innerHTML = `<span class="user-pill">${avatarImg} <span>${escapeHtml(state.session.name + uniSuffix)}</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
@@ -1411,6 +1413,7 @@ function renderNavState(){
     studentSpaceLink.classList.add('hidden');
     analyticsLink.classList.remove('hidden');
     couponsLink.classList.remove('hidden');
+    if(examsLink) examsLink.classList.remove('hidden');
     userArea.innerHTML = `<span class="user-pill"><span>🛡️ ${escapeHtml(state.session.name)}</span> <span class="admin-tag">مشرف</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
   } else if(state.session && state.session.type === 'teacher'){
     loginLink.classList.add('hidden');
@@ -1420,6 +1423,7 @@ function renderNavState(){
     studentSpaceLink.classList.add('hidden');
     analyticsLink.classList.add('hidden');
     couponsLink.classList.add('hidden');
+    if(examsLink) examsLink.classList.add('hidden');
     userArea.innerHTML = `<span class="user-pill"><span>${escapeHtml(state.session.name)}</span> <span class="admin-tag">مدرّس</span></span><button class="btn small" id="logoutBtn">خروج</button>`;
   } else {
     loginLink.classList.remove('hidden');
@@ -1429,6 +1433,7 @@ function renderNavState(){
     studentSpaceLink.classList.add('hidden');
     analyticsLink.classList.add('hidden');
     couponsLink.classList.add('hidden');
+    if(examsLink) examsLink.classList.add('hidden');
     userArea.innerHTML = '';
   }
   const lb = document.getElementById('logoutBtn');
@@ -1458,6 +1463,7 @@ function renderNavState(){
         <span>🛡️ أنت الآن في وضع المشرف — يمكنك إضافة أو حذف الدورات والمحاضرات والأسئلة مباشرة من الصفحات.</span>
         <a href="/admin-analytics" class="btn small" style="border-color:#fff;color:#fff;">📊 التحليلات</a>
         <a href="/admin-coupons" class="btn small" style="border-color:#fff;color:#fff;">🎟️ الكوبونات</a>
+        <a href="/admin-exams" class="btn small" style="border-color:#fff;color:#fff;">📝 الاختبارات</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
       </div>`;
@@ -1474,6 +1480,7 @@ async function logout(){
   state.enrollments = [];
   state.coupons = []; state.bankCoupons = []; state.bankAccess = [];
   state.students = []; state.messages = []; state.summaries = []; state.savedQuestions = []; state.summariesCount = null;
+  examStopTimers(); examRun = null; examAdmin = Object.assign(examAdmin, { loaded:false, exams:[], attempts:[], view:'list', examId:null, search:'' });
   navigate('home'); render();
 }
 
@@ -4548,6 +4555,7 @@ function pageLogin(){
   <section class="section">
     <div class="auth-wrap">
       <div class="card-panel">
+        ${peekAfterLoginRoute() ? `<div class="form-msg ok" style="margin-bottom:14px;">📝 سجّل الدخول (أو أنشئ حسابًا) وسنرجعك مباشرة إلى الاختبار.</div>` : ''}
         <h2>${authMode==='login' ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}</h2>
         <p class="sub">${authMode==='login' ? 'أدخل بياناتك للوصول إلى حسابك' : 'انضم إلى منصة MEDORA الآن'}</p>
         <div id="authMsg"></div>
@@ -6917,6 +6925,10 @@ function setPageMeta({ title, description, noindex } = {}){
    ثم يستدعي setPageMeta(). صفحات لوحة التحكم والحساب الشخصي تتعلّم
    noindex عشان ما تنفهرس بمحركات البحث. */
 function updateSeoMeta(route){
+  if(route.startsWith('exam/')){
+    setPageMeta({ title: (examRun && examRun.info && examRun.info.title) ? examRun.info.title : 'اختبار', noindex: true });
+    return;
+  }
   if(route.startsWith('course/')){
     const course = state.courses.find(c => c.id === route.slice(7));
     if(course){
@@ -7005,6 +7017,9 @@ function updateSeoMeta(route){
     case 'admin-coupons':
       setPageMeta({ title: 'كوبونات الإدارة', noindex: true });
       break;
+    case 'admin-exams':
+      setPageMeta({ title: 'الاختبارات', noindex: true });
+      break;
 
     default:
       setPageMeta({ description: DEFAULT_DESCRIPTION });
@@ -7020,6 +7035,8 @@ async function render(){
   let html = '';
   if(route.startsWith('course/')){
     html = pageCourseDetail(route.slice(7));
+  } else if(route.startsWith('exam/')){
+    html = pageExam(examIdFromRoute(route));
   } else {
     switch(route){
       case 'home': html = pageHome(); break;
@@ -7039,6 +7056,7 @@ async function render(){
       case 'admin-login': html = pageAdminLogin(); break;
       case 'admin-analytics': html = pageAdminAnalytics(); break;
       case 'admin-coupons': html = pageAdminCoupons(); break;
+      case 'admin-exams': html = pageAdminExams(); break;
       default: html = pageHome();
     }
   }
@@ -7064,7 +7082,7 @@ async function render(){
    وتمنع تحديد/نسخ محتوى الأسئلة. تظهر فقط للطالب المسجّل دخوله وفقط في صفحة "bank". */
 function updateWatermark(route){
   const isStudent = state.session && state.session.type === 'student';
-  const shouldShow = isStudent && route === 'bank';
+  const shouldShow = isStudent && (route === 'bank' || route.startsWith('exam/'));
   document.body.classList.toggle('copy-protected', shouldShow);
   const label = shouldShow ? `${state.session.name || ''}  •  ${state.session.phone || ''}` : '';
   document.querySelectorAll('#app .wizard-card, #app .q-card').forEach(el=>{
@@ -7097,7 +7115,953 @@ document.addEventListener('keydown', (e)=>{
   if((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(k)) e.preventDefault();
 });
 
+/* =========================================================================
+   الاختبارات المشاركة بالرابط (Exams)
+   - المشرف: صفحة /admin-exams لإنشاء اختبار (أسئلة من البنك + إعدادات) ونسخ رابطه ومتابعة النتائج.
+   - الطالب: يفتح /exam/<id>، يسجّل دخول بحسابه، ويحل الاختبار بعدّاد وقت وخريطة أسئلة وعلامة "مشكوك فيه".
+   - الأسئلة والإجابات الصحيحة محفوظة بجدول exams (للمشرف فقط). الطالب يستقبل الأسئلة بدون
+     إجابات من دالة exam_start، والتصحيح يتم على السيرفر عبر exam_submit (راجع exams.sql).
+   ========================================================================= */
+const EXAM_RETURN_KEY = 'medora_after_login';
+function examLink(id){ return location.origin + '/exam/' + id; }
+function examIdFromRoute(route){ return route && route.startsWith('exam/') ? decodeURIComponent(route.slice(5).split('/')[0]) : null; }
+function examStripHtml(html){ const d = document.createElement('div'); d.innerHTML = html || ''; return (d.textContent || '').replace(/\s+/g,' ').trim(); }
+function examFmtTime(ms){
+  ms = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(ms / 3600), m = Math.floor((ms % 3600) / 60), s = ms % 60;
+  const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+function examFmtDate(ms){ return ms ? new Date(ms).toLocaleString('ar-JO', { dateStyle:'medium', timeStyle:'short' }) : '—'; }
+function examErrMsg(e){
+  const m = String((e && (e.message || e.details)) || e || '');
+  if(/NOT_AUTHENTICATED/.test(m)) return 'سجّل الدخول أولًا للمتابعة.';
+  if(/NOT_STUDENT/.test(m)) return 'الاختبارات مخصّصة لحسابات الطلاب فقط.';
+  if(/EXAM_UNAVAILABLE/.test(m)) return 'هذا الاختبار غير متاح حاليًا.';
+  if(/ATTEMPTS_EXHAUSTED/.test(m)) return 'استنفدت عدد المحاولات المسموحة لهذا الاختبار.';
+  if(/NOT_FOUND/.test(m)) return 'تعذّر العثور على المحاولة.';
+  if(e && (e.code === 'PGRST202' || e.code === '42883' || e.code === '42P01' || e.code === 'PGRST205')) return 'نظام الاختبارات غير مفعّل بعد على السيرفر (يجب تشغيل ملف exams.sql من Supabase).';
+  return isNetworkOrServerError(e) ? SERVER_BUSY_MSG : 'حدث خطأ غير متوقع، حاول مرة أخرى.';
+}
+
+/* رجوع الطالب للاختبار بعد تسجيل الدخول: نخزّن المسار مؤقتًا (30 دقيقة) بـ sessionStorage */
+function setAfterLoginRoute(route){ try{ sessionStorage.setItem(EXAM_RETURN_KEY, JSON.stringify({ route, at: Date.now() })); }catch(e){} }
+function peekAfterLoginRoute(){
+  try{
+    const raw = sessionStorage.getItem(EXAM_RETURN_KEY); if(!raw) return null;
+    const o = JSON.parse(raw);
+    return (Date.now() - o.at < 30*60*1000) ? o.route : null;
+  }catch(e){ return null; }
+}
+function popAfterLoginRoute(){ const r = peekAfterLoginRoute(); try{ sessionStorage.removeItem(EXAM_RETURN_KEY); }catch(e){} return r; }
+
+function injectExamStyles(){
+  if(document.getElementById('examStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'examStyles';
+  style.textContent = `
+    .exam-wrap{ max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+    .exam-topbar{ position: sticky; top: 0; z-index: 30; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+      background: var(--card); border:1px solid var(--border); border-radius:16px; padding:12px 16px; margin-bottom:16px; box-shadow:0 4px 16px rgba(0,0,0,.05); }
+    .exam-topbar .exam-title{ font-weight:800; font-size:15px; flex:1; min-width:140px; }
+    .exam-timer{ font-weight:800; font-size:18px; font-variant-numeric: tabular-nums; padding:6px 14px; border-radius:999px; background:var(--teal-light); color:var(--teal); direction:ltr; }
+    .exam-timer.warn{ background:#fef3c7; color:#b45309; }
+    .exam-timer.danger{ background:var(--danger); color:#fff; animation: examPulse 1s infinite; }
+    @keyframes examPulse{ 50%{ opacity:.65; } }
+    .exam-meta{ font-size:12.5px; color:var(--muted); }
+    .exam-layout{ display:grid; grid-template-columns: 1fr 280px; gap:18px; align-items:start; }
+    .exam-nav-card{ background:var(--card); border:1px solid var(--border); border-radius:18px; padding:16px; position:sticky; top:84px; }
+    .exam-nav-card h4{ margin:0 0 10px; font-size:14.5px; display:flex; justify-content:space-between; align-items:center; }
+    .exam-nav-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap:8px; margin-bottom:12px; }
+    .exam-nb{ position:relative; height:40px; border-radius:10px; border:1.5px solid var(--border); background:var(--bg); color:var(--ink);
+      font-family:inherit; font-weight:800; font-size:13.5px; cursor:pointer; padding:0; }
+    .exam-nb.answered{ background: color-mix(in srgb, var(--teal) 14%, var(--card)); border-color: var(--teal); }
+    .exam-nb.current{ outline:3px solid var(--teal); outline-offset:1px; }
+    .exam-nb.flagged::after{ content:'🚩'; position:absolute; top:-8px; inset-inline-end:-5px; font-size:12px; }
+    .exam-legend{ display:flex; flex-wrap:wrap; gap:10px; font-size:11.5px; color:var(--muted); margin-bottom:14px; }
+    .exam-legend i{ display:inline-block; width:12px; height:12px; border-radius:4px; border:1.5px solid var(--border); vertical-align:-2px; margin-inline-end:4px; }
+    .exam-legend i.a{ background: color-mix(in srgb, var(--teal) 14%, var(--card)); border-color:var(--teal); }
+    .exam-flag-btn.on{ background:#fef3c7; border-color:#f59e0b; color:#b45309; }
+    .exam-check{ display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--border); border-radius:12px; margin-bottom:8px; cursor:pointer; font-size:14px; line-height:1.6; }
+    .exam-check input{ margin-top:5px; }
+    .exam-check.sub{ margin-inline-start:22px; }
+    .exam-info-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin:16px 0; }
+    .exam-info-grid div{ background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:12px; text-align:center; font-size:13px; color:var(--muted); }
+    .exam-info-grid b{ display:block; color:var(--ink); font-size:16px; margin-top:3px; }
+    .exam-qpick{ max-height:300px; overflow:auto; border:1px solid var(--border); border-radius:12px; padding:6px; background:var(--bg); }
+    .exam-qpick label{ display:flex; gap:10px; align-items:flex-start; padding:8px; border-radius:8px; cursor:pointer; font-size:13.5px; line-height:1.55; }
+    .exam-qpick label:hover{ background:var(--card); }
+    .exam-link-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:12px 0; }
+    .exam-link-row input{ flex:1; min-width:220px; direction:ltr; text-align:left; font-size:13px; }
+    .exam-table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:14px; background:var(--card); }
+    .exam-table{ width:100%; border-collapse:collapse; font-size:13.5px; min-width:760px; }
+    .exam-table th, .exam-table td{ padding:10px 12px; text-align:start; border-bottom:1px solid var(--border); white-space:nowrap; }
+    .exam-table th{ background:var(--bg); font-weight:800; font-size:12.5px; color:var(--muted); }
+    .exam-stat-row{ display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:16px; }
+    .exam-stat-row div{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px; text-align:center; font-size:12.5px; color:var(--muted); }
+    .exam-stat-row b{ display:block; font-size:20px; color:var(--teal); margin-top:2px; }
+    @media (max-width: 860px){
+      .exam-layout{ grid-template-columns: 1fr; }
+      .exam-nav-card{ position:static; order:-1; }
+      .exam-topbar{ top:0; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+injectExamStyles();
+
+/* ============================ جهة الطالب ============================ */
+let examRun = null;
+let examTimerId = null, examSaveTimeout = null, examAutosaveId = null;
+
+function newExamRun(id){
+  return { id, userKey:null, loading:false, loaded:false, info:null, error:'', step:'intro', busy:false,
+    attemptId:null, startedAt:0, clockOffset:0, durationMs:0, questions:[], answers:{}, flagged:{}, idx:0,
+    result:null, dirty:false, saving:false, saveState:'', submitting:false, autoTried:false, startError:'' };
+}
+function examUserKey(){
+  const s = state.session;
+  return s ? (s.type + ':' + (s.phone || s.username || s.teacherId || '')) : 'anon';
+}
+function examStopTimers(){
+  clearInterval(examTimerId); examTimerId = null;
+  clearTimeout(examSaveTimeout); examSaveTimeout = null;
+  clearInterval(examAutosaveId); examAutosaveId = null;
+}
+function scrollToExamTop(){ const el = document.querySelector('.exam-topbar') || document.querySelector('.exam-wrap'); if(el) el.scrollIntoView({ behavior:'smooth', block:'start' }); }
+
+async function examEnsureLoaded(id){
+  if(!examRun || examRun.id !== id){ examStopTimers(); examRun = newExamRun(id); }
+  const run = examRun;
+  if(run.step !== 'intro') return;
+  const key = examUserKey();
+  if(run.loading || (run.loaded && run.userKey === key)) return;
+  run.loading = true; run.loaded = false; run.userKey = key;
+  try{
+    const { data, error } = await supabaseClient.rpc('exam_public_info', { p_id: id });
+    if(error) throw error;
+    run.info = data || null; run.error = '';
+  }catch(e){ run.info = null; run.error = examErrMsg(e); }
+  run.loading = false; run.loaded = true;
+  if(examRun === run && examIdFromRoute(currentRoute()) === id) render();
+}
+
+function examInfoRowsHtml(info){
+  return `<div class="exam-info-grid">
+    <div>عدد الأسئلة<b>${info.questionCount}</b></div>
+    <div>المدة<b>${info.durationMinutes ? info.durationMinutes + ' دقيقة' : 'بدون وقت'}</b></div>
+    <div>المحاولات<b>${info.maxAttempts ? info.maxAttempts : 'غير محدودة'}</b></div>
+    <div>العلامة<b style="font-size:14px;">${info.showScore ? 'تظهر مباشرة بعد التسليم' : 'يعلنها المشرف لاحقًا'}</b></div>
+  </div>`;
+}
+
+function pageExam(id){
+  if(!supabaseClient) return `<section class="section"><div class="exam-wrap"><div class="empty-state"><h3>إعدادات الاتصال غير مكتملة</h3></div></div></section>`;
+  if(!examRun || examRun.id !== id){ examStopTimers(); examRun = newExamRun(id); }
+  const r = examRun;
+  const wrap = inner => `<section class="section"><div class="exam-wrap" style="max-width:760px;">${inner}</div></section>`;
+  if(r.step === 'running') return examRunningHtml();
+  if(r.step === 'result') return wrap(examResultHtml());
+  if(!r.loaded || r.userKey !== examUserKey()){
+    return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ تحميل الاختبار...</div>`);
+  }
+  if(!r.info){
+    return wrap(`<div class="empty-state"><h3>الاختبار غير موجود</h3><p>${escapeHtml(r.error || 'تأكد من صحة الرابط أو تواصل مع المشرف.')}</p></div>`);
+  }
+  const info = r.info, s = state.session;
+  let actionHtml = '';
+  if(!info.active){
+    actionHtml = `<div class="form-msg error">هذا الاختبار مغلق حاليًا.</div>`;
+  } else if(!s){
+    actionHtml = `<p class="hint" style="text-align:center;">سجّل الدخول بحسابك على المنصة للبدء بالاختبار.</p>
+      <div style="text-align:center;"><a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div>`;
+  } else if(s.type === 'admin'){
+    actionHtml = `<p class="hint">أنت مسجّل كمشرف — الاختبار للطلاب فقط. يمكنك معاينة الأسئلة أو متابعة النتائج.</p>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <button class="btn small" id="examPreviewBtn">👁 معاينة الأسئلة</button>
+        <button class="btn teal solid small" id="examGoResultsBtn">📊 نتائج الطلاب</button></div>`;
+  } else if(s.type !== 'student'){
+    actionHtml = `<div class="form-msg error">هذا الاختبار مخصّص لحسابات الطلاب.</div>`;
+  } else {
+    const used = (info.attempts || []).length;
+    const exhausted = info.maxAttempts > 0 && used >= info.maxAttempts && !info.inProgress;
+    const prev = (info.attempts || []).map((a, i) => `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--border); font-size:13.5px;">
+        <span>المحاولة ${i+1} — ${examFmtDate(a.submittedAt)}</span>
+        ${a.resultVisible ? `<span><b style="color:var(--teal);">${a.score}%</b> <button class="btn small" data-exam-result="${a.id}">عرض التفاصيل</button></span>` : `<span class="hint" style="margin:0;">بانتظار إعلان النتيجة</span>`}
+      </div>`).join('');
+    actionHtml = `
+      ${r.startError ? `<div class="form-msg error">${escapeHtml(r.startError)}</div>` : ''}
+      ${info.inProgress ? `<div class="form-msg ok">لديك محاولة قيد التنفيذ — سيُكمل العدّاد من حيث توقف.</div>` : ''}
+      ${exhausted ? `<div class="form-msg error">استنفدت عدد المحاولات المسموحة.</div>` : `
+        <ul class="hint" style="text-align:start; line-height:2; margin:0 0 14px; padding-inline-start:18px;">
+          <li>تُحفظ إجاباتك تلقائيًا، ولو انقطع النت تقدر تكمل من نفس الرابط.</li>
+          ${info.durationMinutes ? `<li>عند انتهاء الوقت يُسلَّم الاختبار تلقائيًا بما أجبت عليه.</li>` : ''}
+          <li>تقدر تعلّم أي سؤال تشك فيه 🚩 وتتنقّل بين الأسئلة بحرية قبل التسليم.</li>
+        </ul>
+        <div style="text-align:center;"><button class="btn teal solid" id="examStartBtn" ${r.busy ? 'disabled' : ''}>${info.inProgress ? 'متابعة الاختبار' : 'ابدأ الاختبار'}</button></div>`}
+      ${prev ? `<div style="margin-top:18px;"><b style="font-size:14px;">محاولاتك السابقة</b>${prev}</div>` : ''}`;
+  }
+  return wrap(`
+    <div class="wizard-card">
+      <h3 style="margin-bottom:6px;">📝 ${escapeHtml(info.title)}</h3>
+      ${info.description ? `<p style="color:var(--muted); font-size:14.5px; line-height:1.8; white-space:pre-line;">${escapeHtml(info.description)}</p>` : ''}
+      ${examInfoRowsHtml(info)}
+      ${actionHtml}
+    </div>`);
+}
+
+async function examStart(){
+  const r = examRun; if(!r || r.busy) return;
+  r.busy = true; r.startError = '';
+  const btn = document.getElementById('examStartBtn'); if(btn) btn.disabled = true;
+  try{
+    const { data, error } = await supabaseClient.rpc('exam_start', { p_id: r.id });
+    if(error) throw error;
+    r.attemptId = data.attemptId;
+    r.startedAt = Number(data.startedAt);
+    r.clockOffset = Number(data.serverNow) - Date.now();
+    r.durationMs = (Number(data.durationMinutes) || 0) * 60000;
+    r.questions = data.questions || [];
+    r.answers = data.answers || {};
+    r.flagged = {}; (data.flagged || []).forEach(qid => { r.flagged[qid] = true; });
+    r.idx = 0; r.result = null; r.dirty = false; r.saveState = ''; r.autoTried = false; r.submitting = false;
+    r.step = 'running';
+    examStartTimers();
+  }catch(e){ r.startError = examErrMsg(e); r.loaded = false; }
+  r.busy = false;
+  await render();
+  scrollToExamTop();
+}
+
+function examStartTimers(){
+  examStopTimers();
+  examTick();
+  if(examRun.durationMs) examTimerId = setInterval(examTick, 1000);
+  examAutosaveId = setInterval(()=>{ if(examRun && examRun.step === 'running' && examRun.dirty) examSaveProgress(); }, 15000);
+}
+function examRemainingMs(){ const r = examRun; return r.durationMs - ((Date.now() + r.clockOffset) - r.startedAt); }
+function examTick(){
+  const r = examRun;
+  if(!r || r.step !== 'running'){ examStopTimers(); return; }
+  if(!r.durationMs) return;
+  const rem = examRemainingMs();
+  const el = document.getElementById('examTimer');
+  if(el){
+    el.textContent = '⏱ ' + examFmtTime(rem);
+    el.classList.toggle('warn', rem <= 300000 && rem > 60000);
+    el.classList.toggle('danger', rem <= 60000);
+  }
+  if(rem <= 0 && !r.submitting && !r.autoTried){ r.autoTried = true; examSubmit(true); }
+}
+
+function examSetSaveState(run, st){
+  run.saveState = st;
+  if(run !== examRun) return;
+  const el = document.getElementById('examSaveState');
+  if(el) el.textContent = ({ pending:'', saving:'جارِ الحفظ…', saved:'✓ تم الحفظ', error:'⚠ تعذّر الحفظ، سيُعاد المحاولة' })[st] || '';
+}
+function examMarkDirty(){
+  const r = examRun; if(!r) return;
+  r.dirty = true;
+  clearTimeout(examSaveTimeout);
+  examSaveTimeout = setTimeout(()=> examSaveProgress(), 1200);
+  examSetSaveState(r, 'pending');
+}
+async function examSaveProgress(run){
+  run = run || examRun;
+  if(!run || run.step !== 'running' || run.saving || run.submitting) return;
+  run.saving = true; run.dirty = false;
+  examSetSaveState(run, 'saving');
+  const answers = JSON.parse(JSON.stringify(run.answers));
+  const flagged = Object.keys(run.flagged).filter(k => run.flagged[k]);
+  try{
+    const { data, error } = await supabaseClient.rpc('exam_save', { p_attempt: run.attemptId, p_answers: answers, p_flagged: flagged });
+    if(error) throw error;
+    if(data && data.expired && run === examRun && !run.submitting){ run.saving = false; run.autoTried = true; examSubmit(true); return; }
+    examSetSaveState(run, 'saved');
+  }catch(e){ run.dirty = true; examSetSaveState(run, 'error'); }
+  run.saving = false;
+}
+
+async function examSubmit(auto){
+  const r = examRun; if(!r || r.submitting || r.step !== 'running') return;
+  r.submitting = true;
+  clearTimeout(examSaveTimeout);
+  openModal(`<div style="text-align:center; padding:22px;"><span class="loading-dot"></span> ${auto ? 'انتهى الوقت — جارِ تسليم الاختبار تلقائيًا…' : 'جارِ تسليم الاختبار…'}</div>`);
+  try{
+    const flagged = Object.keys(r.flagged).filter(k => r.flagged[k]);
+    const { data, error } = await supabaseClient.rpc('exam_submit', { p_attempt: r.attemptId, p_answers: r.answers, p_flagged: flagged });
+    if(error) throw error;
+    r.result = data; r.step = 'result'; examStopTimers();
+    closeModal();
+  }catch(e){
+    r.submitting = false;
+    openModal(`<h3>تعذّر تسليم الاختبار</h3>
+      <p style="color:var(--muted); font-size:14.5px; line-height:1.8;">${escapeHtml(examErrMsg(e))}<br>إجاباتك ما زالت محفوظة — تأكد من الاتصال بالإنترنت ثم أعد المحاولة.</p>
+      <div class="modal-actions"><button class="btn teal solid small" id="examRetrySubmit">إعادة المحاولة</button></div>`);
+    document.getElementById('examRetrySubmit').addEventListener('click', ()=>{ closeModal(); examSubmit(auto); });
+    return;
+  }
+  r.submitting = false;
+  await render();
+  window.scrollTo({ top:0, behavior:'instant' });
+}
+
+function examIsAnswered(q){
+  const a = examRun.answers[q.id], t = q.type || 'mcq';
+  if(t === 'written') return typeof a === 'string' && a.trim().length > 0;
+  if(t === 'matching') return !!a && (q.lefts || []).length > 0 && q.lefts.every((_, i) => a[i] !== undefined && a[i] !== '');
+  return typeof a === 'number';
+}
+
+function examRunningHtml(){
+  const r = examRun, qs = r.questions, total = qs.length, q = qs[r.idx], type = q.type || 'mcq';
+  const answered = qs.filter(examIsAnswered).length;
+  const flaggedCount = qs.filter(x => r.flagged[x.id]).length;
+  const a = r.answers[q.id];
+  let body = '';
+  if(type === 'mcq'){
+    body = `<div class="quiz-options i18n-skip" dir="ltr">${(q.options || []).map((opt, i) =>
+      `<button type="button" class="q-opt-badge clickable ${a === i ? 'selected' : ''} i18n-skip" data-exam-answer="${i}" dir="ltr">${quizOptionBadgeHtml(i, opt)}</button>`).join('')}</div>`;
+  } else if(type === 'written'){
+    body = `<div class="written-answer-box"><textarea id="examWritten" class="i18n-skip" dir="ltr" style="text-align:left;" placeholder="Type your answer here...">${escapeHtml(typeof a === 'string' ? a : '')}</textarea></div>`;
+  } else {
+    const rights = q.rights || [];
+    body = `<div class="match-answer-list">${(q.lefts || []).map((left, i) => {
+      const sel = a ? a[i] : undefined;
+      return `<div class="match-answer-row"><span style="min-width:140px; font-weight:700;">${i+1}. ${escapeHtml(left)}</span>
+        <select class="exam-match-select match-answer-select" data-left-index="${i}"><option value="">— اختر —</option>
+        ${rights.map((rt, j) => `<option value="${j}" ${sel === rt ? 'selected' : ''}>${escapeHtml(rt)}</option>`).join('')}</select></div>`;
+    }).join('')}</div>`;
+  }
+  const isFlagged = !!r.flagged[q.id];
+  const grid = qs.map((x, i) => `<button type="button" class="exam-nb ${examIsAnswered(x) ? 'answered' : ''} ${r.flagged[x.id] ? 'flagged' : ''} ${i === r.idx ? 'current' : ''}" data-exam-goto="${i}" aria-label="السؤال ${i+1}">${i+1}</button>`).join('');
+  const isLast = r.idx === total - 1;
+  return `
+  <section class="section">
+    <div class="exam-wrap">
+      <div class="exam-topbar">
+        <div class="exam-title i18n-skip">${escapeHtml(r.info ? r.info.title : 'الاختبار')}</div>
+        <div class="exam-meta"><span id="examSaveState">${({ saved:'✓ تم الحفظ', error:'⚠ تعذّر الحفظ، سيُعاد المحاولة', saving:'جارِ الحفظ…' })[r.saveState] || ''}</span></div>
+        ${r.durationMs ? `<div class="exam-timer i18n-skip" id="examTimer">⏱ ${examFmtTime(examRemainingMs())}</div>` : `<div class="exam-meta">بدون وقت محدد</div>`}
+      </div>
+      <div class="exam-layout">
+        <div class="wizard-card">
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+            <b>السؤال ${r.idx + 1} من ${total}</b>
+            <button type="button" class="btn small exam-flag-btn ${isFlagged ? 'on' : ''}" id="examFlagBtn">${isFlagged ? '🚩 مُعلَّم للمراجعة' : '⚑ علّم السؤال (مشكوك فيه)'}</button>
+          </div>
+          <div class="quiz-q-text i18n-skip" dir="ltr" style="text-align:left;">${renderRichContent(q.question)}</div>
+          ${body}
+          <div class="wizard-nav" style="margin-top:18px;">
+            <button class="btn small" id="examPrevBtn" ${r.idx === 0 ? 'disabled' : ''}>→ السابق</button>
+            ${isLast
+              ? `<button class="btn teal solid" id="examFinishBtn">إنهاء وتسليم الاختبار</button>`
+              : `<button class="btn teal solid" id="examNextBtn">التالي ←</button>`}
+          </div>
+        </div>
+        <aside class="exam-nav-card">
+          <h4><span>🗂 الأسئلة</span><span class="exam-meta">${answered} / ${total} مُجاب</span></h4>
+          <div class="exam-nav-grid">${grid}</div>
+          <div class="exam-legend"><span><i class="a"></i>مُجاب</span><span><i></i>غير مُجاب</span><span>🚩 مشكوك فيه (${flaggedCount})</span></div>
+          <button class="btn teal solid small" id="examFinishBtn2" style="width:100%; justify-content:center;">إنهاء وتسليم</button>
+        </aside>
+      </div>
+    </div>
+  </section>`;
+}
+
+function examConfirmFinish(){
+  const r = examRun; if(!r || r.submitting) return;
+  const unanswered = r.questions.map((q, i) => ({ q, i })).filter(x => !examIsAnswered(x.q));
+  const flagged = r.questions.map((q, i) => ({ q, i })).filter(x => r.flagged[x.q.id]);
+  const chips = (list) => list.map(x => `<button type="button" class="exam-nb" style="width:40px; display:inline-block; margin:3px;" data-exam-jump="${x.i}">${x.i + 1}</button>`).join('');
+  openModal(`
+    <h3>تسليم الاختبار؟</h3>
+    <p style="font-size:14.5px; line-height:1.9; color:var(--muted);">أجبت عن <b style="color:var(--ink);">${r.questions.length - unanswered.length}</b> من ${r.questions.length} سؤال.</p>
+    ${unanswered.length ? `<div class="form-msg error" style="text-align:start;">أسئلة بدون إجابة (${unanswered.length}):<div>${chips(unanswered)}</div></div>` : ''}
+    ${flagged.length ? `<div class="form-msg" style="text-align:start; background:#fef3c7; color:#92400e;">🚩 أسئلة علّمتها للمراجعة (${flagged.length}):<div>${chips(flagged)}</div></div>` : ''}
+    <p class="hint">بعد التسليم لا يمكنك تعديل إجاباتك.</p>
+    <div class="modal-actions"><button class="btn small" id="examBackToExam">العودة للاختبار</button><button class="btn teal solid small" id="examConfirmSubmit">تسليم الآن</button></div>`);
+  document.getElementById('examBackToExam').addEventListener('click', closeModal);
+  document.getElementById('examConfirmSubmit').addEventListener('click', ()=> examSubmit(false));
+  document.querySelectorAll('[data-exam-jump]').forEach(b => b.addEventListener('click', ()=>{
+    closeModal(); r.idx = Number(b.dataset.examJump); render().then(scrollToExamTop);
+  }));
+}
+
+/* عنصر مراجعة موحّد: يُستخدم لنتيجة الطالب (من السيرفر) وتفاصيل المحاولة عند المشرف.
+   it = { type, question, options, lefts, correctIndex, correctRights, yourAnswer, isCorrect, modelAnswer, explanation, flagged } */
+function examReviewItemHtml(it, i){
+  const type = it.type || 'mcq', ya = it.yourAnswer;
+  let tag = '', body = '';
+  if(type === 'written'){
+    tag = `<span class="ans-tag review">مراجعة ذاتية</span>`;
+    body = `<div class="i18n-skip" style="font-size:13.5px; color:var(--muted); direction:ltr; text-align:left; white-space:pre-wrap;">إجابة الطالب: ${typeof ya === 'string' && ya.trim() ? escapeHtml(ya) : 'لم يُجب'}</div>
+      ${it.modelAnswer ? explainBoxHtml(escapeHtml(it.modelAnswer), 'Model Answer:') : ''}`;
+  } else if(type === 'matching'){
+    tag = `<span class="ans-tag ${it.isCorrect ? 'right' : 'wrong'}">${it.isCorrect ? 'صحيح' : 'خاطئ'}</span>`;
+    body = (it.lefts || []).map((left, pi) => {
+      const chosen = ya && ya[pi] !== undefined ? ya[pi] : null;
+      const ok = chosen !== null && chosen === (it.correctRights || [])[pi];
+      return `<div class="i18n-skip" style="font-size:13px; color:${ok ? 'var(--good)' : 'var(--danger-dark)'}; direction:ltr; text-align:left;">${escapeHtml(left)} → ${escapeHtml(chosen === null ? 'لم يُجب' : chosen)}${!ok ? ' (الصحيح: ' + escapeHtml((it.correctRights || [])[pi] || '') + ')' : ''}</div>`;
+    }).join('');
+  } else {
+    tag = `<span class="ans-tag ${it.isCorrect ? 'right' : 'wrong'}">${it.isCorrect ? 'صحيح' : 'خاطئ'}</span>`;
+    body = `<div class="quiz-options i18n-skip" dir="ltr" style="margin-top:8px;">${(it.options || []).map((opt, oi) => {
+      let cls = 'q-opt-badge';
+      if(oi === it.correctIndex) cls += ' correct'; else if(oi === ya) cls += ' wrong';
+      return `<div class="${cls}">${quizOptionBadgeHtml(oi, opt)}</div>`;
+    }).join('')}</div>${ya === undefined || ya === null ? `<p class="hint" style="margin:6px 0 0;">لم تتم الإجابة عن هذا السؤال.</p>` : ''}`;
+  }
+  return `<div class="review-item">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px;">
+      <b class="i18n-skip" style="color:var(--ink); font-size:14px; direction:ltr; text-align:left;">${i + 1}. ${renderRichContent(it.question)}</b>
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">${it.flagged ? '<span title="علّمه كمشكوك فيه">🚩</span>' : ''}${tag}</div>
+    </div>
+    ${body}
+    ${it.explanation ? explainBoxHtml(renderRichContent(it.explanation)) : ''}
+  </div>`;
+}
+
+function examResultHtml(){
+  const r = examRun, res = r.result, title = r.info ? r.info.title : 'الاختبار';
+  const backBtn = `<button class="btn teal solid small" id="examBackToIntro">العودة لصفحة الاختبار</button>`;
+  if(!res || !res.visible){
+    return `<div class="wizard-card" style="text-align:center;">
+      <div style="font-size:44px;">✅</div>
+      <h3>تم تسليم إجاباتك بنجاح</h3>
+      <p style="color:var(--muted); font-size:14.5px; line-height:1.8;">${escapeHtml(title)}<br>ستظهر النتيجة عندما يعلنها المشرف، ارجع لنفس الرابط لاحقًا لمشاهدتها.</p>
+      ${backBtn}</div>`;
+  }
+  const pct = res.score || 0;
+  const items = (res.review || []).map((it, i) => examReviewItemHtml(Object.assign({}, it, { flagged: !!r.flagged[it.id] }), i)).join('');
+  return `<div class="wizard-card" style="text-align:center;">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="score-circle"><b>${pct}%</b><span>${res.correct} من ${res.gradable}</span></div>
+      ${res.written ? `<p class="hint" style="margin-top:-14px; margin-bottom:14px;">+ ${res.written} سؤال كتابي يحتاج مراجعة (غير محتسب ضمن النسبة)</p>` : ''}
+      <p style="color:var(--muted); font-size:14.5px; margin-bottom:20px;">${pct >= 70 ? 'أداء ممتاز! 👏' : 'لا بأس، راجع الأسئلة وحاول مجددًا 💪'}</p>
+      ${backBtn}
+    </div>
+    ${res.hasReview ? `<div style="margin-top:26px; text-align:start;">${items}</div>` : ''}`;
+}
+
+async function examViewPastResult(attemptId){
+  const r = examRun; if(!r) return;
+  try{
+    const { data, error } = await supabaseClient.rpc('exam_result', { p_attempt: attemptId });
+    if(error) throw error;
+    r.result = data; r.flagged = {}; r.step = 'result';
+    await render(); window.scrollTo({ top:0, behavior:'instant' });
+  }catch(e){ alert(examErrMsg(e)); }
+}
+
+function bindExamEvents(id){
+  examEnsureLoaded(id);
+  const r = examRun; if(!r) return;
+  const on = (sel, fn) => { const el = document.getElementById(sel); if(el) el.addEventListener('click', fn); };
+  if(r.step === 'intro'){
+    if(!state.session) setAfterLoginRoute('exam/' + id);
+    on('examStartBtn', examStart);
+    on('examPreviewBtn', ()=> modalExamPreview(id));
+    on('examGoResultsBtn', ()=>{ examAdmin.view = 'results'; examAdmin.examId = id; navigate('admin-exams'); });
+    document.querySelectorAll('[data-exam-result]').forEach(b => b.addEventListener('click', ()=> examViewPastResult(b.dataset.examResult)));
+  } else if(r.step === 'result'){
+    on('examBackToIntro', ()=>{ r.step = 'intro'; r.loaded = false; r.result = null; r.error = ''; render().then(()=> window.scrollTo({ top:0, behavior:'instant' })); });
+  } else if(r.step === 'running'){
+    const q = r.questions[r.idx], type = q.type || 'mcq';
+    examTick();
+    if(!examTimerId && !examAutosaveId) examStartTimers();   // بعد أي إعادة رسم نتأكد إن المؤقتات شغّالة
+    document.querySelectorAll('[data-exam-answer]').forEach(btn => btn.addEventListener('click', ()=>{
+      const v = Number(btn.dataset.examAnswer);
+      if(r.answers[q.id] === v) delete r.answers[q.id]; else r.answers[q.id] = v;   // الضغط ثانية = إلغاء الاختيار
+      examMarkDirty(); render();
+    }));
+    const ta = document.getElementById('examWritten');
+    if(ta) ta.addEventListener('input', ()=>{
+      r.answers[q.id] = ta.value; examMarkDirty();
+      const nb = document.querySelector('.exam-nb.current');   // تحديث خريطة الأسئلة بدون إعادة رسم حتى لا يفقد الحقل التركيز
+      if(nb) nb.classList.toggle('answered', examIsAnswered(q));
+    });
+    document.querySelectorAll('.exam-match-select').forEach(sel => sel.addEventListener('change', ()=>{
+      const li = Number(sel.dataset.leftIndex);
+      r.answers[q.id] = r.answers[q.id] || {};
+      if(sel.value === '') delete r.answers[q.id][li]; else r.answers[q.id][li] = q.rights[Number(sel.value)];
+      examMarkDirty(); render();
+    }));
+    on('examFlagBtn', ()=>{ r.flagged[q.id] = !r.flagged[q.id]; if(!r.flagged[q.id]) delete r.flagged[q.id]; examMarkDirty(); render(); });
+    on('examPrevBtn', ()=>{ if(r.idx > 0){ r.idx--; render().then(scrollToExamTop); } });
+    on('examNextBtn', ()=>{ if(r.idx < r.questions.length - 1){ r.idx++; render().then(scrollToExamTop); } });
+    on('examFinishBtn', examConfirmFinish);
+    on('examFinishBtn2', examConfirmFinish);
+    document.querySelectorAll('[data-exam-goto]').forEach(b => b.addEventListener('click', ()=>{ r.idx = Number(b.dataset.examGoto); render().then(scrollToExamTop); }));
+  }
+}
+
+/* تحذير عند محاولة إغلاق/تحديث الصفحة أثناء اختبار جارٍ (التقدّم محفوظ تلقائيًا لكن العدّاد لا يتوقف) */
+window.addEventListener('beforeunload', (e)=>{
+  if(examRun && examRun.step === 'running'){ e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ============================ جهة المشرف ============================ */
+let examAdmin = { view:'list', examId:null, loaded:false, loading:false, error:'', exams:[], attempts:[], search:'', sort:'new' };
+
+function mapExamRow(r){
+  return { id: r.id, title: r.title, description: r.description || '', courseId: r.course_id, settings: r.settings || {},
+    questions: Array.isArray(r.questions) ? r.questions : [], active: !!r.active, released: !!r.released, createdAt: Number(r.created_at) };
+}
+function mapAttemptRow(a){
+  return { id: a.id, examId: a.exam_id, phone: a.phone || '', name: a.student_name || '', university: a.university || '', major: a.major || '',
+    startedAt: a.started_at ? Date.parse(a.started_at) : null, submittedAt: a.submitted_at ? Date.parse(a.submitted_at) : null,
+    score: a.score, correct: a.correct, gradable: a.gradable, written: a.written, auto: !!a.auto_submitted };
+}
+async function loadExamsAdmin(force){
+  if(examAdmin.loading || (examAdmin.loaded && !force)) return;
+  examAdmin.loading = true; examAdmin.error = '';
+  try{
+    const [exams, attempts] = await Promise.all([
+      fetchAllRows('exams', '*', 'created_at'),
+      fetchAllRows('exam_attempts', 'id,exam_id,phone,student_name,university,major,started_at,submitted_at,score,correct,gradable,written,auto_submitted', 'id'),
+    ]);
+    examAdmin.exams = exams.map(mapExamRow);
+    examAdmin.attempts = attempts.map(mapAttemptRow);
+  }catch(e){
+    console.error('loadExamsAdmin failed', e);
+    examAdmin.error = (e && (e.code === '42P01' || e.code === 'PGRST205')) ? 'جداول الاختبارات غير موجودة بعد — شغّل ملف exams.sql من Supabase أولًا.' : 'تعذّر تحميل الاختبارات، حاول مجددًا.';
+  }
+  examAdmin.loading = false; examAdmin.loaded = true;
+  if(currentRoute() === 'admin-exams') render();
+}
+
+function examSettingsFieldsHtml(s){
+  s = s || {};
+  const chk = (name, val, label, extra) => `<label class="exam-check ${extra || ''}"><input type="checkbox" name="${name}" ${val ? 'checked' : ''}><span>${label}</span></label>`;
+  return `
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <div class="field" style="flex:1; min-width:200px;"><label>مدة الاختبار بالدقائق <span class="hint">(فارغ أو 0 = بدون عدّاد)</span></label>
+        <input type="number" name="duration" min="0" max="600" value="${s.durationMinutes || ''}" placeholder="مثال: 30"></div>
+      <div class="field" style="flex:1; min-width:200px;"><label>عدد المحاولات لكل طالب <span class="hint">(0 = غير محدود)</span></label>
+        <input type="number" name="maxAttempts" min="0" max="50" value="${s.maxAttempts === undefined ? 1 : s.maxAttempts}"></div>
+    </div>
+    ${chk('showScore', s.showScore, 'إظهار العلامة للطالب مباشرة بعد التسليم <span class="hint" style="display:block;">إذا عطّلتها، تبقى العلامات عندك فقط، وتقدر تكشفها للطلاب لاحقًا بزر «إظهار النتائج».</span>')}
+    ${chk('showAnswers', s.showAnswers, 'إظهار الإجابات الصحيحة ومراجعة الأسئلة مع العلامة')}
+    ${chk('showExplanations', s.showExplanations, 'إظهار تفسير الإجابات (يظهر ضمن المراجعة)', 'sub')}
+    ${chk('shuffleQuestions', s.shuffleQuestions, 'خلط ترتيب الأسئلة لكل طالب')}`;
+}
+function bindExamSettingsDeps(form){
+  const ans = form.querySelector('[name="showAnswers"]'), exp = form.querySelector('[name="showExplanations"]');
+  const sync = ()=>{ if(!ans.checked){ exp.checked = false; } exp.disabled = !ans.checked; };
+  ans.addEventListener('change', sync); sync();
+}
+function readExamSettings(fd){
+  const num = (k, dflt) => { const raw = fd.get(k); if(raw === null || raw === '') return dflt; const v = Math.floor(Number(raw)); return isNaN(v) ? dflt : Math.max(0, v); };
+  return {
+    durationMinutes: num('duration', 0), maxAttempts: num('maxAttempts', 1),
+    showScore: fd.get('showScore') === 'on', showAnswers: fd.get('showAnswers') === 'on',
+    showExplanations: fd.get('showAnswers') === 'on' && fd.get('showExplanations') === 'on',
+    shuffleQuestions: fd.get('shuffleQuestions') === 'on',
+  };
+}
+function examSettingsSummary(s){
+  s = s || {};
+  const parts = [];
+  parts.push(s.durationMinutes ? `⏱ ${s.durationMinutes} دقيقة` : '⏱ بدون وقت');
+  parts.push(s.showScore ? '🎯 العلامة مباشرة' : '🙈 العلامة مخفية');
+  if(s.showAnswers) parts.push(s.showExplanations ? '✅ إجابات + تفسير' : '✅ إجابات');
+  parts.push(`🔁 ${s.maxAttempts === 0 ? 'محاولات غير محدودة' : (s.maxAttempts === undefined ? 1 : s.maxAttempts) + ' محاولة'}`);
+  if(s.shuffleQuestions) parts.push('🔀 خلط الأسئلة');
+  return parts;
+}
+
+function examStats(examId){
+  const list = examAdmin.attempts.filter(a => a.examId === examId);
+  const done = list.filter(a => a.submittedAt);
+  const scores = done.map(a => a.score || 0);
+  return { total: list.length, done: done.length, inProgress: list.length - done.length,
+    avg: scores.length ? Math.round(scores.reduce((x, y) => x + y, 0) / scores.length) : null,
+    max: scores.length ? Math.max(...scores) : null, min: scores.length ? Math.min(...scores) : null };
+}
+
+function examAdminCardHtml(e){
+  const st = examStats(e.id);
+  const course = state.courses.find(c => c.id === e.courseId);
+  const link = examLink(e.id);
+  const waText = encodeURIComponent(`${e.title}\n${link}`);
+  return `
+  <div class="card-panel" style="margin-bottom:16px; padding:20px 22px;">
+    <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <div>
+        <h3 style="margin:0 0 6px; font-size:18px;" class="i18n-skip">📝 ${escapeHtml(e.title)}</h3>
+        <div style="font-size:13px; color:var(--muted);" class="i18n-skip">${course ? escapeHtml(course.title) + ' • ' : ''}${e.questions.length} سؤال • أُنشئ ${examFmtDate(e.createdAt)}</div>
+      </div>
+      <span class="lecture-tier-tag ${e.active ? '' : 'locked'}">${e.active ? '🟢 مفتوح للطلاب' : '🔴 مغلق'}</span>
+    </div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin:12px 0;">${examSettingsSummary(e.settings).map(p => `<span class="lecture-tier-tag" style="background:var(--bg); color:var(--muted); border:1px solid var(--border);">${p}</span>`).join('')}</div>
+    <div class="exam-link-row">
+      <input type="text" readonly value="${link}" onclick="this.select()">
+      <button class="btn small teal" data-exam-copy="${e.id}">📋 نسخ الرابط</button>
+      <a class="btn small" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">${ICONS.whatsapp} واتساب</a>
+    </div>
+    <div style="font-size:13.5px; color:var(--muted); margin-bottom:12px;">
+      👥 ${st.done} سلّموا${st.inProgress ? ` • ${st.inProgress} جارٍ` : ''}${st.avg !== null ? ` • المتوسط <b style="color:var(--teal);">${st.avg}%</b> • الأعلى ${st.max}% • الأدنى ${st.min}%` : ''}
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn teal solid small" data-exam-results="${e.id}">📊 النتائج (${st.done})</button>
+      <button class="btn small" data-exam-preview="${e.id}">👁 معاينة</button>
+      <button class="btn edit small" data-exam-edit="${e.id}">${ICONS.edit} الإعدادات</button>
+      <button class="btn small" data-exam-toggle="${e.id}">${e.active ? '⏸ إغلاق الاختبار' : '▶️ إعادة فتحه'}</button>
+      ${!(e.settings && e.settings.showScore) ? `<button class="btn small ${e.released ? '' : 'teal'}" data-exam-release="${e.id}">${e.released ? '🙈 إخفاء النتائج عن الطلاب' : '🎯 إظهار النتائج للطلاب'}</button>` : ''}
+      <button class="btn danger small" data-exam-del="${e.id}">${ICONS.trash} حذف</button>
+    </div>
+  </div>`;
+}
+
+function examResultsViewHtml(e){
+  const st = examStats(e.id);
+  let list = examAdmin.attempts.filter(a => a.examId === e.id);
+  const q = (examAdmin.search || '').trim().toLowerCase();
+  if(q) list = list.filter(a => (a.name || '').toLowerCase().includes(q) || (a.phone || '').includes(q));
+  const sorters = {
+    new: (a, b) => (b.startedAt || 0) - (a.startedAt || 0),
+    high: (a, b) => (b.score ?? -1) - (a.score ?? -1),
+    low: (a, b) => (a.score ?? 101) - (b.score ?? 101),
+    name: (a, b) => (a.name || '').localeCompare(b.name || '', 'ar'),
+  };
+  list.sort(sorters[examAdmin.sort] || sorters.new);
+  const rows = list.map((a, i) => {
+    const mins = (a.submittedAt && a.startedAt) ? Math.max(1, Math.round((a.submittedAt - a.startedAt) / 60000)) : null;
+    return `<tr>
+      <td>${i + 1}</td>
+      <td class="i18n-skip"><b>${escapeHtml(a.name || '—')}</b></td>
+      <td class="i18n-skip" dir="ltr" style="text-align:start;">${escapeHtml(a.phone)}</td>
+      <td class="i18n-skip">${escapeHtml(a.university || '—')}</td>
+      <td>${a.submittedAt ? `<b style="color:${(a.score || 0) >= 50 ? 'var(--good)' : 'var(--danger-dark)'};">${a.score}%</b>` : '<span class="hint" style="margin:0;">قيد الحل…</span>'}</td>
+      <td>${a.submittedAt ? `${a.correct}/${a.gradable}${a.written ? ` (+${a.written} كتابي)` : ''}` : '—'}</td>
+      <td>${mins !== null ? mins + ' د' : '—'}${a.auto ? ' ⏰' : ''}</td>
+      <td>${examFmtDate(a.submittedAt || a.startedAt)}</td>
+      <td style="display:flex; gap:6px;">
+        <button class="btn small" data-attempt-view="${a.id}" ${a.submittedAt ? '' : 'disabled'}>تفاصيل</button>
+        <button class="btn danger small" data-attempt-del="${a.id}" title="حذف النتيجة">${ICONS.trash}</button>
+      </td></tr>`;
+  }).join('');
+  return `
+    <div class="toolbar">
+      <h2 class="i18n-skip">📊 نتائج: ${escapeHtml(e.title)}</h2>
+      <div class="toolbar-actions">
+        <button class="btn small" id="examBackToList">↩ كل الاختبارات</button>
+        <button class="btn small" id="examRefreshBtn">🔄 تحديث</button>
+        <button class="btn small" id="examExportBtn">⬇️ تصدير Excel</button>
+        <button class="btn danger small" id="examClearAllBtn">${ICONS.trash} حذف كل النتائج</button>
+      </div>
+    </div>
+    <div class="exam-stat-row">
+      <div>سلّموا<b>${st.done}</b></div><div>قيد الحل<b>${st.inProgress}</b></div>
+      <div>المتوسط<b>${st.avg !== null ? st.avg + '%' : '—'}</b></div>
+      <div>الأعلى<b>${st.max !== null ? st.max + '%' : '—'}</b></div>
+      <div>الأدنى<b>${st.min !== null ? st.min + '%' : '—'}</b></div>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+      <input type="text" id="examSearchInput" placeholder="🔍 ابحث بالاسم أو رقم الهاتف" value="${escapeHtml(examAdmin.search)}" style="flex:1; min-width:200px;">
+      <select id="examSortSelect" class="bank-select" style="width:auto;">
+        <option value="new" ${examAdmin.sort === 'new' ? 'selected' : ''}>الأحدث</option>
+        <option value="high" ${examAdmin.sort === 'high' ? 'selected' : ''}>الأعلى علامة</option>
+        <option value="low" ${examAdmin.sort === 'low' ? 'selected' : ''}>الأدنى علامة</option>
+        <option value="name" ${examAdmin.sort === 'name' ? 'selected' : ''}>الاسم</option></select>
+    </div>
+    ${list.length ? `<div class="exam-table-wrap"><table class="exam-table"><thead><tr><th>#</th><th>الطالب</th><th>الهاتف</th><th>الجامعة</th><th>العلامة</th><th>صحيح</th><th>المدة</th><th>الوقت</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<div class="empty-state" style="padding:26px;"><p>لا توجد نتائج ${q ? 'مطابقة للبحث' : 'بعد'}.</p></div>`}
+    <p class="hint" style="margin-top:10px;">⏰ = سُلّم تلقائيًا لانتهاء الوقت. حذف نتيجة طالب يعيد له محاولة جديدة إن كانت المحاولات محدودة.</p>`;
+}
+
+function pageAdminExams(){
+  if(!isAdminSession()){
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
+  }
+  if(examAdmin.error) return `<section class="section"><div class="container"><div class="empty-state"><h3>تعذّر التحميل</h3><p>${escapeHtml(examAdmin.error)}</p><button class="btn small" id="examRefreshBtn">🔄 إعادة المحاولة</button></div></div></section>`;
+  if(!examAdmin.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ تحميل الاختبارات...</div></section>`;
+  const exam = examAdmin.view === 'results' ? examAdmin.exams.find(x => x.id === examAdmin.examId) : null;
+  if(exam) return `<section class="section"><div class="container">${examResultsViewHtml(exam)}</div></section>`;
+  const exams = examAdmin.exams.slice().sort((a, b) => b.createdAt - a.createdAt);
+  return `
+  <section class="section"><div class="container">
+    <div class="toolbar">
+      <h2>📝 الاختبارات</h2>
+      <div class="toolbar-actions"><button class="btn teal solid" id="examCreateBtn">${ICONS.plus} إنشاء اختبار جديد</button></div>
+    </div>
+    <p class="hint" style="margin:-10px 0 20px;">أنشئ اختبارًا من أسئلة بنك الأسئلة، حدّد إعداداته (الوقت، إظهار العلامة، الإجابات، التفسير)، ثم انسخ رابطه وأرسله للطلاب. يفتحه الطالب بحسابه الموجود على المنصة وتصلك علامته هنا.</p>
+    ${exams.length ? exams.map(examAdminCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>لا توجد اختبارات بعد.</p></div>`}
+  </div></section>`;
+}
+
+function copyExamLink(id, btn){
+  const link = examLink(id);
+  const done = ()=>{ if(btn){ const o = btn.innerHTML; btn.innerHTML = '✅ تم النسخ'; setTimeout(()=>{ btn.innerHTML = o; }, 1600); } };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(done).catch(()=> prompt('انسخ الرابط:', link)); }
+  else { prompt('انسخ الرابط:', link); }
+}
+
+function modalCreateExam(){
+  if(!state.courses.length){ alert('أضف مادة واحدة على الأقل أولًا.'); return; }
+  if(!state.questions.length){ alert('لا توجد أسئلة في بنك الأسئلة بعد — أضف أسئلة أولًا.'); return; }
+  const picker = { courseId: state.courses[0].id, lectures: new Set(), nature: 'both', selected: new Set() };
+  const poolOf = ()=> state.questions.filter(q => q.courseId === picker.courseId
+    && (picker.nature === 'both' || (q.nature || 'past') === picker.nature)
+    && (picker.lectures.size === 0 || (q.lectureId ? picker.lectures.has(q.lectureId) : picker.lectures.has('__none__'))));
+  const courseOptions = state.courses.map(c => `<option class="i18n-skip" value="${c.id}">${escapeHtml(c.title)} — ${escapeHtml(c.university)} / ${escapeHtml(c.major || 'التمريض')}</option>`).join('');
+  openModal(`
+    <h3>📝 إنشاء اختبار جديد</h3>
+    <form id="examForm">
+      <div class="field"><label>عنوان الاختبار</label><input type="text" name="title" required placeholder="مثال: امتحان تجريبي — الوحدة الأولى"></div>
+      <div class="field"><label>وصف / تعليمات للطلاب (اختياري)</label><textarea name="description" rows="2" placeholder="مثال: الاختبار يغطي المحاضرات 1-5"></textarea></div>
+      <div class="field"><label>أسئلة الاختبار — اختر المادة</label>
+        <select id="examCourseSel" class="bank-select">${courseOptions}</select></div>
+      <div id="examLectureBox"></div>
+      <div class="field"><label>طبيعة الأسئلة</label>
+        <select id="examNatureSel" class="bank-select"><option value="both">كلاهما</option><option value="past">أسئلة سنوات سابقة</option><option value="ref">أسئلة مراجع</option></select></div>
+      <div class="field">
+        <label>اختر الأسئلة <span id="examPickCount" class="hint"></span></label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+          <button type="button" class="btn small" id="examSelAll">تحديد الكل</button>
+          <button type="button" class="btn small" id="examSelNone">إلغاء التحديد</button>
+          <span style="margin-inline-start:auto; display:flex; gap:6px; align-items:center;">
+            <input type="number" id="examRandN" min="1" value="20" style="width:80px;">
+            <button type="button" class="btn small teal" id="examRandBtn">🎲 اختيار عشوائي</button></span>
+        </div>
+        <div class="exam-qpick" id="examQList"></div>
+      </div>
+      <h4 style="margin:18px 0 8px;">⚙️ إعدادات الاختبار</h4>
+      ${examSettingsFieldsHtml({ durationMinutes: 30, maxAttempts: 1, showScore: true, showAnswers: true, showExplanations: true })}
+      <div id="examFormMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small" id="examSaveBtn">حفظ وإنشاء الرابط</button></div>
+    </form>`, true);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  const form = document.getElementById('examForm');
+  bindExamSettingsDeps(form);
+
+  const renderLectures = ()=>{
+    const lecs = state.lectures.filter(l => l.courseId === picker.courseId);
+    const generalCount = state.questions.filter(q => q.courseId === picker.courseId && !q.lectureId).length;
+    const cnt = id => state.questions.filter(q => q.courseId === picker.courseId && q.lectureId === id).length;
+    const box = document.getElementById('examLectureBox');
+    box.innerHTML = (lecs.length || generalCount) ? `<div class="field"><label>المحاضرات <span class="hint">(بدون تحديد = كل المحاضرات)</span></label>
+      <div class="exam-qpick" style="max-height:150px;">
+        ${lecs.map(l => `<label><input type="checkbox" data-exam-lec="${l.id}" ${picker.lectures.has(l.id) ? 'checked' : ''}> <span class="i18n-skip">${escapeHtml(l.title)} <span class="hint">(${cnt(l.id)})</span></span></label>`).join('')}
+        ${generalCount ? `<label><input type="checkbox" data-exam-lec="__none__" ${picker.lectures.has('__none__') ? 'checked' : ''}> <span>أسئلة عامة <span class="hint">(${generalCount})</span></span></label>` : ''}
+      </div></div>` : '';
+    box.querySelectorAll('[data-exam-lec]').forEach(cb => cb.addEventListener('change', ()=>{
+      if(cb.checked) picker.lectures.add(cb.dataset.examLec); else picker.lectures.delete(cb.dataset.examLec);
+      renderList();
+    }));
+  };
+  const updateCount = ()=>{ const pool = poolOf(); document.getElementById('examPickCount').textContent = `— المحدد ${picker.selected.size} • المتاح ${pool.length}`; };
+  const typeTag = t => t === 'written' ? '✍️ كتابي' : t === 'matching' ? '🔗 توصيل' : '☑️ اختيار';
+  const renderList = ()=>{
+    const pool = poolOf();
+    const ids = new Set(pool.map(q => q.id));
+    picker.selected = new Set([...picker.selected].filter(id => ids.has(id)));
+    const MAX = 400;
+    document.getElementById('examQList').innerHTML = pool.length
+      ? pool.slice(0, MAX).map(q => `<label><input type="checkbox" data-exam-q="${q.id}" ${picker.selected.has(q.id) ? 'checked' : ''}>
+          <span class="i18n-skip"><span class="hint" style="margin-inline-end:6px;">${typeTag(q.type)}</span>${escapeHtml(examStripHtml(q.question).slice(0, 140))}</span></label>`).join('')
+        + (pool.length > MAX ? `<p class="hint" style="padding:8px;">عُرض أول ${MAX} سؤال — ضيّق الفلاتر لرؤية الباقي.</p>` : '')
+      : `<p class="hint" style="padding:10px;">لا توجد أسئلة مطابقة.</p>`;
+    document.querySelectorAll('[data-exam-q]').forEach(cb => cb.addEventListener('change', ()=>{
+      if(cb.checked) picker.selected.add(cb.dataset.examQ); else picker.selected.delete(cb.dataset.examQ);
+      updateCount();
+    }));
+    updateCount();
+  };
+  document.getElementById('examCourseSel').addEventListener('change', e => { picker.courseId = e.target.value; picker.lectures.clear(); picker.selected.clear(); renderLectures(); renderList(); });
+  document.getElementById('examNatureSel').addEventListener('change', e => { picker.nature = e.target.value; renderList(); });
+  document.getElementById('examSelAll').addEventListener('click', ()=>{ poolOf().slice(0, 400).forEach(q => picker.selected.add(q.id)); renderList(); });
+  document.getElementById('examSelNone').addEventListener('click', ()=>{ picker.selected.clear(); renderList(); });
+  document.getElementById('examRandBtn').addEventListener('click', ()=>{
+    const n = Math.max(1, Math.floor(Number(document.getElementById('examRandN').value) || 1));
+    picker.selected = new Set(shuffleArr(poolOf()).slice(0, n).map(q => q.id)); renderList();
+  });
+  renderLectures(); renderList();
+
+  form.addEventListener('submit', async (ev)=>{
+    ev.preventDefault();
+    const fd = new FormData(form), msg = document.getElementById('examFormMsg');
+    const title = (fd.get('title') || '').trim();
+    if(!title){ msg.innerHTML = `<div class="form-msg error">أدخل عنوان الاختبار.</div>`; return; }
+    const chosen = state.questions.filter(q => picker.selected.has(q.id));
+    if(!chosen.length){ msg.innerHTML = `<div class="form-msg error">اختر سؤالًا واحدًا على الأقل.</div>`; return; }
+    const questions = shuffleArr(chosen).map(q => {
+      const o = { id: q.id, type: q.type || 'mcq', question: q.question, nature: q.nature || 'past', explanation: q.explanation || '' };
+      if(o.type === 'mcq'){ o.options = q.options || []; o.correctIndex = q.correctIndex; }
+      else if(o.type === 'matching'){ o.pairs = q.pairs || []; }
+      else { o.modelAnswer = q.modelAnswer || ''; }
+      return o;
+    });
+    const btn = document.getElementById('examSaveBtn'); btn.disabled = true;
+    const row = { id: Math.random().toString(36).slice(2, 7) + Math.random().toString(36).slice(2, 7), title,
+      description: (fd.get('description') || '').trim(), course_id: picker.courseId, settings: readExamSettings(fd),
+      questions, active: true, released: false, created_at: Date.now() };
+    const { error } = await supabaseClient.from('exams').insert(row);
+    if(error){
+      console.error('exam insert failed', error);
+      msg.innerHTML = `<div class="form-msg error">${error.code === '42P01' || error.code === 'PGRST205' ? 'جداول الاختبارات غير موجودة — شغّل ملف exams.sql من Supabase أولًا.' : 'تعذّر حفظ الاختبار، تأكد من صلاحياتك وحاول مرة ثانية.'}</div>`;
+      btn.disabled = false; return;
+    }
+    examAdmin.exams.push(mapExamRow(row)); examAdmin.view = 'list';
+    closeModal(); render();
+  });
+}
+
+function modalEditExam(id){
+  const e = examAdmin.exams.find(x => x.id === id); if(!e) return;
+  openModal(`
+    <h3>⚙️ إعدادات الاختبار</h3>
+    <form id="examEditForm">
+      <div class="field"><label>عنوان الاختبار</label><input type="text" name="title" required value="${escapeHtml(e.title)}"></div>
+      <div class="field"><label>وصف / تعليمات</label><textarea name="description" rows="2">${escapeHtml(e.description)}</textarea></div>
+      ${examSettingsFieldsHtml(e.settings)}
+      <p class="hint">الأسئلة نفسها ثابتة بعد الإنشاء حتى تبقى النتائج متناسقة. لاختبار بأسئلة مختلفة أنشئ اختبارًا جديدًا.</p>
+      <div id="examEditMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  const form = document.getElementById('examEditForm'); bindExamSettingsDeps(form);
+  form.addEventListener('submit', async (ev)=>{
+    ev.preventDefault();
+    const fd = new FormData(form);
+    const patch = { title: (fd.get('title') || '').trim(), description: (fd.get('description') || '').trim(), settings: readExamSettings(fd) };
+    if(!patch.title) return;
+    const { error } = await supabaseClient.from('exams').update(patch).eq('id', id);
+    if(error){ document.getElementById('examEditMsg').innerHTML = `<div class="form-msg error">تعذّر الحفظ.</div>`; return; }
+    Object.assign(e, { title: patch.title, description: patch.description, settings: patch.settings });
+    closeModal(); render();
+  });
+}
+
+function modalExamPreview(id){
+  const e = examAdmin.exams.find(x => x.id === id);
+  const show = (ex) => openModal(`<h3 class="i18n-skip">👁 ${escapeHtml(ex.title)} — ${ex.questions.length} سؤال</h3>
+    <div style="max-height:65vh; overflow:auto;">${ex.questions.map((q, i) => `<div class="q-card"><div class="q-text i18n-skip" dir="ltr" style="text-align:left;">${i + 1}. ${renderRichContent(q.question)}</div>${questionContentHtml(q)}${q.explanation ? explainBoxHtml(renderRichContent(q.explanation)) : ''}</div>`).join('')}</div>
+    <div class="modal-actions"><button class="btn small" id="cancelModal">إغلاق</button></div>`, true);
+  if(e){ show(e); document.getElementById('cancelModal').addEventListener('click', closeModal); return; }
+  /* المشرف فتح رابط اختبار لم تُحمَّل بياناته بعد */
+  supabaseClient.from('exams').select('*').eq('id', id).maybeSingle().then(({ data }) => {
+    if(!data){ alert('الاختبار غير موجود.'); return; }
+    show(mapExamRow(data)); document.getElementById('cancelModal').addEventListener('click', closeModal);
+  });
+}
+
+async function modalExamAttemptDetails(attemptId){
+  const att = examAdmin.attempts.find(a => a.id === attemptId); if(!att) return;
+  const exam = examAdmin.exams.find(x => x.id === att.examId); if(!exam) return;
+  openModal(`<div style="text-align:center; padding:24px;"><span class="loading-dot"></span> جارِ التحميل...</div>`, true);
+  const { data, error } = await supabaseClient.from('exam_attempts').select('answers,flagged,question_order').eq('id', attemptId).maybeSingle();
+  if(error || !data){ openModal(`<p>تعذّر تحميل التفاصيل.</p><div class="modal-actions"><button class="btn small" id="cancelModal">إغلاق</button></div>`); document.getElementById('cancelModal').addEventListener('click', closeModal); return; }
+  const answers = data.answers || {}, flagged = new Set(data.flagged || []);
+  const order = (data.question_order && data.question_order.length) ? data.question_order : exam.questions.map((_, i) => i);
+  const items = order.map((qi, i) => {
+    const q = exam.questions[qi]; if(!q) return '';
+    const a = answers[q.id], type = q.type || 'mcq';
+    let isCorrect = null;
+    if(type === 'mcq') isCorrect = typeof a === 'number' && a === q.correctIndex;
+    else if(type === 'matching') isCorrect = !!a && (q.pairs || []).length > 0 && q.pairs.every((p, pi) => a[pi] === p.right);
+    return examReviewItemHtml({ type, question: q.question, options: q.options, lefts: (q.pairs || []).map(p => p.left),
+      correctIndex: q.correctIndex, correctRights: (q.pairs || []).map(p => p.right), yourAnswer: a, isCorrect,
+      modelAnswer: q.modelAnswer, explanation: q.explanation, flagged: flagged.has(q.id) }, i);
+  }).join('');
+  openModal(`<h3 class="i18n-skip">${escapeHtml(att.name || 'طالب')} — ${att.score}%</h3>
+    <p class="hint i18n-skip" style="margin-top:-6px;">${escapeHtml(att.phone)} • ${att.correct}/${att.gradable} صحيح${att.written ? ` • ${att.written} كتابي (راجعه يدويًا)` : ''} • 🚩 = علّمه الطالب كمشكوك فيه</p>
+    <div style="max-height:65vh; overflow:auto; text-align:start;">${items}</div>
+    <div class="modal-actions"><button class="btn small" id="cancelModal">إغلاق</button></div>`, true);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+}
+
+async function exportExamResultsExcel(examId){
+  const e = examAdmin.exams.find(x => x.id === examId); if(!e) return;
+  try{ await ensureXlsxLib(); }catch(err){}
+  if(typeof XLSX === 'undefined'){ alert('تعذّر تحميل مكتبة الإكسيل، تأكد من اتصالك بالإنترنت وحاول مجددًا.'); return; }
+  const list = examAdmin.attempts.filter(a => a.examId === examId && a.submittedAt).sort((a, b) => (b.score || 0) - (a.score || 0));
+  if(!list.length){ alert('لا توجد نتائج مُسلَّمة لتصديرها.'); return; }
+  const rows = list.map(a => ({
+    'اسم الطالب': a.name, 'رقم الهاتف': a.phone, 'الجامعة': a.university, 'التخصص': a.major,
+    'العلامة %': a.score, 'الإجابات الصحيحة': a.correct, 'الأسئلة المصحّحة': a.gradable, 'أسئلة كتابية': a.written || 0,
+    'مدة الحل (دقيقة)': a.startedAt ? Math.max(1, Math.round((a.submittedAt - a.startedAt) / 60000)) : '',
+    'وقت التسليم': examFmtDate(a.submittedAt), 'تسليم تلقائي': a.auto ? 'نعم' : 'لا',
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch:24 }, { wch:14 }, { wch:26 }, { wch:14 }, { wch:10 }, { wch:14 }, { wch:14 }, { wch:12 }, { wch:14 }, { wch:22 }, { wch:12 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'النتائج');
+  XLSX.writeFile(wb, `نتائج-${(e.title || 'exam').replace(/[\\/:*?"<>|]/g, '').trim() || 'exam'}.xlsx`);
+}
+
+function bindAdminExamsEvents(){
+  if(!isAdminSession()) return;
+  loadExamsAdmin();
+  const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  on('examRefreshBtn', async ()=>{ examAdmin.loaded = false; examAdmin.error = ''; await render(); loadExamsAdmin(true); });
+  on('examCreateBtn', modalCreateExam);
+  on('examBackToList', ()=>{ examAdmin.view = 'list'; examAdmin.examId = null; examAdmin.search = ''; render(); });
+  on('examExportBtn', ()=> exportExamResultsExcel(examAdmin.examId));
+  on('examClearAllBtn', ()=>{
+    const e = examAdmin.exams.find(x => x.id === examAdmin.examId); if(!e) return;
+    confirmDelete('سيتم حذف كل نتائج هذا الاختبار نهائيًا (لا يتم حذف الاختبار نفسه). هل أنت متأكد؟', async ()=>{
+      const { error } = await supabaseClient.from('exam_attempts').delete().eq('exam_id', e.id);
+      if(error){ alert('تعذّر حذف النتائج.'); return; }
+      examAdmin.attempts = examAdmin.attempts.filter(a => a.examId !== e.id);
+    });
+  });
+  const search = document.getElementById('examSearchInput');
+  if(search) search.addEventListener('input', ()=>{
+    examAdmin.search = search.value;
+    render().then(()=>{ const el = document.getElementById('examSearchInput'); if(el){ el.focus(); const p = el.value.length; el.setSelectionRange(p, p); } });
+  });
+  const sort = document.getElementById('examSortSelect');
+  if(sort) sort.addEventListener('change', ()=>{ examAdmin.sort = sort.value; render(); });
+
+  document.querySelectorAll('[data-exam-copy]').forEach(b => b.addEventListener('click', ()=> copyExamLink(b.dataset.examCopy, b)));
+  document.querySelectorAll('[data-exam-results]').forEach(b => b.addEventListener('click', ()=>{ examAdmin.view = 'results'; examAdmin.examId = b.dataset.examResults; examAdmin.search = ''; render().then(()=> window.scrollTo({ top:0, behavior:'instant' })); }));
+  document.querySelectorAll('[data-exam-preview]').forEach(b => b.addEventListener('click', ()=> modalExamPreview(b.dataset.examPreview)));
+  document.querySelectorAll('[data-exam-edit]').forEach(b => b.addEventListener('click', ()=> modalEditExam(b.dataset.examEdit)));
+  document.querySelectorAll('[data-exam-toggle]').forEach(b => b.addEventListener('click', async ()=>{
+    const e = examAdmin.exams.find(x => x.id === b.dataset.examToggle); if(!e) return;
+    const { error } = await supabaseClient.from('exams').update({ active: !e.active }).eq('id', e.id);
+    if(error){ alert('تعذّر التحديث.'); return; }
+    e.active = !e.active; render();
+  }));
+  document.querySelectorAll('[data-exam-release]').forEach(b => b.addEventListener('click', async ()=>{
+    const e = examAdmin.exams.find(x => x.id === b.dataset.examRelease); if(!e) return;
+    const { error } = await supabaseClient.from('exams').update({ released: !e.released }).eq('id', e.id);
+    if(error){ alert('تعذّر التحديث.'); return; }
+    e.released = !e.released; render();
+  }));
+  document.querySelectorAll('[data-exam-del]').forEach(b => b.addEventListener('click', ()=>{
+    const id = b.dataset.examDel;
+    confirmDelete('سيتم حذف هذا الاختبار وكل نتائج الطلاب فيه نهائيًا، وسيتوقف رابطه عن العمل. هل أنت متأكد؟', async ()=>{
+      const { error } = await supabaseClient.from('exams').delete().eq('id', id);
+      if(error){ alert('تعذّر حذف الاختبار.'); return; }
+      examAdmin.exams = examAdmin.exams.filter(x => x.id !== id);
+      examAdmin.attempts = examAdmin.attempts.filter(a => a.examId !== id);
+    });
+  }));
+  document.querySelectorAll('[data-attempt-view]').forEach(b => b.addEventListener('click', ()=> modalExamAttemptDetails(b.dataset.attemptView)));
+  document.querySelectorAll('[data-attempt-del]').forEach(b => b.addEventListener('click', ()=>{
+    const id = b.dataset.attemptDel;
+    confirmDelete('سيتم حذف نتيجة هذا الطالب نهائيًا. هل أنت متأكد؟', async ()=>{
+      const { error } = await supabaseClient.from('exam_attempts').delete().eq('id', id);
+      if(error){ alert('تعذّر حذف النتيجة.'); return; }
+      examAdmin.attempts = examAdmin.attempts.filter(a => a.id !== id);
+    });
+  }));
+}
+
 function bindPageEvents(route){
+  /* الاختبارات: لو الطالب غادر صفحة الاختبار أثناء الحل نحفظ تقدّمه ونوقف المؤقتات (المحاولة تبقى محفوظة بالسيرفر وتُستأنف من الرابط) */
+  if(examRun && !route.startsWith('exam/')){
+    if(examRun.step === 'running' && examRun.dirty) examSaveProgress(examRun);
+    examStopTimers(); examRun = null;
+  }
+  if(route !== 'login' && !route.startsWith('exam/')){ try{ sessionStorage.removeItem(EXAM_RETURN_KEY); }catch(e){} }
+  if(route.startsWith('exam/')) bindExamEvents(examIdFromRoute(route));
+  if(route === 'admin-exams') bindAdminExamsEvents();
   document.querySelectorAll('[data-self-enroll]').forEach(btn=>{
     btn.addEventListener('click', ()=> selfEnroll(btn.dataset.selfEnroll));
   });
@@ -7856,7 +8820,7 @@ async function handleAuthSubmit(e){
       state.courseFilter = university;
       state.majorFilter = major;
       watchDeviceLock(phone);
-      navigate('home'); render();
+      navigate(popAfterLoginRoute() || 'home'); render();
     } else {
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email: pseudoEmail, password });
       if(error){
@@ -7880,7 +8844,7 @@ async function handleAuthSubmit(e){
       if(state.session.university) state.courseFilter = state.session.university;
       if(state.session.major) state.majorFilter = state.session.major;
       watchDeviceLock(finalPhone);
-      navigate('home'); render();
+      navigate(popAfterLoginRoute() || 'home'); render();
     }
   }catch(e){
     const msgBox = document.getElementById('authMsg');
