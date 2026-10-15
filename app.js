@@ -134,10 +134,10 @@ async function deleteData(key, shared=true){
      for insert with check ( auth.uid() = user_id );
    -- المشرف يقرأ كل الصفوف
    create policy "admin select all devices" on public.student_devices
-     for select using ( (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' );
+     for select using ( (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' );
    -- المشرف فقط يملك صلاحية "إعادة تعيين الجهاز" (حذف الصف)
    create policy "admin delete any device" on public.student_devices
-     for delete using ( (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' );
+     for delete using ( (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' );
 
    -- لتفعيل الإشعار الفوري (خروج تلقائي من الجهاز القديم فور إعادة التعيين
    -- دون انتظار تحديث الصفحة)، فعّل Realtime على الجدول:
@@ -451,13 +451,14 @@ async function syncSessionFromAuth(){
     const authUser = data && data.session ? data.session.user : null;
     if(!authUser){ state.session = null; return; }
     const meta = authUser.user_metadata || {};
-    if(meta.role === 'admin'){
+    const role = (authUser.app_metadata || {}).role; /* الدور يُقرأ من app_metadata فقط (لا يقدر المستخدم تعديله) */
+    if(role === 'admin'){
       state.session = {
         type: 'admin',
         username: meta.username || (authUser.email||'').split('@')[0],
         name: meta.fullName || 'مشرف المنصة',
       };
-    } else if(meta.role === 'teacher'){
+    } else if(role === 'teacher'){
       state.session = {
         type: 'teacher',
         teacherId: authUser.id,
@@ -3786,10 +3787,13 @@ function modalCreateTeacher(){
     const tempClient = getTempAuthClient();
     const { data, error } = await tempClient.auth.signUp({
       email: pseudoEmail, password,
-      options: { data: { role:'teacher', username, fullName } }
+      options: { data: { username, fullName } }
     });
     if(error){ msgBox.innerHTML = `<div class="form-msg error">تعذّر إنشاء الحساب: ${escapeHtml(error.message||'')}</div>`; return; }
     if(!data.user){ msgBox.innerHTML = `<div class="form-msg error">تعذّر إنشاء الحساب.</div>`; return; }
+    /* منح دور المدرّس يتم من السيرفر عبر دالة محمية (تتحقق إن المستدعي أدمن) وبجلسة الأدمن، مو بجلسة الحساب المؤقت */
+    const { error: roleErr } = await supabaseClient.rpc('set_teacher_role', { p_user: data.user.id });
+    if(roleErr){ msgBox.innerHTML = `<div class="form-msg error">تم إنشاء الحساب لكن تعذّر منحه صلاحية المدرّس: ${escapeHtml(roleErr.message||'')}</div>`; return; }
     state.teachers.push({ id: data.user.id, username, fullName });
     await setData('teachers', state.teachers, true);
     state.courses.forEach(c=>{ if(courseIds.includes(c.id)) c.teacherId = data.user.id; });
@@ -4611,12 +4615,18 @@ function pageAdminLogin(){
 /* =========================================================
    Modal helpers
    ========================================================= */
+let modalCloseHook = null; /* يُنفَّذ مرة واحدة عند إغلاق النافذة (مثلاً لحذف صور مرفوعة ولم يُحفظ سؤالها) */
 function openModal(html, wide){
+  modalCloseHook = null;
   document.getElementById('modalRoot').innerHTML = `<div class="modal-overlay" id="modalOverlay"><div class="modal-box${wide?' wide':''}">${html}</div></div>`;
   document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id === 'modalOverlay') closeModal(); });
   translateSubtree(document.getElementById('modalRoot'));
 }
-function closeModal(){ document.getElementById('modalRoot').innerHTML = ''; }
+function closeModal(){
+  const hook = modalCloseHook; modalCloseHook = null;
+  document.getElementById('modalRoot').innerHTML = '';
+  if(hook){ try{ hook(); }catch(e){ console.error(e); } }
+}
 
 function sectionPickerFieldsHtml(enabledSections, pricing){
   return `
@@ -5723,12 +5733,12 @@ function questionFormFields(defaults, idSuffix){
       <option value="matching" ${type==='matching'?'selected':''}>سؤال توصيل (Matching)</option>
     </select></div>
     <div class="field"><label>نص السؤال (بالإنجليزي) — يمكن إضافة صور وجداول وتنسيق الخط</label>
-      ${rteToolbarHtml(questionEditorId)}
+      ${rteToolbarHtml(questionEditorId, 'bank')}
       <div class="rte-editor i18n-skip" id="${questionEditorId}" contenteditable="true" dir="ltr" style="text-align:left;" data-placeholder="Write the question here">${d.question||''}</div>
     </div>
     <div id="qTypeFields">${questionTypeFieldsHtml(type, d)}</div>
     <div class="field"><label>Explanation (تفسير الإجابة، اختياري) — يمكن إضافة صور وجداول وتنسيق الخط</label>
-      ${rteToolbarHtml(explanationEditorId)}
+      ${rteToolbarHtml(explanationEditorId, 'bank')}
       <div class="rte-editor i18n-skip" id="${explanationEditorId}" contenteditable="true" dir="ltr" style="text-align:left;" data-placeholder="Write an explanation shown to the student with the correct answer">${d.explanation||''}</div>
     </div>
     <div id="questionMsg"></div>
@@ -5801,6 +5811,7 @@ function modalAddQuestion(defaults){
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   bindQuestionFormDynamics(document.getElementById('questionForm'));
+  const imgSession = trackQuestionImageSession(document.getElementById('questionForm'));
   document.getElementById('questionForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -5827,6 +5838,7 @@ function modalAddQuestion(defaults){
     state.questions.push(base);
     const { error } = await supabaseClient.from('questions').insert(questionToRow(base));
     if(error){ console.error('add question failed', error); state.questions = state.questions.filter(x=>x!==base); msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ السؤال، حاول مرة أخرى.</div>`; return; }
+    imgSession.markSaved([base.question, base.explanation]);
     closeModal(); render();
   });
 }
@@ -5842,6 +5854,7 @@ function modalEditQuestion(questionId){
     </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   bindQuestionFormDynamics(document.getElementById('questionEditForm'));
+  const imgSession = trackQuestionImageSession(document.getElementById('questionEditForm'));
   document.getElementById('questionEditForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -5862,6 +5875,7 @@ function modalEditQuestion(questionId){
       if(!r.ok){ msgBox.innerHTML = `<div class="form-msg error">${r.error}</div>`; return; }
       payload = { options: r.options, correctIndex: r.correctIndex };
     }
+    const oldImgPaths = qimgPathsInQuestion(q); /* صور السؤال قبل التعديل — التي تُزال منه تُحذف من الـ Storage */
     q.courseId = fd.get('courseId'); q.lectureId = fd.get('lectureId') || null; q.nature = fd.get('nature');
     q.question = questionContent.html;
     q.explanation = readRichEditor('qExplanationEditorEdit').html;
@@ -5870,6 +5884,8 @@ function modalEditQuestion(questionId){
     Object.assign(q, payload);
     const { error } = await supabaseClient.from('questions').update(questionToRow(q)).eq('id', questionId);
     if(error){ console.error('edit question failed', error); msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ التعديلات، حاول مرة أخرى.</div>`; return; }
+    imgSession.markSaved([q.question, q.explanation]);
+    qimgCleanup(oldImgPaths);
     closeModal(); render();
   });
 }
@@ -6587,11 +6603,125 @@ const RTE_FONT_FAMILIES = [
   ['Tahoma, sans-serif', 'Tahoma']
 ];
 const RTE_FONT_SIZES = [12,13,14,15,16,18,20,22,24,28,32];
-function rteToolbarHtml(editorId){
+/* =========================================================
+   صور الأسئلة: تُرفع إلى Supabase Storage (bucket: question-images) بدل base64 داخل نص السؤال،
+   وتُحذف من الـ Storage تلقائيًا عند حذف السؤال/الاختبار أو إزالة الصورة من السؤال.
+   المسارات:  bank/...  لأسئلة البنك،   exams/<examId>/...  لأسئلة كتبتها داخل اختبار.
+   ========================================================= */
+const QIMG_BUCKET = 'question-images';
+const QIMG_URL_PREFIX = SUPABASE_URL + '/storage/v1/object/public/' + QIMG_BUCKET + '/';
+
+function qimgPathsInHtml(html){
+  const out = new Set();
+  if(!html) return out;
+  const re = /<img[^>]+src\s*=\s*["']([^"']+)["']/gi;
+  let m;
+  while((m = re.exec(html))){
+    if(m[1].startsWith(QIMG_URL_PREFIX)){
+      try{ out.add(decodeURIComponent(m[1].slice(QIMG_URL_PREFIX.length).split('?')[0])); }catch(e){}
+    }
+  }
+  return out;
+}
+function qimgPathsInQuestion(q){
+  return [...qimgPathsInHtml(q && q.question), ...qimgPathsInHtml(q && q.explanation)];
+}
+function resizeImageToBlob(file, maxSize){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onerror = ()=> reject(new Error('read failed'));
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onerror = ()=> reject(new Error('image load failed'));
+      img.onload = ()=>{
+        let { width, height } = img;
+        const scale = Math.min(1, maxSize / Math.max(width, height));
+        width = Math.max(1, Math.round(width * scale)); height = Math.max(1, Math.round(height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height); /* خلفية بيضاء للصور الشفافة (PNG) */
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('encode failed')), 'image/jpeg', 0.85);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function blobToDataUrl(blob){
+  return new Promise((resolve, reject)=>{ const r = new FileReader(); r.onload = ()=> resolve(r.result); r.onerror = ()=> reject(new Error('read failed')); r.readAsDataURL(blob); });
+}
+async function qimgUpload(file, folder){
+  const blob = await resizeImageToBlob(file, 900);
+  const path = `${folder}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const { error } = await supabaseClient.storage.from(QIMG_BUCKET).upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
+  if(error) throw error;
+  const { data } = supabaseClient.storage.from(QIMG_BUCKET).getPublicUrl(path);
+  return { path, url: data.publicUrl };
+}
+async function qimgRemove(paths){
+  const list = [...paths];
+  if(!list.length || !supabaseClient) return;
+  try{
+    const { error } = await supabaseClient.storage.from(QIMG_BUCKET).remove(list);
+    if(error) console.error('qimg remove failed', error);
+  }catch(e){ console.error('qimg remove failed', e); }
+}
+/* يحذف مجلدًا كاملًا من الـ bucket (يُستخدم عند حذف اختبار) */
+async function qimgRemoveFolder(folder){
+  if(!supabaseClient) return;
+  try{
+    for(let i = 0; i < 20; i++){
+      const { data, error } = await supabaseClient.storage.from(QIMG_BUCKET).list(folder, { limit: 1000 });
+      if(error || !data || !data.length) return;
+      const files = data.filter(f => f.id).map(f => `${folder}/${f.name}`);
+      if(!files.length) return;
+      await qimgRemove(files);
+      if(data.length < 1000) return;
+    }
+  }catch(e){ console.error('qimg folder remove failed', e); }
+}
+/* يرجّع المسارات (من بين المرشّحة للحذف) التي ما زالت مستخدمة في سؤال بالبنك أو داخل أي اختبار */
+async function qimgStillUsed(candidates){
+  const used = new Set();
+  const scan = (html)=> qimgPathsInHtml(html).forEach(pth => { if(candidates.has(pth)) used.add(pth); });
+  state.questions.forEach(q => { scan(q.question); scan(q.explanation); });
+  try{
+    const { data, error } = await supabaseClient.from('exams').select('questions');
+    if(error) throw error;
+    (data || []).forEach(r => (r.questions || []).forEach(q => { scan(q.question); scan(q.explanation); }));
+  }catch(e){ candidates.forEach(pth => used.add(pth)); } /* لو تعذّر الفحص لا نحذف شيئًا احتياطًا */
+  return used;
+}
+/* يحذف الصور المرشّحة من الـ Storage فقط إن لم يعد يستخدمها أي سؤال آخر أو اختبار */
+async function qimgCleanup(paths){
+  const cand = new Set(paths);
+  if(!cand.size || !isAdminSession()) return;
+  const used = await qimgStillUsed(cand);
+  await qimgRemove([...cand].filter(pth => !used.has(pth)));
+}
+/* يتتبّع الصور المرفوعة أثناء فتح نافذة: إن أُغلقت بدون حفظ تُحذف، وعند الحفظ تُحذف غير المستخدمة منها */
+function trackQuestionImageSession(formEl){
+  const uploaded = new Set();
+  let saved = false;
+  formEl.addEventListener('qimg-uploaded', (e)=> uploaded.add(e.detail.path));
+  modalCloseHook = ()=>{ if(!saved) qimgRemove([...uploaded]); };
+  return {
+    markSaved(finalHtmls){
+      saved = true; modalCloseHook = null;
+      const used = new Set();
+      finalHtmls.forEach(h => qimgPathsInHtml(h).forEach(pth => used.add(pth)));
+      qimgRemove([...uploaded].filter(pth => !used.has(pth)));
+    }
+  };
+}
+
+function rteToolbarHtml(editorId, imgFolder){
   const familyOptions = RTE_FONT_FAMILIES.map(([val,label])=>`<option value="${escapeHtml(val)}">${escapeHtml(label)}</option>`).join('');
   const sizeOptions = RTE_FONT_SIZES.map(sz=>`<option value="${sz}" ${sz===15?'selected':''}>${sz}px</option>`).join('');
   return `
-  <div class="rte-toolbar" data-target="${editorId}">
+  <div class="rte-toolbar" data-target="${editorId}"${imgFolder ? ` data-img-folder="${imgFolder}"` : ''}>
     <button type="button" class="rte-btn" data-cmd="bold" title="عريض"><b>B</b></button>
     <button type="button" class="rte-btn" data-cmd="italic" title="مائل"><i>I</i></button>
     <button type="button" class="rte-btn" data-cmd="underline" title="تسطير"><u>U</u></button>
@@ -6639,12 +6769,26 @@ function wireRteToolbar(scopeEl){
         const file = imgInput.files[0];
         imgInput.value = '';
         if(!file) return;
+        const folder = toolbar.dataset.imgFolder;
+        const oldLabel = imgBtn.textContent;
         try{
-          const dataUrl = await resizeImageFile(file, 700);
+          let src;
+          if(folder){
+            /* أسئلة: ارفع الصورة إلى Supabase Storage وضع رابطها بدل base64 */
+            imgBtn.textContent = '⏳'; imgBtn.disabled = true;
+            const up = await qimgUpload(file, folder);
+            src = up.url;
+            editor.dispatchEvent(new CustomEvent('qimg-uploaded', { bubbles: true, detail: { path: up.path } }));
+          } else {
+            src = await blobToDataUrl(await resizeImageToBlob(file, 700));
+          }
           editor.focus(); restoreSelection();
-          document.execCommand('insertHTML', false, `<img src="${dataUrl}">`);
+          document.execCommand('insertHTML', false, `<img src="${src}">`);
           saveSelection();
-        }catch(err){ /* تجاهل الصورة إن تعذّرت قراءتها */ }
+        }catch(err){
+          console.error('image insert failed', err);
+          if(folder) alert('تعذّر رفع الصورة. تأكد من تنفيذ ملف medora_question_images.sql ومن صلاحياتك، ثم حاول مرة ثانية.');
+        }finally{ imgBtn.textContent = oldLabel; imgBtn.disabled = false; }
       });
     }
     const tableBtn = toolbar.querySelector('.rte-table-btn');
@@ -6725,7 +6869,7 @@ function sanitizeSummaryHtml(html){
         Array.from(child.attributes).forEach(attr=>{
           const name = attr.name.toLowerCase();
           if(name === 'src' && child.tagName === 'IMG'){
-            if(!/^data:image\//i.test(attr.value)) child.removeAttribute(attr.name);
+            if(!(/^data:image\//i.test(attr.value) || attr.value.startsWith(QIMG_URL_PREFIX))) child.removeAttribute(attr.name);
           } else if(name === 'style'){
             /* يُبقي فقط على خصائص التنسيق الآمنة (لون/نوع خط/حجم خط...) ويحذف أي قيمة
                تحتوي على url(/expression(/javascript: لمنع أي محاولة حقن عبر الأنماط */
@@ -7789,7 +7933,7 @@ function pageAdminExams(){
       <h2>📝 الاختبارات</h2>
       <div class="toolbar-actions"><button class="btn teal solid" id="examCreateBtn">${ICONS.plus} إنشاء اختبار جديد</button></div>
     </div>
-    <p class="hint" style="margin:-10px 0 20px;">أنشئ اختبارًا من أسئلة بنك الأسئلة، حدّد إعداداته (الوقت، إظهار العلامة، الإجابات، التفسير)، ثم انسخ رابطه وأرسله للطلاب. يفتحه الطالب بحسابه الموجود على المنصة وتصلك علامته هنا.</p>
+    <p class="hint" style="margin:-10px 0 20px;">أنشئ اختبارًا من أسئلة بنك الأسئلة و/أو أسئلة تكتبها بنفسك (مع صور)، حدّد إعداداته (الوقت، إظهار العلامة، الإجابات، التفسير)، ثم انسخ رابطه وأرسله للطلاب. يفتحه الطالب بحسابه الموجود على المنصة وتصلك علامته هنا.</p>
     ${exams.length ? exams.map(examAdminCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>لا توجد اختبارات بعد.</p></div>`}
   </div></section>`;
 }
@@ -7803,8 +7947,11 @@ function copyExamLink(id, btn){
 
 function modalCreateExam(){
   if(!state.courses.length){ alert('أضف مادة واحدة على الأقل أولًا.'); return; }
-  if(!state.questions.length){ alert('لا توجد أسئلة في بنك الأسئلة بعد — أضف أسئلة أولًا.'); return; }
   const picker = { courseId: state.courses[0].id, lectures: new Set(), nature: 'both', selected: new Set() };
+  const examId = Math.random().toString(36).slice(2, 7) + Math.random().toString(36).slice(2, 7);
+  const imgFolder = 'exams/' + examId;
+  const customQs = [];   /* أسئلة كتبها الأدمن مباشرة داخل الاختبار */
+  let editingIdx = -1;
   const poolOf = ()=> state.questions.filter(q => q.courseId === picker.courseId
     && (picker.nature === 'both' || (q.nature || 'past') === picker.nature)
     && (picker.lectures.size === 0 || (q.lectureId ? picker.lectures.has(q.lectureId) : picker.lectures.has('__none__'))));
@@ -7830,6 +7977,12 @@ function modalCreateExam(){
         </div>
         <div class="exam-qpick" id="examQList"></div>
       </div>
+      <div class="field">
+        <label>✍️ أسئلة تكتبها بنفسك لهذا الاختبار <span id="examCustomCount" class="hint"></span></label>
+        <div id="examCustomList"></div>
+        <button type="button" class="btn small teal" id="examCustomAddBtn">${ICONS.plus} كتابة سؤال جديد</button>
+        <div id="examCustomBuilder" style="display:none; margin-top:12px; padding:14px; border:1px dashed var(--teal); border-radius:12px;"></div>
+      </div>
       <h4 style="margin:18px 0 8px;">⚙️ إعدادات الاختبار</h4>
       ${examSettingsFieldsHtml({ durationMinutes: 30, maxAttempts: 1, showScore: true, showAnswers: true, showExplanations: true })}
       <div id="examFormMsg"></div>
@@ -7838,6 +7991,78 @@ function modalCreateExam(){
   document.getElementById('cancelModal').addEventListener('click', closeModal);
   const form = document.getElementById('examForm');
   bindExamSettingsDeps(form);
+  const imgSession = trackQuestionImageSession(form); /* الصور المرفوعة تُحذف إن أُغلقت النافذة بدون حفظ */
+  /* منع Enter داخل حقول السؤال من حفظ الاختبار بالخطأ */
+  form.addEventListener('keydown', (ev)=>{ if(ev.key === 'Enter' && ev.target.tagName === 'INPUT' && ev.target.closest('#examCustomBuilder')) ev.preventDefault(); });
+
+  const cqTag = t => t === 'written' ? '✍️ كتابي' : t === 'matching' ? '🔗 توصيل' : '☑️ اختيار';
+  const builderBox = document.getElementById('examCustomBuilder');
+  const renderCustomList = ()=>{
+    document.getElementById('examCustomCount').textContent = customQs.length ? `— ${customQs.length} سؤال` : '';
+    document.getElementById('examCustomList').innerHTML = customQs.map((q, i) => `
+      <div style="display:flex; gap:8px; align-items:center; padding:8px 10px; border:1px solid var(--border, #d9e2ec); border-radius:10px; margin-bottom:6px;">
+        <span class="hint">${cqTag(q.type)}</span>
+        <span class="i18n-skip" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(examStripHtml(q.question).slice(0, 100) || '🖼️ سؤال بصورة')}</span>
+        <button type="button" class="btn small" data-cq-edit="${i}">${ICONS.edit}</button>
+        <button type="button" class="btn small danger" data-cq-del="${i}">${ICONS.trash}</button>
+      </div>`).join('');
+    document.querySelectorAll('[data-cq-edit]').forEach(b => b.addEventListener('click', ()=> openBuilder(Number(b.dataset.cqEdit))));
+    document.querySelectorAll('[data-cq-del]').forEach(b => b.addEventListener('click', ()=>{ customQs.splice(Number(b.dataset.cqDel), 1); if(!builderBox.style.display || builderBox.style.display !== 'none') closeBuilder(); renderCustomList(); }));
+  };
+  const closeBuilder = ()=>{ builderBox.style.display = 'none'; builderBox.innerHTML = ''; editingIdx = -1; };
+  const openBuilder = (idx)=>{
+    editingIdx = idx;
+    const d = idx >= 0 ? customQs[idx] : {};
+    const type = d.type || 'mcq';
+    builderBox.style.display = 'block';
+    builderBox.innerHTML = `
+      <div class="field"><label>نمط السؤال</label><select id="cqType" class="bank-select">
+        <option value="mcq" ${type === 'mcq' ? 'selected' : ''}>اختيار من متعدد (حتى 5 خيارات)</option>
+        <option value="written" ${type === 'written' ? 'selected' : ''}>سؤال كتابي (إجابة حرة)</option>
+        <option value="matching" ${type === 'matching' ? 'selected' : ''}>سؤال توصيل (Matching)</option></select></div>
+      <div class="field"><label>نص السؤال — يمكن إضافة صور وجداول وتنسيق الخط</label>
+        ${rteToolbarHtml('cqQuestionEditor', imgFolder)}
+        <div class="rte-editor i18n-skip" id="cqQuestionEditor" contenteditable="true" dir="ltr" style="text-align:left;" data-placeholder="Write the question here">${d.question || ''}</div></div>
+      <div id="cqTypeFields">${questionTypeFieldsHtml(type, d)}</div>
+      <div class="field"><label>Explanation (تفسير الإجابة، اختياري)</label>
+        ${rteToolbarHtml('cqExplanationEditor', imgFolder)}
+        <div class="rte-editor i18n-skip" id="cqExplanationEditor" contenteditable="true" dir="ltr" style="text-align:left;" data-placeholder="Write an explanation shown to the student with the correct answer">${d.explanation || ''}</div></div>
+      <div id="cqMsg"></div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn teal solid small" id="cqSave">✔ ${idx >= 0 ? 'حفظ تعديل السؤال' : 'إضافة السؤال للاختبار'}</button>
+        <button type="button" class="btn small" id="cqCancel">إلغاء</button></div>`;
+    wireRteToolbar(builderBox);
+    bindMatchPairRows();
+    document.getElementById('cqType').addEventListener('change', (e)=>{
+      document.getElementById('cqTypeFields').innerHTML = questionTypeFieldsHtml(e.target.value, {});
+      bindMatchPairRows();
+    });
+    document.getElementById('cqCancel').addEventListener('click', closeBuilder);
+    document.getElementById('cqSave').addEventListener('click', ()=>{
+      const msgBox = document.getElementById('cqMsg');
+      const fd = new FormData(form);
+      const type = document.getElementById('cqType').value;
+      const qc = readRichEditor('cqQuestionEditor');
+      if(!qc.hasContent){ msgBox.innerHTML = `<div class="form-msg error">يرجى كتابة نص السؤال.</div>`; return; }
+      const o = { id: editingIdx >= 0 ? customQs[editingIdx].id : 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        type, question: qc.html, nature: 'past', explanation: readRichEditor('cqExplanationEditor').html };
+      if(type === 'matching'){
+        const r = collectMatchingFromForm();
+        if(!r.ok){ msgBox.innerHTML = `<div class="form-msg error">${r.error}</div>`; return; }
+        o.pairs = r.pairs;
+      } else if(type === 'written'){
+        o.modelAnswer = collectWrittenFromForm(fd).modelAnswer;
+      } else {
+        const r = collectMcqFromForm(fd);
+        if(!r.ok){ msgBox.innerHTML = `<div class="form-msg error">${r.error}</div>`; return; }
+        o.options = r.options; o.correctIndex = r.correctIndex;
+      }
+      if(editingIdx >= 0) customQs[editingIdx] = o; else customQs.push(o);
+      closeBuilder(); renderCustomList();
+    });
+  };
+  document.getElementById('examCustomAddBtn').addEventListener('click', ()=> openBuilder(-1));
+  renderCustomList();
 
   const renderLectures = ()=>{
     const lecs = state.lectures.filter(l => l.courseId === picker.courseId);
@@ -7888,8 +8113,9 @@ function modalCreateExam(){
     const title = (fd.get('title') || '').trim();
     if(!title){ msg.innerHTML = `<div class="form-msg error">أدخل عنوان الاختبار.</div>`; return; }
     const chosen = state.questions.filter(q => picker.selected.has(q.id));
-    if(!chosen.length){ msg.innerHTML = `<div class="form-msg error">اختر سؤالًا واحدًا على الأقل.</div>`; return; }
-    const questions = shuffleArr(chosen).map(q => {
+    if(builderBox.style.display !== 'none'){ msg.innerHTML = `<div class="form-msg error">عندك سؤال مفتوح للكتابة — اضغط «إضافة السؤال للاختبار» أو «إلغاء» أولًا.</div>`; return; }
+    if(!chosen.length && !customQs.length){ msg.innerHTML = `<div class="form-msg error">اختر سؤالًا من البنك أو اكتب سؤالًا واحدًا على الأقل.</div>`; return; }
+    const questions = shuffleArr([...chosen, ...customQs]).map(q => {
       const o = { id: q.id, type: q.type || 'mcq', question: q.question, nature: q.nature || 'past', explanation: q.explanation || '' };
       if(o.type === 'mcq'){ o.options = q.options || []; o.correctIndex = q.correctIndex; }
       else if(o.type === 'matching'){ o.pairs = q.pairs || []; }
@@ -7897,7 +8123,7 @@ function modalCreateExam(){
       return o;
     });
     const btn = document.getElementById('examSaveBtn'); btn.disabled = true;
-    const row = { id: Math.random().toString(36).slice(2, 7) + Math.random().toString(36).slice(2, 7), title,
+    const row = { id: examId, title,
       description: (fd.get('description') || '').trim(), course_id: picker.courseId, settings: readExamSettings(fd),
       questions, active: true, released: false, created_at: Date.now() };
     const { error } = await supabaseClient.from('exams').insert(row);
@@ -7907,6 +8133,7 @@ function modalCreateExam(){
       btn.disabled = false; return;
     }
     examAdmin.exams.push(mapExamRow(row)); examAdmin.view = 'list';
+    imgSession.markSaved(questions.flatMap(q => [q.question, q.explanation])); /* احذف الصور المرفوعة التي لم تعد مستخدمة */
     closeModal(); render();
   });
 }
@@ -8038,6 +8265,7 @@ function bindAdminExamsEvents(){
     confirmDelete('سيتم حذف هذا الاختبار وكل نتائج الطلاب فيه نهائيًا، وسيتوقف رابطه عن العمل. هل أنت متأكد؟', async ()=>{
       const { error } = await supabaseClient.from('exams').delete().eq('id', id);
       if(error){ alert('تعذّر حذف الاختبار.'); return; }
+      await qimgRemoveFolder('exams/' + id); /* احذف صور الأسئلة التي كُتبت داخل هذا الاختبار من Supabase Storage */
       examAdmin.exams = examAdmin.exams.filter(x => x.id !== id);
       examAdmin.attempts = examAdmin.attempts.filter(a => a.examId !== id);
     });
@@ -8105,12 +8333,14 @@ function bindPageEvents(route){
       btn.addEventListener('click', ()=>{
         const id = btn.dataset.delCourse;
         confirmDelete('سيتم حذف هذا الكورس ومحاضراته وأسئلته نهائيًا. هل أنت متأكد؟', async ()=>{
+          const delQs = state.questions.filter(q=>q.courseId===id);
           state.courses = state.courses.filter(c=>c.id!==id);
           state.lectures = state.lectures.filter(l=>l.courseId!==id);
           state.questions = state.questions.filter(q=>q.courseId!==id);
           await setData('courses', state.courses, true);
           await setData('lectures', state.lectures, true);
-          await supabaseClient.from('questions').delete().eq('course_id', id);
+          const { error: delQErr } = await supabaseClient.from('questions').delete().eq('course_id', id);
+          if(!delQErr) await qimgCleanup(delQs.flatMap(qimgPathsInQuestion));
         });
       });
     });
@@ -8336,8 +8566,10 @@ function bindPageEvents(route){
         btn.addEventListener('click', ()=>{
           const id = btn.dataset.delQuestion;
           confirmDelete('سيتم حذف هذا السؤال نهائيًا. هل أنت متأكد؟', async ()=>{
+            const oldQ = state.questions.find(q=>q.id===id);
             state.questions = state.questions.filter(q=>q.id!==id);
-            await supabaseClient.from('questions').delete().eq('id', id);
+            const { error: delErr } = await supabaseClient.from('questions').delete().eq('id', id);
+            if(!delErr && oldQ) await qimgCleanup(qimgPathsInQuestion(oldQ)); /* احذف صور السؤال من Supabase Storage */
           });
         });
       });
@@ -8801,7 +9033,7 @@ async function handleAuthSubmit(e){
       const { data, error } = await supabaseClient.auth.signUp({
         email: pseudoEmail,
         password,
-        options: { data: { phone, fullName, university, major, role:'student' } }
+        options: { data: { phone, fullName, university, major } }
       });
       if(error){
         const msg = isNetworkOrServerError(error) ? SERVER_BUSY_MSG
@@ -8865,11 +9097,12 @@ async function handleAdminSubmit(e){
   const { data, error } = await supabaseClient.auth.signInWithPassword({ email: pseudoEmail, password });
   if(error){ msgBox.innerHTML = `<div class="form-msg error">بيانات دخول المشرف غير صحيحة.</div>`; return; }
   const meta = data.user.user_metadata || {};
-  if(meta.role !== 'admin' && meta.role !== 'teacher'){
+  const role = (data.user.app_metadata || {}).role; /* من app_metadata فقط */
+  if(role !== 'admin' && role !== 'teacher'){
     await supabaseClient.auth.signOut();
     msgBox.innerHTML = `<div class="form-msg error">هذا الحساب لا يملك صلاحية دخول لوحة التحكم.</div>`; return;
   }
-  if(meta.role === 'teacher'){
+  if(role === 'teacher'){
     const stillActive = state.teachers.some(t=>t.id===data.user.id);
     if(!stillActive){
       await supabaseClient.auth.signOut();
