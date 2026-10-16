@@ -5214,6 +5214,91 @@ async function getSecureEmbedUrl(libraryId, videoGuid){
   return `https://iframe.mediadelivery.net/embed/${result.libraryId}/${result.videoGuid}?token=${result.token}&expires=${result.expires}`;
 }
 
+/* ===== تكبير المشغّل يدويًا (حل مشكلة وضع تقسيم الشاشة) =====
+   زر التكبير الأصلي داخل مشغّل Bunny بيعتمد على Fullscreen API، وهذا بيفشل/بيتصرف غلط
+   في وضع Split View (آيباد) أو الملتي-ويندو (أندرويد). فهون بنكبّر المشغّل بالـ CSS
+   ليملأ نافذة المتصفح الحالية (مهما كان حجمها) بدل الاعتماد على Fullscreen API. */
+const VP_EXPAND_BTN_HTML = `<button type="button" class="vp-expand-btn" data-action="vp-expand" aria-label="تكبير الفيديو" title="تكبير الفيديو">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+</button>`;
+const VP_EXIT_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>`;
+const VP_ENTER_ICON = VP_EXPAND_BTN_HTML.match(/<svg[\s\S]*<\/svg>/)[0];
+
+(function injectVideoExpandStyles(){
+  if(document.getElementById('vpExpandStyles')) return;
+  const st = document.createElement('style');
+  st.id = 'vpExpandStyles';
+  st.textContent = `
+    .video-player-wrap{ position:relative; }
+    .vp-expand-btn{
+      position:absolute; top:8px; left:8px; z-index:5;
+      width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+      border:0; border-radius:10px; cursor:pointer; color:#fff;
+      background:rgba(0,0,0,.55); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+      -webkit-tap-highlight-color:transparent;
+    }
+    .vp-expand-btn:active{ background:rgba(0,0,0,.8); }
+    .video-player-wrap.vp-expanded{
+      position:fixed !important; top:0; left:0; right:0; bottom:0;
+      width:100vw !important; height:100vh !important; height:100dvh !important;
+      max-width:none !important; max-height:none !important;
+      margin:0 !important; padding:0 !important; border-radius:0 !important;
+      z-index:2147483000; background:#000;
+    }
+    .video-player-wrap.vp-expanded iframe{
+      position:absolute !important; inset:0; width:100% !important; height:100% !important;
+      border:0; border-radius:0 !important;
+    }
+    .video-player-wrap.vp-expanded .vp-expand-btn{
+      top:max(8px, env(safe-area-inset-top)); left:max(8px, env(safe-area-inset-left));
+    }
+    body.vp-lock{ overflow:hidden !important; }
+  `;
+  document.head.appendChild(st);
+})();
+
+let vpExpandedWrap = null;
+
+function vpSetExpanded(wrap, on){
+  const btn = wrap.querySelector('.vp-expand-btn');
+  if(on){
+    if(vpExpandedWrap && vpExpandedWrap !== wrap) vpSetExpanded(vpExpandedWrap, false);
+    wrap.classList.add('vp-expanded');
+    document.body.classList.add('vp-lock');
+    vpExpandedWrap = wrap;
+    if(btn){ btn.innerHTML = VP_EXIT_ICON; btn.setAttribute('aria-label','تصغير الفيديو'); }
+    // لو أحد الأجداد فيه transform/filter بيكسر position:fixed، ننقل المشغّل مؤقتًا لـ body
+    const r = wrap.getBoundingClientRect();
+    if(Math.abs(r.width - window.innerWidth) > 2 || Math.abs(r.height - window.innerHeight) > 2){
+      wrap._vpHome = { parent: wrap.parentNode, next: wrap.nextSibling };
+      document.body.appendChild(wrap);
+    }
+  }else{
+    wrap.classList.remove('vp-expanded');
+    document.body.classList.remove('vp-lock');
+    if(wrap._vpHome){
+      const { parent, next } = wrap._vpHome;
+      parent.insertBefore(wrap, next && next.parentNode === parent ? next : null);
+      wrap._vpHome = null;
+    }
+    if(btn){ btn.innerHTML = VP_ENTER_ICON; btn.setAttribute('aria-label','تكبير الفيديو'); }
+    if(vpExpandedWrap === wrap) vpExpandedWrap = null;
+    requestAnimationFrame(()=> wrap.scrollIntoView({ block:'center' }));
+  }
+}
+
+document.addEventListener('click', (e)=>{
+  const b = e.target.closest && e.target.closest('[data-action="vp-expand"]');
+  if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const wrap = b.closest('.video-player-wrap');
+  if(wrap) vpSetExpanded(wrap, !wrap.classList.contains('vp-expanded'));
+}, true);
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape' && vpExpandedWrap) vpSetExpanded(vpExpandedWrap, false);
+});
+
 /* يفتح/يقفل مشغّل الفيديو جوا الصفحة عند الضغط على زر "مشاهدة" (بدل فتح رابط بنافذة جديدة) */
 async function toggleSecurePlayer(btn){
   const libraryId = btn.dataset.libraryId;
@@ -5236,6 +5321,7 @@ async function toggleSecurePlayer(btn){
         <iframe src="${secureUrl}" loading="lazy"
           allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
           allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>
+        ${VP_EXPAND_BTN_HTML}
       </div>`;
     slot.dataset.open = '1';
     // نخلي الفيديو كامل يظهر على الشاشة (بما فيه الجزء السفلي) بعد ما يفتح
@@ -5253,6 +5339,7 @@ async function toggleSecurePlayer(btn){
           <iframe src="${escapeHtml(plainUrl)}" loading="lazy"
             allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
             allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>
+          ${VP_EXPAND_BTN_HTML}
         </div>`;
       slot.dataset.open = '1';
       return;
