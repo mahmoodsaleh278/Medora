@@ -7893,6 +7893,7 @@ function examAdminCardHtml(e){
       <button class="btn teal solid small" data-exam-results="${e.id}">📊 النتائج (${st.done})</button>
       <button class="btn small" data-exam-preview="${e.id}">👁 معاينة</button>
       <button class="btn edit small" data-exam-edit="${e.id}">${ICONS.edit} الإعدادات</button>
+      <button class="btn edit small" data-exam-qedit="${e.id}">✏️ تعديل الأسئلة والإجابات</button>
       <button class="btn small" data-exam-toggle="${e.id}">${e.active ? '⏸ إغلاق الاختبار' : '▶️ إعادة فتحه'}</button>
       ${!(e.settings && e.settings.showScore) ? `<button class="btn small ${e.released ? '' : 'teal'}" data-exam-release="${e.id}">${e.released ? '🙈 إخفاء النتائج عن الطلاب' : '🎯 إظهار النتائج للطلاب'}</button>` : ''}
       <button class="btn danger small" data-exam-del="${e.id}">${ICONS.trash} حذف</button>
@@ -8203,7 +8204,7 @@ function modalEditExam(id){
       <div class="field"><label>عنوان الاختبار</label><input type="text" name="title" required value="${escapeHtml(e.title)}"></div>
       <div class="field"><label>وصف / تعليمات</label><textarea name="description" rows="2">${escapeHtml(e.description)}</textarea></div>
       ${examSettingsFieldsHtml(e.settings)}
-      <p class="hint">الأسئلة نفسها ثابتة بعد الإنشاء حتى تبقى النتائج متناسقة. لاختبار بأسئلة مختلفة أنشئ اختبارًا جديدًا.</p>
+      <p class="hint">لتعديل الأسئلة أو الإجابات الصحيحة استخدم زر «✏️ تعديل الأسئلة والإجابات» من بطاقة الاختبار.</p>
       <div id="examEditMsg"></div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ</button></div>
     </form>`);
@@ -8220,6 +8221,151 @@ function modalEditExam(id){
     closeModal(); render();
   });
 }
+
+/* ===== تعديل أسئلة وإجابات اختبار منشور =====
+   - تعديل نص السؤال/الخيارات/الإجابة الصحيحة/التفسير، حذف، إعادة ترتيب، إضافة أسئلة جديدة.
+   - الحفظ يتم عبر دالة السيرفر exam_admin_update_questions (ملف exams_edit_questions.sql)،
+     وهي تُحدّث ترتيب أسئلة محاولات الطلاب وتعيد تصحيح النتائج المُسلَّمة اختياريًا. */
+function modalEditExamQuestions(id){
+  const e = examAdmin.exams.find(x => x.id === id); if(!e) return;
+  const st = examStats(id);
+  const qs = JSON.parse(JSON.stringify(e.questions || []));
+  const imgFolder = 'exams/' + id;
+  let editingIdx = -1;
+  const cqTag = t => t === 'written' ? '✍️ كتابي' : t === 'matching' ? '🔗 توصيل' : '☑️ اختيار';
+  openModal(`
+    <h3>✏️ تعديل أسئلة الاختبار: <span class="i18n-skip">${escapeHtml(e.title)}</span></h3>
+    ${(st.done || st.inProgress) ? `<div class="form-msg" style="margin-bottom:10px;">⚠️ ${st.done} طالب سلّموا${st.inProgress ? ` و${st.inProgress} يحلّون الآن` : ''}. تعديل الأسئلة يؤثر على النتائج عند إعادة التصحيح، والطلاب الذين يحلّون الآن يحتاجون تحديث الصفحة ليروا التعديلات.</div>` : ''}
+    <form id="examQEditForm">
+      <div id="eqList"></div>
+      <button type="button" class="btn small teal" id="eqAddBtn">${ICONS.plus} إضافة سؤال جديد</button>
+      <div id="eqBuilder" style="display:none; margin-top:12px; padding:14px; border:1px dashed var(--teal); border-radius:12px;"></div>
+      <label class="exam-check" style="margin-top:14px;"><input type="checkbox" id="eqRegrade" checked><span>إعادة تصحيح علامات الطلاب الذين سلّموا حسب الأسئلة والإجابات الجديدة <span class="hint" style="display:block;">أوقفها إذا أردت إبقاء العلامات القديمة كما هي.</span></span></label>
+      <div id="eqMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="button" class="btn teal solid small" id="eqSaveBtn">💾 حفظ التعديلات</button></div>
+    </form>`, true);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  const form = document.getElementById('examQEditForm');
+  const imgSession = trackQuestionImageSession(form);
+  form.addEventListener('submit', ev => ev.preventDefault());
+  form.addEventListener('keydown', ev => { if(ev.key === 'Enter' && ev.target.tagName === 'INPUT' && ev.target.closest('#eqBuilder')) ev.preventDefault(); });
+  const builderBox = document.getElementById('eqBuilder');
+  const builderOpen = ()=> builderBox.style.display !== 'none';
+  const closeBuilder = ()=>{ builderBox.style.display = 'none'; builderBox.innerHTML = ''; editingIdx = -1; };
+
+  const renderList = ()=>{
+    document.getElementById('eqList').innerHTML = qs.map((q, i) => {
+      const t = q.type || 'mcq';
+      const ans = t === 'mcq' ? `<span class="hint">✔ ${String.fromCharCode(65 + (q.correctIndex || 0))}</span>` : '';
+      return `<div style="display:flex; gap:6px; align-items:center; padding:8px 10px; border:1px solid var(--border, #d9e2ec); border-radius:10px; margin-bottom:6px;">
+        <b style="min-width:24px;">${i + 1}</b><span class="hint">${cqTag(t)}</span>${ans}
+        <span class="i18n-skip" style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(examStripHtml(q.question).slice(0, 90) || '🖼️ سؤال بصورة')}</span>
+        <button type="button" class="btn small" data-eq-up="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="btn small" data-eq-down="${i}" ${i === qs.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="btn small" data-eq-edit="${i}">${ICONS.edit}</button>
+        <button type="button" class="btn small danger" data-eq-del="${i}">${ICONS.trash}</button>
+      </div>`;
+    }).join('') || `<p class="hint">لا توجد أسئلة. أضف سؤالًا واحدًا على الأقل.</p>`;
+    const L = document.getElementById('eqList');
+    L.querySelectorAll('[data-eq-edit]').forEach(b => b.addEventListener('click', ()=> openBuilder(Number(b.dataset.eqEdit))));
+    L.querySelectorAll('[data-eq-del]').forEach(b => b.addEventListener('click', ()=>{
+      if(!confirm('حذف هذا السؤال من الاختبار؟ (يُحذف أيضًا من محاولات الطلاب)')) return;
+      qs.splice(Number(b.dataset.eqDel), 1); closeBuilder(); renderList();
+    }));
+    const move = (i, d)=>{ const j = i + d; if(j < 0 || j >= qs.length) return; [qs[i], qs[j]] = [qs[j], qs[i]]; closeBuilder(); renderList(); };
+    L.querySelectorAll('[data-eq-up]').forEach(b => b.addEventListener('click', ()=> move(Number(b.dataset.eqUp), -1)));
+    L.querySelectorAll('[data-eq-down]').forEach(b => b.addEventListener('click', ()=> move(Number(b.dataset.eqDown), 1)));
+  };
+
+  const openBuilder = (idx)=>{
+    editingIdx = idx;
+    const d = idx >= 0 ? qs[idx] : {};
+    const type = d.type || 'mcq';
+    builderBox.style.display = 'block';
+    builderBox.innerHTML = `
+      <div class="field"><label>نمط السؤال</label><select id="cqType" class="bank-select">
+        <option value="mcq" ${type === 'mcq' ? 'selected' : ''}>اختيار من متعدد (حتى 5 خيارات)</option>
+        <option value="written" ${type === 'written' ? 'selected' : ''}>سؤال كتابي (إجابة حرة)</option>
+        <option value="matching" ${type === 'matching' ? 'selected' : ''}>سؤال توصيل (Matching)</option></select></div>
+      <div class="field"><label>نص السؤال — يمكن إضافة صور وجداول وتنسيق الخط</label>
+        ${rteToolbarHtml('cqQuestionEditor', imgFolder)}
+        <div class="rte-editor i18n-skip" id="cqQuestionEditor" contenteditable="true" dir="ltr" style="text-align:left;" data-placeholder="Write the question here">${d.question || ''}</div></div>
+      <div id="cqTypeFields">${questionTypeFieldsHtml(type, d)}</div>
+      <div class="field"><label>Explanation (تفسير الإجابة، اختياري)</label>
+        ${rteToolbarHtml('cqExplanationEditor', imgFolder)}
+        <div class="rte-editor i18n-skip" id="cqExplanationEditor" contenteditable="true" dir="ltr" style="text-align:left;" data-placeholder="Write an explanation shown to the student with the correct answer">${d.explanation || ''}</div></div>
+      <div id="cqMsg"></div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn teal solid small" id="cqSave">✔ ${idx >= 0 ? 'حفظ تعديل السؤال' : 'إضافة السؤال للاختبار'}</button>
+        <button type="button" class="btn small" id="cqCancel">إلغاء</button></div>`;
+    wireRteToolbar(builderBox);
+    bindMatchPairRows();
+    document.getElementById('cqType').addEventListener('change', (ev)=>{
+      document.getElementById('cqTypeFields').innerHTML = questionTypeFieldsHtml(ev.target.value, {});
+      bindMatchPairRows();
+    });
+    document.getElementById('cqCancel').addEventListener('click', closeBuilder);
+    document.getElementById('cqSave').addEventListener('click', ()=>{
+      const msgBox = document.getElementById('cqMsg');
+      const fd = new FormData(form);
+      const type = document.getElementById('cqType').value;
+      const qc = readRichEditor('cqQuestionEditor');
+      if(!qc.hasContent){ msgBox.innerHTML = `<div class="form-msg error">يرجى كتابة نص السؤال.</div>`; return; }
+      const prev = editingIdx >= 0 ? qs[editingIdx] : null;
+      const o = { id: prev ? prev.id : 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        type, question: qc.html, nature: (prev && prev.nature) || 'past', explanation: readRichEditor('cqExplanationEditor').html };
+      if(type === 'matching'){
+        const r = collectMatchingFromForm();
+        if(!r.ok){ msgBox.innerHTML = `<div class="form-msg error">${r.error}</div>`; return; }
+        o.pairs = r.pairs;
+      } else if(type === 'written'){
+        o.modelAnswer = collectWrittenFromForm(fd).modelAnswer;
+      } else {
+        const r = collectMcqFromForm(fd);
+        if(!r.ok){ msgBox.innerHTML = `<div class="form-msg error">${r.error}</div>`; return; }
+        o.options = r.options; o.correctIndex = r.correctIndex;
+      }
+      if(editingIdx >= 0) qs[editingIdx] = o; else qs.push(o);
+      closeBuilder(); renderList();
+    });
+    builderBox.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  };
+  document.getElementById('eqAddBtn').addEventListener('click', ()=> openBuilder(-1));
+  renderList();
+
+  document.getElementById('eqSaveBtn').addEventListener('click', async ()=>{
+    const msg = document.getElementById('eqMsg');
+    if(builderOpen()){ msg.innerHTML = `<div class="form-msg error">عندك سؤال مفتوح للتعديل — اضغط «حفظ تعديل السؤال» أو «إلغاء» أولًا.</div>`; return; }
+    if(!qs.length){ msg.innerHTML = `<div class="form-msg error">يجب أن يحتوي الاختبار على سؤال واحد على الأقل.</div>`; return; }
+    const btn = document.getElementById('eqSaveBtn'); btn.disabled = true;
+    msg.innerHTML = `<div class="form-msg">جارِ الحفظ...</div>`;
+    const regrade = document.getElementById('eqRegrade').checked;
+    const { data, error } = await supabaseClient.rpc('exam_admin_update_questions', { p_exam: id, p_questions: qs, p_regrade: regrade });
+    if(error){
+      console.error('exam update failed', error);
+      let reason = 'تعذّر حفظ التعديلات.';
+      if(error.code === 'PGRST202' || error.code === '42883') reason = 'الدالة غير موجودة على السيرفر — شغّل ملف exams_edit_questions.sql من Supabase SQL Editor أولًا.';
+      else if(/NOT_ADMIN/.test(error.message || '')) reason = 'ما عندك صلاحية أدمن (تأكد من تسجيل الدخول كأدمن، وسجّل خروج ودخول من جديد).';
+      msg.innerHTML = `<div class="form-msg error">${reason}<br><span class="hint" dir="ltr" style="display:block;margin-top:6px;">${escapeHtml((error.code || '') + ' — ' + (error.message || ''))}</span></div>`;
+      btn.disabled = false; return;
+    }
+    const oldQs = e.questions || [];
+    e.questions = qs;
+    imgSession.markSaved(qs.flatMap(q => [q.question, q.explanation]));
+    /* احذف صور الأسئلة المكتوبة داخل هذا الاختبار فقط إذا لم تعد مستخدمة */
+    try{
+      const usedNow = new Set(), before = new Set();
+      qs.forEach(q => [q.question, q.explanation].forEach(h => qimgPathsInHtml(h).forEach(x => usedNow.add(x))));
+      oldQs.forEach(q => [q.question, q.explanation].forEach(h => qimgPathsInHtml(h).forEach(x => before.add(x))));
+      const orphan = [...before].filter(x => !usedNow.has(x) && x.startsWith('exams/' + id + '/'));
+      if(orphan.length) qimgRemove(orphan);
+    }catch(err){ console.error(err); }
+    closeModal();
+    loadExamsAdmin(true); /* حدّث العلامات بعد إعادة التصحيح */
+    if(regrade && data && data.regraded) alert('✅ تم حفظ التعديلات وإعادة تصحيح ' + data.regraded + ' محاولة.');
+  });
+}
+
 
 function modalExamPreview(id){
   const e = examAdmin.exams.find(x => x.id === id);
@@ -8305,6 +8451,7 @@ function bindAdminExamsEvents(){
   document.querySelectorAll('[data-exam-results]').forEach(b => b.addEventListener('click', ()=>{ examAdmin.view = 'results'; examAdmin.examId = b.dataset.examResults; examAdmin.search = ''; render().then(()=> window.scrollTo({ top:0, behavior:'instant' })); }));
   document.querySelectorAll('[data-exam-preview]').forEach(b => b.addEventListener('click', ()=> modalExamPreview(b.dataset.examPreview)));
   document.querySelectorAll('[data-exam-edit]').forEach(b => b.addEventListener('click', ()=> modalEditExam(b.dataset.examEdit)));
+  document.querySelectorAll('[data-exam-qedit]').forEach(b => b.addEventListener('click', ()=> modalEditExamQuestions(b.dataset.examQedit)));
   document.querySelectorAll('[data-exam-toggle]').forEach(b => b.addEventListener('click', async ()=>{
     const e = examAdmin.exams.find(x => x.id === b.dataset.examToggle); if(!e) return;
     const { error } = await supabaseClient.from('exams').update({ active: !e.active }).eq('id', e.id);
