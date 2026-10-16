@@ -77,7 +77,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
    anon القديم بصيغة JWT لهذا الهيدر تحديدًا). */
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_mqU4Pv057AylZ9kG81DMbA_BVYJ_WXo';
 const supabaseClient = (SUPABASE_URL.startsWith('http'))
-  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
+    })
   : null;
 
 /* shared=true  -> بيانات مشتركة بين كل الزوار، تُخزَّن في Supabase (جدول medora_data)
@@ -196,34 +198,71 @@ async function enforceDeviceLock(phone, userId){
    بذلك سقف عدد الطلاب المتزامنين بشكل كبير مقابل تأخير بسيط (ثوانٍ إلى دقيقة) في سرعة
    اكتشاف إعادة التعيين اليدوية من الأدمن — وهو سيناريو نادر أصلًا. */
 let deviceLockPollTimer = null;
+let deviceLockVisHandler = null;
 function stopDeviceLockWatch(){
   if(deviceLockPollTimer){ clearTimeout(deviceLockPollTimer); deviceLockPollTimer = null; }
+  if(deviceLockVisHandler){ document.removeEventListener('visibilitychange', deviceLockVisHandler); deviceLockVisHandler = null; }
 }
+/* تعديل مهم: لا نعتبر "لا يوجد صف" = "إعادة تعيين من الأدمن" إلا بعد التأكد أن الجلسة
+   صالحة (التوكن غير منتهٍ). عند انتهاء التوكن (مثلًا بعد قفل شاشة الآيفون أثناء محاضرة)
+   يرجع الطلب 0 صفوف بسبب RLS بدون أي خطأ، وكان هذا يطرد الطالب خطأً.
+   كذلك نطلب تأكيد غياب الصف مرتين متتاليتين قبل الطرد. */
 function watchDeviceLock(phone){
   if(!supabaseClient || !phone) return;
   stopDeviceLockWatch();
   const deviceId = getDeviceId();
+  let missingStrikes = 0;
+
+  const kick = async ()=>{
+    stopDeviceLockWatch();
+    try{ await supabaseClient.auth.signOut(); }catch(e){}
+    state.session = null;
+    navigate('login');
+    render();
+    alert('تم تسجيل خروجك: تم إعادة تعيين جهاز هذا الحساب من قِبل الإدارة.');
+  };
+
   const scheduleNext = ()=>{
     const jitterMs = 55000 + Math.floor(Math.random()*20000); // 55-75 ثانية
     deviceLockPollTimer = setTimeout(poll, jitterMs);
   };
+
   async function poll(){
     try{
+      // 1) تأكد أن الجلسة صالحة وجدّدها إذا لزم قبل أي استنتاج
+      let { data:{ session } } = await supabaseClient.auth.getSession();
+      if(!session){
+        const r = await supabaseClient.auth.refreshSession();
+        session = r.data && r.data.session;
+      }
+      // لا جلسة صالحة (شبكة/توكن) -> لا نستنتج شيئًا، نعيد المحاولة لاحقًا
+      if(!session){ scheduleNext(); return; }
+
       const { data, error } = await supabaseClient
         .from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
-      if(!error && (!data || data.device_id !== deviceId)){
-        await supabaseClient.auth.signOut();
-        state.session = null;
-        stopDeviceLockWatch();
-        navigate('login');
-        render();
-        alert('تم تسجيل خروجك: تم إعادة تعيين جهاز هذا الحساب من قِبل الإدارة.');
-        return; // لا نجدول جولة جديدة بعد الخروج
+      if(error){ scheduleNext(); return; }
+
+      if(data && data.device_id === deviceId){
+        missingStrikes = 0;                  // كل شيء سليم
+      } else if(data && data.device_id !== deviceId){
+        await kick(); return;                // الصف موجود بجهاز آخر: واضح
+      } else {
+        missingStrikes++;                    // الصف غير موجود: نؤكد مرتين قبل الطرد
+        if(missingStrikes >= 2){ await kick(); return; }
       }
-    }catch(e){ /* خطأ شبكة عابر - لا نطرد الطالب بسببه، نعيد المحاولة بالجولة الجاية */ }
+    }catch(e){ /* خطأ شبكة عابر - لا نطرد الطالب بسببه */ }
     scheduleNext();
   }
-  scheduleNext(); // أول فحص بعد فاصل عشوائي أيضًا، وليس فوريًا، لتفادي دفعة تسجيل دخول جماعية
+
+  // عند رجوع الطالب للصفحة (بعد قفل الشاشة) نحفّز تجديد التوكن فورًا
+  deviceLockVisHandler = ()=>{
+    if(document.visibilityState === 'visible'){
+      supabaseClient.auth.getSession().catch(()=>{});
+    }
+  };
+  document.addEventListener('visibilitychange', deviceLockVisHandler);
+
+  scheduleNext(); // أول فحص بعد فاصل عشوائي لتفادي دفعة طلبات متزامنة
 }
 
 /* ---------------- App state ---------------- */
