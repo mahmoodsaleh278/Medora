@@ -7955,7 +7955,7 @@ function hyPointHtml(p, key){
   return `<div class="hy-pt ${p.hy ? 'hy' : ''} ${done ? 'done' : ''}" data-k="${key}">
     <div class="hy-pt-text">${p.hy ? '<span class="hy-fire">🔥</span> ' : ''}${p.text}</div>
     ${p.mnemonic ? `<div class="hy-mn">💡 ${p.mnemonic}</div>` : ''}
-    ${p.ar ? `<div class="hy-ar" dir="rtl" data-ar-box="${key}" ${arOn ? '' : 'hidden'}><span class="hy-ar-tag">🇯🇴 شرح بالعربي</span>${p.ar}</div>` : ''}
+    ${p.ar ? `<div class="hy-ar" dir="rtl" data-ar-box="${key}" ${arOn ? '' : 'hidden'}><span class="hy-ar-tag">شرح بالعربي</span>${p.ar}</div>` : ''}
     <div class="hy-pt-act">
       ${p.ar ? `<button type="button" class="hy-mini ar ${arOn ? 'on' : ''}" data-hy-ar="${key}">${arOn ? 'إخفاء العربي' : 'اشرحلي بالعربي'}</button>` : ''}
       <button type="button" class="hy-mini ${done ? 'on' : ''}" data-hy-done="${key}">${done ? '✓ Got it' : 'Got it?'}</button>
@@ -7977,7 +7977,7 @@ function hyReviewHtml(){
     <div class="hy-tools">
       <input type="search" id="hySearch" placeholder="🔎 Search this file..." value="${escapeHtml(r.query)}">
       <label class="hy-toggle"><input type="checkbox" id="hyOnlyChk" ${r.hyOnly ? 'checked' : ''}> 🔥 High Yield only (quick review)</label>
-      ${c.sections.some(sec => sec.points.some(p => p.ar)) ? `<label class="hy-toggle"><input type="checkbox" id="hyArAllChk" ${r.arAll ? 'checked' : ''}> 🇯🇴 عرض الشرح بالعربي لكل النقاط</label>` : ''}
+      ${c.sections.some(sec => sec.points.some(p => p.ar)) ? `<label class="hy-toggle"><input type="checkbox" id="hyArAllChk" ${r.arAll ? 'checked' : ''}> عرض الشرح بالعربي لكل النقاط</label>` : ''}
     </div>
     <div id="hyNoRes" class="empty-state" hidden style="padding:18px;"><p>No matching results.</p></div>
     ${secs || '<div class="empty-state"><p>No sections in this file.</p></div>'}`;
