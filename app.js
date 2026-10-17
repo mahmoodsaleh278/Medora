@@ -147,12 +147,93 @@ async function deleteData(key, shared=true){
 */
 
 /* هوية ثابتة لهذا المتصفح/الجهاز، تُخزَّن محليًا ولا تُشارَك أبدًا */
+/* ---- تخزين هوية الجهاز في 3 أماكن: localStorage + Cookie + IndexedDB ----
+   إذا انمسح مكان واحد أو اثنان (مسح الكاش، ITP في سفاري، تنظيف المتصفح...)
+   يرجع الـ ID من المكان الباقي ويُعاد كتابته في الأماكن الثلاثة. */
+const DEVICE_ID_KEY = 'medora_device_id';
+let _deviceIdCache = null;
+
+function _newDeviceId(){
+  return (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : ('dev-'+Date.now()+'-'+Math.random().toString(16).slice(2));
+}
+function _lsGet(){ try{ return localStorage.getItem(DEVICE_ID_KEY); }catch(e){ return null; } }
+function _lsSet(v){ try{ localStorage.setItem(DEVICE_ID_KEY, v); }catch(e){} }
+function _cookieGet(){
+  try{
+    const m = document.cookie.match(new RegExp('(?:^|; )'+DEVICE_ID_KEY+'=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
+  }catch(e){ return null; }
+}
+function _cookieSet(v){
+  try{
+    const secure = location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = DEVICE_ID_KEY+'='+encodeURIComponent(v)+'; max-age='+(60*60*24*730)+'; path=/; SameSite=Lax'+secure;
+  }catch(e){}
+}
+function _idbOpen(){
+  return new Promise((resolve)=>{
+    try{
+      if(!window.indexedDB){ resolve(null); return; }
+      const req = indexedDB.open('medora_device_db', 1);
+      req.onupgradeneeded = ()=>{ try{ req.result.createObjectStore('kv'); }catch(e){} };
+      req.onsuccess = ()=> resolve(req.result);
+      req.onerror = ()=> resolve(null);
+      req.onblocked = ()=> resolve(null);
+    }catch(e){ resolve(null); }
+  });
+}
+async function _idbGet(){
+  const db = await _idbOpen();
+  if(!db) return null;
+  return new Promise((resolve)=>{
+    try{
+      const tx = db.transaction('kv', 'readonly');
+      const r = tx.objectStore('kv').get(DEVICE_ID_KEY);
+      r.onsuccess = ()=>{ resolve(r.result || null); try{ db.close(); }catch(e){} };
+      r.onerror = ()=>{ resolve(null); try{ db.close(); }catch(e){} };
+    }catch(e){ resolve(null); }
+  });
+}
+async function _idbSet(v){
+  const db = await _idbOpen();
+  if(!db) return;
+  return new Promise((resolve)=>{
+    try{
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(v, DEVICE_ID_KEY);
+      tx.oncomplete = ()=>{ try{ db.close(); }catch(e){} resolve(); };
+      tx.onerror = ()=>{ try{ db.close(); }catch(e){} resolve(); };
+      tx.onabort = ()=>{ try{ db.close(); }catch(e){} resolve(); };
+    }catch(e){ resolve(); }
+  });
+}
+
+/* النسخة الكاملة (async): تقرأ من الأماكن الثلاثة، تستعيد المفقود، وتنشئ ID جديد فقط
+   إذا كانت الأماكن الثلاثة كلها فارغة (أول مرة فعلًا). */
+async function ensureDeviceId(){
+  if(_deviceIdCache) return _deviceIdCache;
+  let id = _lsGet() || _cookieGet() || await _idbGet();
+  if(!id) id = _newDeviceId();
+  _lsSet(id);
+  _cookieSet(id);
+  await _idbSet(id);
+  _deviceIdCache = id;
+  return id;
+}
+
+/* نسخة متزامنة (sync): تُستخدم بعد استدعاء ensureDeviceId مرة واحدة على الأقل */
 function getDeviceId(){
-  let id = localStorage.getItem('medora_device_id');
+  if(_deviceIdCache) return _deviceIdCache;
+  let id = _lsGet() || _cookieGet();
   if(!id){
-    id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('dev-'+Date.now()+'-'+Math.random().toString(16).slice(2));
-    localStorage.setItem('medora_device_id', id);
+    id = _newDeviceId();
   }
+  _lsSet(id);
+  _cookieSet(id);
+  _deviceIdCache = id;
+  _idbSet(id);
   return id;
 }
 
@@ -163,7 +244,7 @@ function getDeviceId(){
      وليس فقط عند التزامن اللحظي)، إلى أن يعيد المشرف تعيين جهاز الحساب. */
 async function enforceDeviceLock(phone, userId){
   if(!supabaseClient) return true;
-  const deviceId = getDeviceId();
+  const deviceId = await ensureDeviceId();
   try{
     const { data: existing, error } = await supabaseClient
       .from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
@@ -1531,7 +1612,6 @@ function renderNavState(){
         <a href="/admin-analytics" class="btn small" style="border-color:#fff;color:#fff;">📊 التحليلات</a>
         <a href="/admin-coupons" class="btn small" style="border-color:#fff;color:#fff;">🎟️ الكوبونات</a>
         <a href="/admin-exams" class="btn small" style="border-color:#fff;color:#fff;">📝 الاختبارات</a>
-        <a href="/admin-highyield" class="btn small" style="border-color:#fff;color:#fff;">🔥 High Yield</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
       </div>`;
@@ -1548,7 +1628,6 @@ async function logout(){
   state.enrollments = [];
   state.coupons = []; state.bankCoupons = []; state.bankAccess = [];
   state.students = []; state.messages = []; state.summaries = []; state.savedQuestions = []; state.summariesCount = null;
-  hyRun = null; hyAdmin = { loaded:false, loading:false, items:[], error:'' };
   examStopTimers(); examRun = null; examAdmin = Object.assign(examAdmin, { loaded:false, exams:[], attempts:[], view:'list', examId:null, search:'' });
   navigate('home'); render();
 }
@@ -7269,7 +7348,6 @@ function setPageMeta({ title, description, noindex } = {}){
    ثم يستدعي setPageMeta(). صفحات لوحة التحكم والحساب الشخصي تتعلّم
    noindex عشان ما تنفهرس بمحركات البحث. */
 function updateSeoMeta(route){
-  if(route.startsWith('hy/')){ setPageMeta({ title: 'High Yield', noindex: true }); return; }
   if(route.startsWith('exam/')){
     setPageMeta({ title: (examRun && examRun.info && examRun.info.title) ? examRun.info.title : 'اختبار', noindex: true });
     return;
@@ -7365,9 +7443,6 @@ function updateSeoMeta(route){
     case 'admin-exams':
       setPageMeta({ title: 'الاختبارات', noindex: true });
       break;
-    case 'admin-highyield':
-      setPageMeta({ title: 'High Yield التفاعلي', noindex: true });
-      break;
 
     default:
       setPageMeta({ description: DEFAULT_DESCRIPTION });
@@ -7385,8 +7460,6 @@ async function render(){
     html = pageCourseDetail(route.slice(7));
   } else if(route.startsWith('exam/')){
     html = pageExam(examIdFromRoute(route));
-  } else if(route.startsWith('hy/')){
-    html = pageHighYield(hyIdFromRoute(route));
   } else {
     switch(route){
       case 'home': html = pageHome(); break;
@@ -7407,7 +7480,6 @@ async function render(){
       case 'admin-analytics': html = pageAdminAnalytics(); break;
       case 'admin-coupons': html = pageAdminCoupons(); break;
       case 'admin-exams': html = pageAdminExams(); break;
-      case 'admin-highyield': html = pageAdminHighYield(); break;
       default: html = pageHome();
     }
   }
@@ -7433,7 +7505,7 @@ async function render(){
    وتمنع تحديد/نسخ محتوى الأسئلة. تظهر فقط للطالب المسجّل دخوله وفقط في صفحة "bank". */
 function updateWatermark(route){
   const isStudent = state.session && state.session.type === 'student';
-  const shouldShow = isStudent && (route === 'bank' || route.startsWith('exam/') || route.startsWith('hy/'));
+  const shouldShow = isStudent && (route === 'bank' || route.startsWith('exam/'));
   document.body.classList.toggle('copy-protected', shouldShow);
   const label = shouldShow ? `${state.session.name || ''}  •  ${state.session.phone || ''}` : '';
   document.querySelectorAll('#app .wizard-card, #app .q-card').forEach(el=>{
@@ -7456,7 +7528,7 @@ function updateWatermark(route){
 document.addEventListener('copy', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
 document.addEventListener('cut', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
 document.addEventListener('contextmenu', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
-document.addEventListener('selectstart', (e)=>{ if(document.body.classList.contains('copy-protected') && !(document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName))) e.preventDefault(); });
+document.addEventListener('selectstart', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
 document.addEventListener('dragstart', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
 document.addEventListener('keydown', (e)=>{
   if(!document.body.classList.contains('copy-protected')) return;
@@ -7465,709 +7537,6 @@ document.addEventListener('keydown', (e)=>{
   if(e.key === 'F12') e.preventDefault();
   if((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(k)) e.preventDefault();
 });
-
-/* =========================================================================
-   High Yield التفاعلي
-   - المشرف: صفحة /admin-highyield لرفع ملف High Yield (PDF/صورة) فيتحوّل بالذكاء الاصطناعي
-     إلى محتوى منظّم (نقاط + بطاقات + أسئلة)، يراجعه المشرف ويعدّله، ثم ينسخ رابطه.
-   - الطالب: يفتح /hy/<id>؛ لا يظهر المحتوى إلا لمن سجّل دخوله (محمي بـ RLS على السيرفر أيضًا).
-     تقدّمه (نقاط مفهومة، محفوظات، بطاقات، أخطاء، سلسلة الأيام) يُحفظ بحسابه.
-   - الجداول المطلوبة: high_yields و high_yield_progress (راجع highyield.sql).
-   ========================================================================= */
-const HY_INTERVALS_DAYS = [1,3,7,14,30];
-let hyAdmin = { loaded:false, loading:false, items:[], error:'' };
-let hyRun = null;
-let hySaveTimer = null;
-
-function hyNewId(){ return Math.random().toString(36).slice(2,7) + Math.random().toString(36).slice(2,7); }
-function hyLink(id){ return location.origin + '/hy/' + id; }
-function hyIdFromRoute(route){ return route && route.startsWith('hy/') ? decodeURIComponent(route.slice(3).split('/')[0]) : null; }
-function hyUserKey(){ const s = state.session; return s ? (s.type + ':' + (s.phone || s.username || s.teacherId || '')) : 'anon'; }
-function hyLocalKey(r){ return 'medora_hy_' + hyUserKey() + '_' + r.id; }
-function hyErrMsg(e){
-  if(e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202')) return 'جداول High Yield غير موجودة بعد — شغّل ملف highyield.sql من Supabase أولًا.';
-  return (typeof isNetworkOrServerError === 'function' && isNetworkOrServerError(e)) ? SERVER_BUSY_MSG : 'حدث خطأ غير متوقع، حاول مرة أخرى.';
-}
-function hyShuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
-function hyToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function hyStreak(days){
-  const set = new Set(days||[]); let n = 0; const d = new Date();
-  const key = x => x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
-  if(!set.has(key(d))) d.setDate(d.getDate()-1);          /* اليوم لسا ما درس؟ نحسب من أمس */
-  while(set.has(key(d))){ n++; d.setDate(d.getDate()-1); }
-  return n;
-}
-
-/* ---------- تطبيع وتنظيف المحتوى القادم من الـ AI أو من تعديل المشرف ---------- */
-function hyNormalize(raw){
-  raw = (raw && typeof raw === 'object') ? raw : {};
-  const s = x => sanitizeSummaryHtml(String(x == null ? '' : x));
-  const t = x => String(x == null ? '' : x).trim();
-  const out = { summary: s(raw.summary), sections: [], flashcards: [], mcqs: [] };
-  (Array.isArray(raw.sections) ? raw.sections : []).forEach(sec => {
-    if(!sec) return;
-    const points = (Array.isArray(sec.points) ? sec.points : [])
-      .map(p => typeof p === 'string' ? { text:p } : p)
-      .filter(p => p && t(p.text))
-      .map(p => ({ text: s(p.text), hy: !!p.hy, mnemonic: s(p.mnemonic || '') }));
-    const table = sec.table ? s(sec.table) : '';
-    if(t(sec.title) && (points.length || table)) out.sections.push({ title: t(sec.title), points, table });
-  });
-  (Array.isArray(raw.flashcards) ? raw.flashcards : []).forEach(c => {
-    if(c && t(c.q) && t(c.a)) out.flashcards.push({ q: s(c.q), a: s(c.a) });
-  });
-  (Array.isArray(raw.mcqs) ? raw.mcqs : []).forEach(m => {
-    if(!m || !t(m.q) || !Array.isArray(m.options)) return;
-    const options = m.options.map(o => s(o)).filter(o => t(o));
-    const correct = Number(m.correct);
-    if(options.length < 2 || !Number.isInteger(correct) || correct < 0 || correct >= options.length) return;
-    out.mcqs.push({ q: s(m.q), options, correct, explanation: s(m.explanation || '') });
-  });
-  return out;
-}
-function hyCounts(c){
-  let points = 0, hy = 0;
-  c.sections.forEach(sec => sec.points.forEach(p => { points++; if(p.hy) hy++; }));
-  return { sections: c.sections.length, points, hy, cards: c.flashcards.length, mcqs: c.mcqs.length };
-}
-function hyMapRow(r){
-  return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', active:r.active !== false,
-    createdAt:Number(r.created_at) || 0, content: hyNormalize(r.content) };
-}
-function hyParseAiJson(txt){
-  const tryParse = str => {
-    let t = String(str || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
-    const a = t.indexOf('{'), b = t.lastIndexOf('}');
-    if(a < 0 || b <= a) throw new Error('no json');
-    return JSON.parse(t.slice(a, b + 1));
-  };
-  try{ return tryParse(txt); }
-  catch(e){
-    /* لو الخدمة غلّفت الرد بوسوم HTML نشيلها ونعيد المحاولة */
-    const d = document.createElement('div'); d.innerHTML = String(txt || '');
-    try{ return tryParse(d.textContent); }catch(e2){ throw new Error('تعذّر فهم ناتج الذكاء الاصطناعي. جرّب مرة ثانية أو استخدم الإدخال اليدوي.'); }
-  }
-}
-function hyBuildPrompt({ title, courseTitle, notes }){
-  return `You convert a "High Yield" study file for nursing/dental students into structured interactive study data.
-Title: ${title}.${courseTitle ? ' Subject: ' + courseTitle + '.' : ''}
-Read the attached file carefully and output ONE valid JSON object and NOTHING else (no markdown, no code fences, no commentary).
-Write EVERYTHING in English only (titles, points, mnemonics, flashcards, MCQs, explanations, summary). If the file is in Arabic or any other language, translate it into clear academic English and keep standard medical terms. Do not use any Arabic words in the output. Do not invent facts that are not in the file.
-${notes ? 'Extra instructions from the admin: ' + notes + '\n' : ''}
-JSON schema:
-{
- "summary": "2-3 sentence overview of the file",
- "sections": [ { "title": "section heading", "points": [ { "text": "one concise high-yield fact", "hy": true, "mnemonic": "optional memory trick, or empty string" } ], "table": "optional full HTML <table> if the file contains a comparison/classification table, else empty string" } ],
- "flashcards": [ { "q": "short question", "a": "short answer" } ],
- "mcqs": [ { "q": "question", "options": ["A","B","C","D"], "correct": 0, "explanation": "why the correct option is right" } ]
-}
-Rules:
-- Follow the structure of the file: one section per heading/topic. Points must be short (one idea each). Set "hy": true only for the most exam-critical points.
-- If the file has tables, reproduce them as HTML tables (<table><tr><th>/<td>) in the section's "table" field.
-- Create 15-30 flashcards and 10-20 MCQs (4 options each, "correct" is the zero-based index of the right option) based ONLY on the file content.
-- Inside string values you may use only these tags: <b>, <i>, <u>, <br>, and <table>/<tr>/<th>/<td> for tables. Escape double quotes inside strings properly so the JSON stays valid.`;
-}
-
-/* ============================ جهة المشرف ============================ */
-async function hyLoadAdmin(force){
-  if(hyAdmin.loading || (hyAdmin.loaded && !force)) return;
-  hyAdmin.loading = true; hyAdmin.error = '';
-  try{
-    const { data, error } = await supabaseClient.from('high_yields').select('*').order('created_at', { ascending:false });
-    if(error) throw error;
-    hyAdmin.items = (data || []).map(hyMapRow);
-  }catch(e){ console.error('hyLoadAdmin failed', e); hyAdmin.error = hyErrMsg(e); }
-  hyAdmin.loading = false; hyAdmin.loaded = true;
-  if(currentRoute() === 'admin-highyield') render();
-}
-
-function hyAdminCardHtml(it){
-  const c = hyCounts(it.content);
-  const course = state.courses.find(x => x.id === it.courseId);
-  return `
-  <div class="wizard-card hy-admin-card" style="margin-bottom:14px;">
-    <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <div style="min-width:200px; flex:1;">
-        <h3 style="margin:0 0 4px; font-size:16px;">🔥 ${escapeHtml(it.title)}</h3>
-        <div class="hint" style="margin:0;">${course ? escapeHtml(course.title) + ' • ' : ''}${examFmtDate(it.createdAt)}</div>
-      </div>
-      <span class="hy-chip ${it.active ? 'ok' : 'off'}">${it.active ? 'منشور' : 'متوقف'}</span>
-    </div>
-    <div class="hy-stats-row">
-      <span>${c.sections} قسم</span><span>${c.points} نقطة (${c.hy} 🔥)</span><span>${c.cards} بطاقة</span><span>${c.mcqs} سؤال</span>
-    </div>
-    <div class="exam-link-row">
-      <input type="text" readonly value="${escapeHtml(hyLink(it.id))}" onclick="this.select()">
-      <button class="btn small teal" data-hy-copy="${it.id}">📋 نسخ الرابط</button>
-    </div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" data-hy-open="${it.id}">👁 فتح</button>
-      <button class="btn small edit" data-hy-edit="${it.id}">${ICONS.edit} تعديل</button>
-      <button class="btn small" data-hy-toggle="${it.id}">${it.active ? '⏸ إيقاف' : '▶️ تفعيل'}</button>
-      <button class="btn small danger" data-hy-del="${it.id}">${ICONS.trash} حذف</button>
-    </div>
-  </div>`;
-}
-
-function pageAdminHighYield(){
-  if(!isAdminSession()){
-    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
-  }
-  if(hyAdmin.error) return `<section class="section"><div class="container"><div class="empty-state"><h3>تعذّر التحميل</h3><p>${escapeHtml(hyAdmin.error)}</p><button class="btn small" id="hyRefreshBtn">🔄 إعادة المحاولة</button></div></div></section>`;
-  if(!hyAdmin.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
-  return `
-  <section class="section"><div class="container">
-    <div class="toolbar">
-      <h2>🔥 High Yield التفاعلي</h2>
-      <div class="toolbar-actions"><button class="btn teal solid" id="hyCreateBtn">${ICONS.plus} رفع ملف جديد</button></div>
-    </div>
-    <p class="hint" style="margin:-10px 0 20px;">ارفع ملف High Yield جاهز (PDF أو صورة) وسيتحوّل إلى صفحة تفاعلية: نقاط قابلة للتتبّع، بطاقات مراجعة، وأسئلة تدريبية. راجعه وعدّله ثم انسخ الرابط وأرسله للطلاب — لا يفتحه إلا من لديه حساب مسجّل على المنصة.</p>
-    ${hyAdmin.items.length ? hyAdmin.items.map(hyAdminCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>لا توجد ملفات بعد.</p></div>`}
-  </div></section>`;
-}
-
-function hyCourseOptions(selected){
-  return `<option value="">عام (بدون مادة)</option>` + state.courses.map(c =>
-    `<option class="i18n-skip" value="${c.id}" ${c.id === selected ? 'selected' : ''}>${escapeHtml(c.title)} — ${escapeHtml(c.university)}</option>`).join('');
-}
-
-function hyModalStep1(){
-  openModal(`
-    <h3>🔥 رفع ملف High Yield</h3>
-    <form id="hyGenForm">
-      <div class="field"><label>عنوان الملف</label><input type="text" name="title" required maxlength="120" placeholder="مثال: High Yield — Cardiovascular"></div>
-      <div class="field"><label>المادة (اختياري)</label><select name="course" class="bank-select">${hyCourseOptions('')}</select></div>
-      <div class="field"><label>ملف الـ High Yield (PDF أو صورة، حتى 20MB)</label><input type="file" id="hyFile" accept="application/pdf,image/*"></div>
-      <div class="field"><label>تعليمات إضافية للذكاء الاصطناعي (اختياري)</label><textarea name="notes" rows="2" placeholder="مثال: ركّز على الجرعات، أو اعمل الأسئلة بصيغة سريرية"></textarea></div>
-      <div id="hyGenMsg"></div>
-      <div class="modal-actions">
-        <button type="button" class="btn small" id="cancelModal">إلغاء</button>
-        <button type="button" class="btn small" id="hyManualBtn">إدخال يدوي (JSON)</button>
-        <button type="submit" class="btn teal solid small" id="hyGenBtn">✨ حوّله لتفاعلي</button>
-      </div>
-    </form>`, true);
-  document.getElementById('cancelModal').addEventListener('click', closeModal);
-  const form = document.getElementById('hyGenForm');
-  const msg = document.getElementById('hyGenMsg');
-  document.getElementById('hyManualBtn').addEventListener('click', () => {
-    const fd = new FormData(form);
-    hyModalStep2({ id:null, title:(fd.get('title') || '').trim(), description:'', courseId:fd.get('course') || '', active:true,
-      raw:{ summary:'', sections:[{ title:'', points:[{ text:'', hy:true, mnemonic:'' }], table:'' }], flashcards:[{ q:'', a:'' }], mcqs:[{ q:'', options:['','','',''], correct:0, explanation:'' }] } });
-  });
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(form);
-    const title = (fd.get('title') || '').trim();
-    const file = document.getElementById('hyFile').files[0];
-    if(!title){ msg.innerHTML = `<div class="form-msg error">اكتب عنوانًا للملف.</div>`; return; }
-    if(!file){ msg.innerHTML = `<div class="form-msg error">ارفع ملف الـ High Yield أولًا.</div>`; return; }
-    if(file.size > 20*1024*1024){ msg.innerHTML = `<div class="form-msg error">حجم الملف كبير (الحد 20MB).</div>`; return; }
-    const mimeType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : '');
-    if(mimeType !== 'application/pdf' && !mimeType.startsWith('image/')){ msg.innerHTML = `<div class="form-msg error">الصيغ المدعومة: PDF أو صورة فقط.</div>`; return; }
-    const btn = document.getElementById('hyGenBtn'); btn.disabled = true;
-    msg.innerHTML = `<div class="form-msg ok"><span class="loading-dot"></span> جارِ تحليل الملف وتحويله... قد يستغرق حتى دقيقة.</div>`;
-    try{
-      const course = state.courses.find(c => c.id === fd.get('course'));
-      const fileBase64 = await fileToBase64(file);
-      const prompt = hyBuildPrompt({ title, courseTitle: course ? course.title : '', notes: (fd.get('notes') || '').trim() });
-      const out = await generateAiSummary({ fileBase64, mimeType, prompt });
-      const raw = hyParseAiJson(out);
-      hyModalStep2({ id:null, title, description:(raw.summary ? examStripHtml(String(raw.summary)).slice(0, 300) : ''), courseId:fd.get('course') || '', active:true, raw });
-    }catch(err){
-      console.error('hy generate failed', err);
-      btn.disabled = false;
-      msg.innerHTML = `<div class="form-msg error">${escapeHtml(err.message || 'حدث خطأ غير متوقع')}</div>`;
-    }
-  });
-}
-
-function hyModalStep2(d){
-  openModal(`
-    <h3>✅ راجع المحتوى ثم انشره</h3>
-    <form id="hyForm">
-      <div class="field"><label>العنوان</label><input type="text" name="title" required maxlength="120" value="${escapeHtml(d.title)}"></div>
-      <div class="field"><label>وصف قصير (اختياري)</label><textarea name="description" rows="2" maxlength="400">${escapeHtml(d.description)}</textarea></div>
-      <div class="field"><label>المادة</label><select name="course" class="bank-select">${hyCourseOptions(d.courseId)}</select></div>
-      <div class="field"><label>المحتوى (JSON) — عدّل النصوص أو أضف/احذف نقاطًا وأسئلة مباشرة</label>
-        <textarea id="hyJson" rows="14" spellcheck="false" style="direction:ltr; text-align:left; font-family:monospace; font-size:12.5px;"></textarea>
-        <div id="hyJsonStats" class="hint" style="margin-top:6px;"></div></div>
-      <label class="section-picker-check" style="display:flex; gap:8px; align-items:center; margin:8px 0;"><input type="checkbox" name="active" ${d.active ? 'checked' : ''}> منشور (يظهر للطلاب)</label>
-      <div id="hyFormMsg"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small" id="hySaveBtn">💾 حفظ</button></div>
-    </form>`, true);
-  const ta = document.getElementById('hyJson');
-  ta.value = JSON.stringify(d.raw, null, 2);
-  const stats = document.getElementById('hyJsonStats');
-  const refresh = () => {
-    try{
-      const c = hyCounts(hyNormalize(JSON.parse(ta.value)));
-      stats.innerHTML = `✔ JSON صالح — ${c.sections} قسم، ${c.points} نقطة (${c.hy} 🔥)، ${c.cards} بطاقة، ${c.mcqs} سؤال`;
-      stats.style.color = 'var(--teal)';
-    }catch(e){ stats.textContent = '⚠ JSON غير صالح: ' + e.message; stats.style.color = 'var(--danger)'; }
-  };
-  ta.addEventListener('input', refresh); refresh();
-  document.getElementById('cancelModal').addEventListener('click', closeModal);
-  document.getElementById('hyForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target), msg = document.getElementById('hyFormMsg');
-    let content;
-    try{ content = hyNormalize(JSON.parse(ta.value)); }catch(err){ msg.innerHTML = `<div class="form-msg error">JSON غير صالح: ${escapeHtml(err.message)}</div>`; return; }
-    const c = hyCounts(content);
-    if(!c.points && !c.cards && !c.mcqs){ msg.innerHTML = `<div class="form-msg error">المحتوى فارغ — أضف نقطة أو بطاقة أو سؤالًا واحدًا على الأقل.</div>`; return; }
-    const btn = document.getElementById('hySaveBtn'); btn.disabled = true;
-    const id = d.id || hyNewId();
-    const row = { id, title:(fd.get('title') || '').trim(), description:(fd.get('description') || '').trim(), course_id: fd.get('course') || null,
-      content, active: !!fd.get('active'), created_at: d.createdAt || Date.now() };
-    const { error } = await supabaseClient.from('high_yields').upsert(row);
-    if(error){ console.error('hy save failed', error); btn.disabled = false; msg.innerHTML = `<div class="form-msg error">${escapeHtml(hyErrMsg(error))}</div>`; return; }
-    closeModal(); await hyLoadAdmin(true);
-  });
-}
-
-function bindHyAdminEvents(){
-  hyLoadAdmin();
-  const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
-  on('hyCreateBtn', hyModalStep1);
-  on('hyRefreshBtn', () => { hyAdmin.error = ''; hyAdmin.loaded = false; hyLoadAdmin(true); });
-  const find = id => hyAdmin.items.find(x => x.id === id);
-  document.querySelectorAll('[data-hy-copy]').forEach(b => b.addEventListener('click', () => {
-    const link = hyLink(b.dataset.hyCopy);
-    const done = () => { const o = b.innerHTML; b.innerHTML = '✅ تم النسخ'; setTimeout(() => { b.innerHTML = o; }, 1600); };
-    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done).catch(() => prompt('انسخ الرابط:', link));
-    else prompt('انسخ الرابط:', link);
-  }));
-  document.querySelectorAll('[data-hy-open]').forEach(b => b.addEventListener('click', () => navigate('hy/' + b.dataset.hyOpen)));
-  document.querySelectorAll('[data-hy-edit]').forEach(b => b.addEventListener('click', () => {
-    const it = find(b.dataset.hyEdit); if(!it) return;
-    hyModalStep2({ id:it.id, title:it.title, description:it.description, courseId:it.courseId, active:it.active, createdAt:it.createdAt, raw:it.content });
-  }));
-  document.querySelectorAll('[data-hy-toggle]').forEach(b => b.addEventListener('click', async () => {
-    const it = find(b.dataset.hyToggle); if(!it) return;
-    b.disabled = true;
-    const { error } = await supabaseClient.from('high_yields').update({ active: !it.active }).eq('id', it.id);
-    if(error){ alert(hyErrMsg(error)); b.disabled = false; return; }
-    it.active = !it.active; render();
-  }));
-  document.querySelectorAll('[data-hy-del]').forEach(b => b.addEventListener('click', () => {
-    const it = find(b.dataset.hyDel); if(!it) return;
-    confirmDelete('سيتم حذف هذا الملف وتقدّم الطلاب فيه نهائيًا. هل أنت متأكد؟', async () => {
-      const { error } = await supabaseClient.from('high_yields').delete().eq('id', it.id);
-      if(error){ alert(hyErrMsg(error)); return; }
-      hyAdmin.items = hyAdmin.items.filter(x => x.id !== it.id); render();
-    });
-  }));
-}
-
-/* ============================ جهة الطالب ============================ */
-function hyEmptyProg(){ return { done:{}, marks:{}, cards:{}, wrong:{}, quiz:{ best:0, last:0, attempts:0 }, days:[] }; }
-function hyNewRun(id){
-  return { id, loading:false, loaded:false, userKey:null, item:null, error:'', prog:hyEmptyProg(), uid:null,
-    tab:'review', query:'', hyOnly:false, open:null, fc:null, qz:null };
-}
-async function hyUid(r){
-  if(r.uid) return r.uid;
-  try{ const { data } = await supabaseClient.auth.getSession(); r.uid = (data && data.session && data.session.user && data.session.user.id) || null; }catch(e){}
-  return r.uid;
-}
-async function hyLoadProgress(r){
-  let local = null, remote = null;
-  try{ local = JSON.parse(localStorage.getItem(hyLocalKey(r)) || 'null'); }catch(e){}
-  try{
-    const uid = await hyUid(r);
-    if(uid){
-      const { data, error } = await supabaseClient.from('high_yield_progress').select('data').eq('hy_id', r.id).eq('user_id', uid).maybeSingle();
-      if(!error && data) remote = data.data;
-    }
-  }catch(e){}
-  return Object.assign(hyEmptyProg(), local || {}, remote || {});
-}
-function hySave(){ clearTimeout(hySaveTimer); hySaveTimer = setTimeout(hyFlush, 900); }
-async function hyFlush(){
-  clearTimeout(hySaveTimer); hySaveTimer = null;
-  const r = hyRun; if(!r || !r.item || !r.prog) return;
-  try{ localStorage.setItem(hyLocalKey(r), JSON.stringify(r.prog)); }catch(e){}
-  try{
-    const uid = await hyUid(r); if(!uid) return;
-    await supabaseClient.from('high_yield_progress').upsert({ user_id:uid, hy_id:r.id, data:r.prog, updated_at:new Date().toISOString() }, { onConflict:'user_id,hy_id' });
-  }catch(e){ console.warn('hy progress save failed', e); }
-}
-function hyTouchDay(){
-  const days = hyRun.prog.days, t = hyToday();
-  if(!days.includes(t)){ days.push(t); if(days.length > 120) days.splice(0, days.length - 120); }
-}
-
-async function hyEnsureLoaded(id){
-  const r = hyRun; if(!r || !state.session) return;
-  const key = hyUserKey();
-  if(r.loading || (r.loaded && r.userKey === key)) return;
-  r.loading = true; r.userKey = key;
-  try{
-    const { data, error } = await supabaseClient.from('high_yields').select('*').eq('id', id).maybeSingle();
-    if(error) throw error;
-    if(data && (data.active !== false || isAdminSession())){
-      r.item = hyMapRow(data); r.error = '';
-      r.prog = await hyLoadProgress(r);
-    }else{ r.item = null; r.error = 'This file does not exist or is not available right now.'; }
-  }catch(e){ console.error('hy load failed', e); r.item = null; r.error = hyErrMsg(e); }
-  r.loading = false; r.loaded = true;
-  if(hyRun === r && hyIdFromRoute(currentRoute()) === id) render();
-}
-
-function hyWatermarkCss(){
-  const s = state.session; if(!s || s.type !== 'student') return '';
-  const label = String((s.name || '') + '  •  ' + (s.phone || '')).replace(/[<>&"']/g, '');
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200'><text x='20' y='110' transform='rotate(-24 160 100)' font-family='sans-serif' font-size='15' fill='#808080' fill-opacity='0.09'>${label}</text></svg>`;
-  return `background-image:url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}");`;
-}
-
-function pageHighYield(id){
-  if(!supabaseClient) return `<section class="section"><div class="hy-wrap"><div class="empty-state"><h3>إعدادات الاتصال غير مكتملة</h3></div></div></section>`;
-  if(!hyRun || hyRun.id !== id) hyRun = hyNewRun(id);
-  const r = hyRun;
-  const wrap = inner => `<section class="section"><div class="hy-wrap">${inner}</div></section>`;
-  if(!state.session){
-    return wrap(`<div class="wizard-card" style="text-align:center;"><h3>🔥 High Yield</h3>
-      <p class="hint">This content is available to registered students only. Please log in to your account to continue.</p>
-      <a href="/login" class="btn teal solid">Log in / Sign up</a></div>`);
-  }
-  if(!r.loaded || r.userKey !== hyUserKey()){
-    return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> Loading...</div>`);
-  }
-  if(!r.item) return wrap(`<div class="empty-state"><h3>Content unavailable</h3><p>${escapeHtml(r.error || 'Please check the link or contact the admin.')}</p></div>`);
-  const c = r.item.content;
-  const tabs = [['review','📖 Review', true], ['cards','🃏 Flashcards', c.flashcards.length > 0], ['quiz','❓ Quiz', c.mcqs.length > 0], ['saved','⭐ Saved', true]]
-    .filter(t => t[2]).map(t => `<button type="button" class="hy-tab ${r.tab === t[0] ? 'on' : ''}" data-hy-tab="${t[0]}">${t[1]}</button>`).join('');
-  return wrap(`
-    ${hyWatermarkCss() ? `<div class="hy-wm" style="${hyWatermarkCss()}"></div>` : ''}
-    <div id="hyRoot">
-      <div class="hy-top">
-        <div class="hy-title">🔥 ${escapeHtml(r.item.title)}</div>
-        <div class="hy-chips"><span class="hy-chip" id="hyStreakChip"></span><span class="hy-chip" id="hyPctChip"></span></div>
-        <div class="hy-bar"><i id="hyBarFill"></i></div>
-        <div class="hy-tabs">${tabs}</div>
-      </div>
-      <div id="hyBody"></div>
-    </div>`);
-}
-
-function hyPointKeys(){
-  const keys = [];
-  hyRun.item.content.sections.forEach((sec, si) => sec.points.forEach((p, pi) => keys.push('s' + si + 'p' + pi)));
-  return keys;
-}
-function hyUpdateTop(){
-  const r = hyRun; if(!r || !r.item) return;
-  const keys = hyPointKeys(), done = keys.filter(k => r.prog.done[k]).length;
-  const pct = keys.length ? Math.round(done / keys.length * 100) : 0;
-  const st = hyStreak(r.prog.days);
-  const a = document.getElementById('hyStreakChip'), b = document.getElementById('hyPctChip'), f = document.getElementById('hyBarFill');
-  if(a) a.textContent = st ? ('🔥 ' + st + (st === 1 ? '-day streak' : '-day streak')) : '🔥 Start your streak today';
-  if(b) b.textContent = keys.length ? ('✓ ' + done + '/' + keys.length + ' (' + pct + '%)') : '—';
-  if(f) f.style.width = pct + '%';
-}
-
-function hyPointHtml(p, key){
-  const r = hyRun, done = !!r.prog.done[key], mk = !!r.prog.marks[key];
-  return `<div class="hy-pt ${p.hy ? 'hy' : ''} ${done ? 'done' : ''}" data-k="${key}">
-    <div class="hy-pt-text">${p.hy ? '<span class="hy-fire">🔥</span> ' : ''}${p.text}</div>
-    ${p.mnemonic ? `<div class="hy-mn">💡 ${p.mnemonic}</div>` : ''}
-    <div class="hy-pt-act">
-      <button type="button" class="hy-mini ${done ? 'on' : ''}" data-hy-done="${key}">${done ? '✓ Got it' : 'Got it?'}</button>
-      <button type="button" class="hy-mini star ${mk ? 'on' : ''}" data-hy-mark="${key}" title="Save">${mk ? '★' : '☆'}</button>
-    </div></div>`;
-}
-function hyReviewHtml(){
-  const r = hyRun, c = r.item.content;
-  if(!r.open) r.open = new Set(c.sections.length ? [0] : []);
-  const secs = c.sections.map((sec, si) => `
-    <details class="hy-sec" data-sec="${si}" ${r.open.has(si) ? 'open' : ''}>
-      <summary><span>${escapeHtml(sec.title)}</span><small>${sec.points.filter((p, pi) => r.prog.done['s' + si + 'p' + pi]).length}/${sec.points.length}</small></summary>
-      <div class="hy-sec-body">
-        ${sec.points.map((p, pi) => hyPointHtml(p, 's' + si + 'p' + pi)).join('')}
-        ${sec.table ? `<div class="hy-table">${sec.table}</div>` : ''}
-      </div></details>`).join('');
-  return `
-    ${c.summary ? `<div class="hy-summary">${c.summary}</div>` : ''}
-    <div class="hy-tools">
-      <input type="search" id="hySearch" placeholder="🔎 Search this file..." value="${escapeHtml(r.query)}">
-      <label class="hy-toggle"><input type="checkbox" id="hyOnlyChk" ${r.hyOnly ? 'checked' : ''}> 🔥 High Yield only (quick review)</label>
-    </div>
-    <div id="hyNoRes" class="empty-state" hidden style="padding:18px;"><p>No matching results.</p></div>
-    ${secs || '<div class="empty-state"><p>No sections in this file.</p></div>'}`;
-}
-function hyApplyFilter(){
-  const r = hyRun; if(!r) return;
-  const q = (r.query || '').trim().toLowerCase();
-  let any = false;
-  document.querySelectorAll('#hyBody .hy-sec').forEach(sec => {
-    let vis = 0;
-    sec.querySelectorAll('.hy-pt').forEach(p => {
-      const ok = (!r.hyOnly || p.classList.contains('hy')) && (!q || p.textContent.toLowerCase().includes(q));
-      p.hidden = !ok; if(ok) vis++;
-    });
-    const tbl = sec.querySelector('.hy-table');
-    if(tbl){
-      tbl.hidden = !!(r.hyOnly || (q && !tbl.textContent.toLowerCase().includes(q)));
-      if(!tbl.hidden && q) vis++;
-    }
-    sec.hidden = (r.hyOnly || q) ? vis === 0 : false;
-    if(q && vis > 0) sec.open = true;
-    if(!sec.hidden) any = true;
-  });
-  const nr = document.getElementById('hyNoRes'); if(nr) nr.hidden = any || !(r.hyOnly || q);
-}
-
-function hyCardMastered(i){ const st = hyRun.prog.cards['c' + i]; return !!(st && st.box >= 3); }
-function hyBuildQueue(all){
-  const now = Date.now(), idx = [];
-  hyRun.item.content.flashcards.forEach((c, i) => { const st = hyRun.prog.cards['c' + i]; if(all || !st || st.due <= now) idx.push(i); });
-  return hyShuffle(idx);
-}
-function hyCardsHtml(){
-  const r = hyRun, cards = r.item.content.flashcards;
-  if(!r.fc) r.fc = { queue: hyBuildQueue(false), pos:0, flipped:false };
-  const fc = r.fc;
-  const mastered = cards.filter((c, i) => hyCardMastered(i)).length;
-  if(fc.pos >= fc.queue.length){
-    return `<div class="wizard-card hy-center"><h3>🎉 You're done for today</h3>
-      <p class="hint">You've mastered ${mastered} of ${cards.length} cards. Harder cards will come back automatically at the right time.</p>
-      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-        <button class="btn" data-hy-fcprev>← Previous card</button>
-        <button class="btn teal solid" data-hy-fc-all>🔁 Review all cards</button></div></div>`;
-  }
-  const c = cards[fc.queue[fc.pos]];
-  return `
-    <div class="hy-fc-meta">Card ${fc.pos + 1} of ${fc.queue.length} • Mastered ${mastered}/${cards.length}</div>
-    <div class="hy-fc ${fc.flipped ? 'flipped' : ''}" data-hy-flip>
-      <div class="hy-fc-lbl">${fc.flipped ? 'Answer' : 'Question'}</div>
-      <div class="hy-fc-txt">${fc.flipped ? c.a : c.q}</div>
-      ${fc.flipped ? '' : '<div class="hint" style="margin:14px 0 0;">Tap to reveal the answer</div>'}
-    </div>
-    ${fc.flipped ? `<div class="hy-rate">
-      <button class="hy-rate-btn bad" data-hy-rate="forgot">😵 Forgot</button>
-      <button class="hy-rate-btn mid" data-hy-rate="unsure">🤔 Unsure</button>
-      <button class="hy-rate-btn good" data-hy-rate="know">✅ Knew it</button></div>` : ''}
-    ${fc.pos > 0 ? `<div style="margin-top:12px;"><button class="btn small" data-hy-fcprev>← Previous card</button></div>` : ''}`;
-}
-function hyRate(kind){
-  const r = hyRun, fc = r.fc; if(!fc || fc.pos >= fc.queue.length) return;
-  const i = fc.queue[fc.pos], key = 'c' + i, now = Date.now();
-  const st = r.prog.cards[key] || { box:0, due:0 };
-  if(kind === 'know'){ st.box = Math.min(st.box + 1, HY_INTERVALS_DAYS.length); st.due = now + HY_INTERVALS_DAYS[st.box - 1] * 864e5; }
-  else if(kind === 'unsure'){ st.due = now + 6 * 36e5; fc.queue.push(i); }
-  else { st.box = 0; st.due = now; fc.queue.splice(Math.min(fc.pos + 4, fc.queue.length), 0, i); }
-  r.prog.cards[key] = st;
-  fc.pos++; fc.flipped = false;
-  hyTouchDay(); hySave(); hyDraw();
-}
-
-function hyQzScore(){
-  const qz = hyRun.qz, qs = hyRun.item.content.mcqs;
-  return qz.order.filter((qi, p) => qz.answers[p] === qs[qi].correct).length;
-}
-function hyQuizHtml(){
-  const r = hyRun, qs = r.item.content.mcqs, wrongIdx = qs.map((q, i) => i).filter(i => r.prog.wrong['m' + i]);
-  const qz = r.qz;
-  if(!qz){
-    const b = r.prog.quiz;
-    return `<div class="wizard-card hy-center"><h3>❓ Test yourself</h3>
-      <p class="hint">${qs.length} questions from this file, with an explanation for every answer.${b.attempts ? ` Your best score: <b>${b.best}%</b> (${b.attempts} attempt${b.attempts > 1 ? 's' : ''})` : ''}</p>
-      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-        <button class="btn teal solid" data-hy-qstart="all">Start quiz</button>
-        ${wrongIdx.length ? `<button class="btn" data-hy-qstart="wrong">🔁 Review my mistakes (${wrongIdx.length})</button>` : ''}
-      </div></div>`;
-  }
-  if(qz.pos >= qz.order.length){
-    const score = hyQzScore(), pct = Math.round(score / qz.order.length * 100);
-    return `<div class="wizard-card hy-center"><h3>${pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '💪'} Your score: ${pct}%</h3>
-      <p class="hint">You answered ${score} of ${qz.order.length} correctly.</p>
-      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-        <button class="btn" data-hy-qprev>← Previous question</button>
-        <button class="btn teal solid" data-hy-qstart="all">Retake quiz</button>
-        ${wrongIdx.length ? `<button class="btn" data-hy-qstart="wrong">🔁 Review my mistakes (${wrongIdx.length})</button>` : ''}
-        <button class="btn" data-hy-qexit>Back</button></div></div>`;
-  }
-  const qi = qz.order[qz.pos], q = qs[qi], picked = qz.answers[qz.pos], answered = picked != null;
-  return `<div class="wizard-card">
-    <div class="hy-fc-meta">Question ${qz.pos + 1} of ${qz.order.length}</div>
-    <div class="hy-q">${q.q}</div>
-    ${q.options.map((o, oi) => {
-      let cls = '';
-      if(answered){ if(oi === q.correct) cls = 'right'; else if(oi === picked) cls = 'wrong'; }
-      return `<button type="button" class="hy-opt ${cls}" data-hy-opt="${oi}" ${answered ? 'disabled' : ''}><b>${String.fromCharCode(65 + oi)}</b><span>${o}</span></button>`;
-    }).join('')}
-    ${answered ? `<div class="hy-expl ${picked === q.correct ? 'ok' : 'bad'}"><b>${picked === q.correct ? '✅ Correct' : '❌ Incorrect'}</b>${q.explanation ? '<div>' + q.explanation + '</div>' : ''}</div>` : ''}
-    <div class="hy-nav">
-      ${qz.pos > 0 ? `<button class="btn" data-hy-qprev>← Previous</button>` : '<span></span>'}
-      ${answered ? `<button class="btn teal solid" data-hy-qnext>${qz.pos + 1 >= qz.order.length ? 'See result' : 'Next →'}</button>` : ''}
-    </div>
-  </div>`;
-}
-function hyQuizStart(mode){
-  const r = hyRun, qs = r.item.content.mcqs;
-  let order = qs.map((q, i) => i);
-  if(mode === 'wrong') order = order.filter(i => r.prog.wrong['m' + i]);
-  if(!order.length) order = qs.map((q, i) => i);
-  r.qz = { order: hyShuffle(order), pos:0, answers:{}, mode, recorded:false };
-  hyDraw();
-}
-function hyQuizPick(oi){
-  const r = hyRun, qz = r.qz; if(!qz || qz.answers[qz.pos] != null) return;
-  const qi = qz.order[qz.pos], q = r.item.content.mcqs[qi];
-  qz.answers[qz.pos] = oi;
-  if(oi === q.correct) delete r.prog.wrong['m' + qi]; else r.prog.wrong['m' + qi] = 1;
-  hyTouchDay(); hySave(); hyDraw();
-}
-function hyQuizNext(){
-  const r = hyRun, qz = r.qz; if(!qz) return;
-  qz.pos++;
-  if(qz.pos >= qz.order.length && qz.mode === 'all' && !qz.recorded){
-    qz.recorded = true;
-    const pct = Math.round(hyQzScore() / qz.order.length * 100), b = r.prog.quiz;
-    b.last = pct; b.best = Math.max(b.best || 0, pct); b.attempts = (b.attempts || 0) + 1; hySave();
-  }
-  hyDraw();
-}
-function hyQuizPrev(){
-  const qz = hyRun.qz; if(!qz || qz.pos <= 0) return;
-  qz.pos--; hyDraw();
-}
-function hyCardPrev(){
-  const fc = hyRun.fc; if(!fc || fc.pos <= 0) return;
-  fc.pos = Math.min(fc.pos, fc.queue.length) - 1; fc.flipped = false; hyDraw();
-}
-
-function hySavedHtml(){
-  const r = hyRun, rows = [];
-  r.item.content.sections.forEach((sec, si) => sec.points.forEach((p, pi) => {
-    const k = 's' + si + 'p' + pi;
-    if(r.prog.marks[k]) rows.push(`<div class="hy-saved-sec">${escapeHtml(sec.title)}</div>` + hyPointHtml(p, k));
-  }));
-  return rows.length ? rows.join('') : `<div class="empty-state"><h3>Nothing saved yet</h3><p>Tap ☆ on any point in Review and it will appear here.</p></div>`;
-}
-
-function hyDraw(){
-  const r = hyRun, body = document.getElementById('hyBody'); if(!r || !r.item || !body) return;
-  document.querySelectorAll('.hy-tab').forEach(b => b.classList.toggle('on', b.dataset.hyTab === r.tab));
-  body.innerHTML = r.tab === 'cards' ? hyCardsHtml() : r.tab === 'quiz' ? hyQuizHtml() : r.tab === 'saved' ? hySavedHtml() : hyReviewHtml();
-  if(r.tab === 'review'){
-    hyApplyFilter();
-    body.querySelectorAll('details.hy-sec').forEach(d => d.addEventListener('toggle', () => {
-      const si = Number(d.dataset.sec); if(d.open) r.open.add(si); else r.open.delete(si);
-    }));
-  }
-  hyUpdateTop();
-}
-
-function bindHyEvents(id){
-  const r = hyRun; if(!r) return;
-  if(!state.session){ setAfterLoginRoute('hy/' + id); return; }
-  hyEnsureLoaded(id);
-  const root = document.getElementById('hyRoot'); if(!root || !r.item) return;
-  root.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-hy-tab],[data-hy-done],[data-hy-mark],[data-hy-flip],[data-hy-rate],[data-hy-fc-all],[data-hy-qstart],[data-hy-opt],[data-hy-qnext],[data-hy-qexit],[data-hy-qprev],[data-hy-fcprev]');
-    if(!t) return;
-    const d = t.dataset;
-    if(d.hyTab){ r.tab = d.hyTab; hyDraw(); window.scrollTo({ top:0, behavior:'smooth' }); }
-    else if(d.hyDone){
-      const k = d.hyDone; if(r.prog.done[k]) delete r.prog.done[k]; else r.prog.done[k] = 1;
-      hyTouchDay(); hySave();
-      document.querySelectorAll('[data-k="' + k + '"]').forEach(row => {
-        row.classList.toggle('done', !!r.prog.done[k]);
-        const b = row.querySelector('[data-hy-done]'); if(b){ b.classList.toggle('on', !!r.prog.done[k]); b.textContent = r.prog.done[k] ? '✓ Got it' : 'Got it?'; }
-      });
-      const si = Number(k.slice(1, k.indexOf('p'))), sec = r.item.content.sections[si], el = document.querySelector('.hy-sec[data-sec="' + si + '"] summary small');
-      if(el && sec) el.textContent = sec.points.filter((p, pi) => r.prog.done['s' + si + 'p' + pi]).length + '/' + sec.points.length;
-      hyUpdateTop();
-    }
-    else if(d.hyMark){
-      const k = d.hyMark; if(r.prog.marks[k]) delete r.prog.marks[k]; else r.prog.marks[k] = 1;
-      hySave();
-      if(r.tab === 'saved') hyDraw();
-      else document.querySelectorAll('[data-hy-mark="' + k + '"]').forEach(b => { b.classList.toggle('on', !!r.prog.marks[k]); b.textContent = r.prog.marks[k] ? '★' : '☆'; });
-    }
-    else if(t.hasAttribute('data-hy-flip')){ r.fc.flipped = true; hyDraw(); }
-    else if(d.hyRate) hyRate(d.hyRate);
-    else if(t.hasAttribute('data-hy-fc-all')){ r.fc = { queue: hyBuildQueue(true), pos:0, flipped:false }; hyDraw(); }
-    else if(d.hyQstart) hyQuizStart(d.hyQstart);
-    else if(d.hyOpt != null) hyQuizPick(Number(d.hyOpt));
-    else if(t.hasAttribute('data-hy-qnext')) hyQuizNext();
-    else if(t.hasAttribute('data-hy-qprev')) hyQuizPrev();
-    else if(t.hasAttribute('data-hy-fcprev')) hyCardPrev();
-    else if(t.hasAttribute('data-hy-qexit')){ r.qz = null; hyDraw(); }
-  });
-  root.addEventListener('input', (e) => { if(e.target.id === 'hySearch'){ r.query = e.target.value; hyApplyFilter(); } });
-  root.addEventListener('change', (e) => { if(e.target.id === 'hyOnlyChk'){ r.hyOnly = e.target.checked; hyApplyFilter(); } });
-  hyDraw();
-}
-
-function injectHyStyles(){
-  if(document.getElementById('hyStyles')) return;
-  const style = document.createElement('style');
-  style.id = 'hyStyles';
-  style.textContent = `
-    .hy-wrap{ max-width: 820px; margin: 0 auto; padding: 0 14px; direction:ltr; text-align:left; font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; }
-    .hy-nav{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:14px; }
-    .hy-wrap [hidden]{ display:none !important; }
-    .hy-wm{ position:fixed; inset:0; pointer-events:none; z-index:40; }
-    .hy-top{ position:sticky; top:0; z-index:30; background:var(--card); border:1px solid var(--border); border-radius:16px; padding:12px 14px; margin-bottom:14px; box-shadow:0 4px 16px rgba(0,0,0,.05); }
-    .hy-title{ font-weight:800; font-size:16px; margin-bottom:8px; }
-    .hy-chips{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
-    .hy-chip{ font-size:12.5px; font-weight:800; padding:4px 10px; border-radius:999px; background:var(--teal-light); color:var(--teal); }
-    .hy-chip.ok{ background:color-mix(in srgb, var(--teal) 16%, var(--card)); color:var(--teal); }
-    .hy-chip.off{ background:var(--bg); color:var(--muted); border:1px solid var(--border); }
-    .hy-bar{ height:7px; border-radius:99px; background:var(--bg); border:1px solid var(--border); overflow:hidden; margin-bottom:10px; }
-    .hy-bar i{ display:block; height:100%; width:0; background:linear-gradient(90deg, var(--teal), #f59e0b); transition:width .35s; }
-    .hy-tabs{ display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; }
-    .hy-tab{ flex:1; white-space:nowrap; font-family:inherit; font-weight:800; font-size:13px; padding:9px 12px; border-radius:10px; border:1.5px solid var(--border); background:var(--bg); color:var(--ink); cursor:pointer; }
-    .hy-tab.on{ background:var(--teal); border-color:var(--teal); color:#fff; }
-    .hy-summary{ background:var(--teal-light); color:var(--ink); border-radius:14px; padding:12px 14px; font-size:14px; line-height:1.8; margin-bottom:12px; }
-    .hy-tools{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
-    .hy-tools input[type=search]{ flex:1; min-width:180px; padding:10px 12px; border-radius:12px; border:1.5px solid var(--border); background:var(--card); color:var(--ink); font-family:inherit; font-size:14px; }
-    .hy-toggle{ display:flex; gap:6px; align-items:center; font-size:13px; font-weight:700; cursor:pointer; }
-    .hy-sec{ background:var(--card); border:1px solid var(--border); border-radius:14px; margin-bottom:10px; overflow:hidden; }
-    .hy-sec summary{ cursor:pointer; list-style:none; padding:13px 14px; font-weight:800; font-size:15px; display:flex; justify-content:space-between; gap:10px; align-items:center; }
-    .hy-sec summary::-webkit-details-marker{ display:none; }
-    .hy-sec summary small{ color:var(--teal); background:var(--teal-light); padding:2px 9px; border-radius:99px; font-size:12px; }
-    .hy-sec-body{ padding:0 12px 12px; }
-    .hy-pt{ border:1px solid var(--border); border-radius:12px; padding:11px 12px; margin-top:8px; background:var(--bg); transition:background .2s, border-color .2s; }
-    .hy-pt.hy{ border-inline-start:4px solid #f59e0b; }
-    .hy-pt.done{ background:color-mix(in srgb, var(--teal) 10%, var(--card)); border-color:var(--teal); }
-    .hy-pt-text{ font-size:14.5px; line-height:1.85; }
-    .hy-fire{ font-size:13px; }
-    .hy-mn{ margin-top:8px; padding:8px 10px; border-radius:10px; background:#fef3c7; color:#92400e; font-size:13px; line-height:1.7; }
-    .hy-pt-act{ display:flex; gap:8px; margin-top:9px; }
-    .hy-mini{ font-family:inherit; font-size:12.5px; font-weight:800; padding:5px 12px; border-radius:99px; border:1.5px solid var(--border); background:var(--card); color:var(--ink); cursor:pointer; }
-    .hy-mini.on{ background:var(--teal); border-color:var(--teal); color:#fff; }
-    .hy-mini.star.on{ background:#f59e0b; border-color:#f59e0b; }
-    .hy-table{ overflow-x:auto; margin-top:10px; }
-    .hy-table table{ border-collapse:collapse; width:100%; min-width:420px; font-size:13.5px; }
-    .hy-table th, .hy-table td{ border:1px solid var(--border); padding:8px 10px; text-align:start; }
-    .hy-table th{ background:var(--bg); }
-    .hy-saved-sec{ font-weight:800; font-size:13px; color:var(--teal); margin:14px 0 -2px; }
-    .hy-center{ text-align:center; }
-    .hy-fc-meta{ font-size:12.5px; color:var(--muted); margin-bottom:8px; font-weight:700; }
-    .hy-fc{ min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px 18px; border-radius:20px; border:2px solid var(--border); background:var(--card); cursor:pointer; user-select:none; }
-    .hy-fc.flipped{ border-color:var(--teal); background:color-mix(in srgb, var(--teal) 8%, var(--card)); }
-    .hy-fc-lbl{ font-size:12px; font-weight:800; color:var(--teal); margin-bottom:10px; }
-    .hy-fc-txt{ font-size:18px; line-height:1.9; font-weight:700; }
-    .hy-rate{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
-    .hy-rate-btn{ font-family:inherit; font-weight:800; font-size:13.5px; padding:12px 6px; border-radius:12px; border:1.5px solid var(--border); background:var(--card); color:var(--ink); cursor:pointer; }
-    .hy-rate-btn.bad{ border-color:#ef4444; } .hy-rate-btn.mid{ border-color:#f59e0b; } .hy-rate-btn.good{ border-color:#16a34a; }
-    .hy-q{ font-size:16.5px; font-weight:800; line-height:1.9; margin-bottom:12px; }
-    .hy-opt{ display:flex; gap:10px; align-items:flex-start; width:100%; text-align:start; font-family:inherit; font-size:14.5px; line-height:1.7; padding:11px 12px; margin-bottom:8px; border-radius:12px; border:1.5px solid var(--border); background:var(--bg); color:var(--ink); cursor:pointer; }
-    .hy-opt b{ min-width:24px; height:24px; border-radius:7px; background:var(--card); border:1px solid var(--border); display:inline-flex; align-items:center; justify-content:center; font-size:12px; }
-    .hy-opt.right{ border-color:#16a34a; background:color-mix(in srgb, #16a34a 14%, var(--card)); }
-    .hy-opt.wrong{ border-color:#ef4444; background:color-mix(in srgb, #ef4444 14%, var(--card)); }
-    .hy-expl{ margin-top:10px; padding:11px 13px; border-radius:12px; font-size:14px; line-height:1.8; border:1px solid var(--border); }
-    .hy-expl.ok{ background:color-mix(in srgb, #16a34a 10%, var(--card)); } .hy-expl.bad{ background:color-mix(in srgb, #ef4444 10%, var(--card)); }
-    .hy-stats-row{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
-    .hy-stats-row span{ font-size:12.5px; font-weight:700; padding:4px 10px; border-radius:99px; background:var(--bg); border:1px solid var(--border); color:var(--muted); }
-    @media (max-width:560px){ .hy-rate-btn{ font-size:12px; } .hy-fc-txt{ font-size:16px; } }
-  `;
-  document.head.appendChild(style);
-}
-injectHyStyles();
 
 /* =========================================================================
    الاختبارات المشاركة بالرابط (Exams)
@@ -9362,10 +8731,7 @@ function bindPageEvents(route){
     if(examRun.step === 'running' && examRun.dirty) examSaveProgress(examRun);
     examStopTimers(); examRun = null;
   }
-  if(hyRun && !route.startsWith('hy/')){ hyFlush(); hyRun = null; }
-  if(route !== 'login' && !route.startsWith('exam/') && !route.startsWith('hy/')){ try{ sessionStorage.removeItem(EXAM_RETURN_KEY); }catch(e){} }
-  if(route.startsWith('hy/')) bindHyEvents(hyIdFromRoute(route));
-  if(route === 'admin-highyield') bindHyAdminEvents();
+  if(route !== 'login' && !route.startsWith('exam/')){ try{ sessionStorage.removeItem(EXAM_RETURN_KEY); }catch(e){} }
   if(route.startsWith('exam/')) bindExamEvents(examIdFromRoute(route));
   if(route === 'admin-exams') bindAdminExamsEvents();
   document.querySelectorAll('[data-self-enroll]').forEach(btn=>{
