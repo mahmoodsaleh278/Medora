@@ -7590,7 +7590,7 @@ function hyNormalize(raw){
     const points = (Array.isArray(sec.points) ? sec.points : [])
       .map(p => typeof p === 'string' ? { text:p } : p)
       .filter(p => p && t(p.text))
-      .map(p => ({ text: s(p.text), hy: !!p.hy, mnemonic: s(p.mnemonic || '') }));
+      .map(p => ({ text: s(p.text), hy: !!p.hy, mnemonic: s(p.mnemonic || ''), ar: s(p.ar || '') }));
     const table = sec.table ? s(sec.table) : '';
     if(t(sec.title) && (points.length || table)) out.sections.push({ title: t(sec.title), points, table });
   });
@@ -7633,18 +7633,19 @@ function hyBuildPrompt({ title, courseTitle, notes }){
   return `You convert a "High Yield" study file for nursing/dental students into structured interactive study data.
 Title: ${title}.${courseTitle ? ' Subject: ' + courseTitle + '.' : ''}
 Read the attached file carefully and output ONE valid JSON object and NOTHING else (no markdown, no code fences, no commentary).
-Write EVERYTHING in English only (titles, points, mnemonics, flashcards, MCQs, explanations, summary). If the file is in Arabic or any other language, translate it into clear academic English and keep standard medical terms. Do not use any Arabic words in the output. Do not invent facts that are not in the file.
+Write EVERYTHING in English only (titles, points, mnemonics, flashcards, MCQs, explanations, summary). If the file is in Arabic or any other language, translate it into clear academic English and keep standard medical terms. Do not use any Arabic words anywhere in the output EXCEPT inside the "ar" field of each point (described in the rules below). Do not invent facts that are not in the file.
 ${notes ? 'Extra instructions from the admin: ' + notes + '\n' : ''}
 JSON schema:
 {
  "summary": "2-3 sentence overview of the file",
- "sections": [ { "title": "section heading", "points": [ { "text": "one concise high-yield fact", "hy": true, "mnemonic": "optional memory trick, or empty string" } ], "table": "optional full HTML <table> if the file contains a comparison/classification table, else empty string" } ],
+ "sections": [ { "title": "section heading", "points": [ { "text": "one concise high-yield fact", "hy": true, "mnemonic": "optional memory trick, or empty string", "ar": "simple Arabic explanation of the point" } ], "table": "optional full HTML <table> if the file contains a comparison/classification table, else empty string" } ],
  "flashcards": [ { "q": "short question", "a": "short answer" } ],
  "mcqs": [ { "q": "question", "options": ["A","B","C","D"], "correct": 0, "explanation": "why the correct option is right" } ]
 }
 Rules:
 - Follow the structure of the file: one section per heading/topic. Points must be short (one idea each). Set "hy": true only for the most exam-critical points.
 - If the file has tables, reproduce them as HTML tables (<table><tr><th>/<td>) in the section's "table" field.
+- For EVERY point add an "ar" field: a short, simple Arabic explanation (1-2 sentences, easy Jordanian-friendly Modern Standard Arabic) that helps a student who understands Arabic better than English grasp the idea. Write each key medical term in English inside parentheses right after its Arabic equivalent, e.g. "ارتفاع ضغط الدم (Hypertension) يعني ...". Keep drug names, lab values, doses and abbreviations in English exactly as in the file. Do not add facts that are not in the point.
 - Create 15-30 flashcards and 10-20 MCQs (4 options each, "correct" is the zero-based index of the right option) based ONLY on the file content.
 - Inside string values you may use only these tags: <b>, <i>, <u>, <br>, and <table>/<tr>/<th>/<td> for tables. Escape double quotes inside strings properly so the JSON stays valid.`;
 }
@@ -7733,7 +7734,7 @@ function hyModalStep1(){
   document.getElementById('hyManualBtn').addEventListener('click', () => {
     const fd = new FormData(form);
     hyModalStep2({ id:null, title:(fd.get('title') || '').trim(), description:'', courseId:fd.get('course') || '', active:true,
-      raw:{ summary:'', sections:[{ title:'', points:[{ text:'', hy:true, mnemonic:'' }], table:'' }], flashcards:[{ q:'', a:'' }], mcqs:[{ q:'', options:['','','',''], correct:0, explanation:'' }] } });
+      raw:{ summary:'', sections:[{ title:'', points:[{ text:'', hy:true, mnemonic:'', ar:'' }], table:'' }], flashcards:[{ q:'', a:'' }], mcqs:[{ q:'', options:['','','',''], correct:0, explanation:'' }] } });
   });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -7949,10 +7950,14 @@ function hyUpdateTop(){
 
 function hyPointHtml(p, key){
   const r = hyRun, done = !!r.prog.done[key], mk = !!r.prog.marks[key];
+  if(!r.arOpen) r.arOpen = new Set();
+  const arOn = !!p.ar && (r.arAll || r.arOpen.has(key));
   return `<div class="hy-pt ${p.hy ? 'hy' : ''} ${done ? 'done' : ''}" data-k="${key}">
     <div class="hy-pt-text">${p.hy ? '<span class="hy-fire">🔥</span> ' : ''}${p.text}</div>
     ${p.mnemonic ? `<div class="hy-mn">💡 ${p.mnemonic}</div>` : ''}
+    ${p.ar ? `<div class="hy-ar" dir="rtl" data-ar-box="${key}" ${arOn ? '' : 'hidden'}><span class="hy-ar-tag">🇯🇴 شرح بالعربي</span>${p.ar}</div>` : ''}
     <div class="hy-pt-act">
+      ${p.ar ? `<button type="button" class="hy-mini ar ${arOn ? 'on' : ''}" data-hy-ar="${key}">${arOn ? 'إخفاء العربي' : 'اشرحلي بالعربي'}</button>` : ''}
       <button type="button" class="hy-mini ${done ? 'on' : ''}" data-hy-done="${key}">${done ? '✓ Got it' : 'Got it?'}</button>
       <button type="button" class="hy-mini star ${mk ? 'on' : ''}" data-hy-mark="${key}" title="Save">${mk ? '★' : '☆'}</button>
     </div></div>`;
@@ -7972,6 +7977,7 @@ function hyReviewHtml(){
     <div class="hy-tools">
       <input type="search" id="hySearch" placeholder="🔎 Search this file..." value="${escapeHtml(r.query)}">
       <label class="hy-toggle"><input type="checkbox" id="hyOnlyChk" ${r.hyOnly ? 'checked' : ''}> 🔥 High Yield only (quick review)</label>
+      ${c.sections.some(sec => sec.points.some(p => p.ar)) ? `<label class="hy-toggle"><input type="checkbox" id="hyArAllChk" ${r.arAll ? 'checked' : ''}> 🇯🇴 عرض الشرح بالعربي لكل النقاط</label>` : ''}
     </div>
     <div id="hyNoRes" class="empty-state" hidden style="padding:18px;"><p>No matching results.</p></div>
     ${secs || '<div class="empty-state"><p>No sections in this file.</p></div>'}`;
@@ -8146,7 +8152,7 @@ function bindHyEvents(id){
   hyEnsureLoaded(id);
   const root = document.getElementById('hyRoot'); if(!root || !r.item) return;
   root.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-hy-tab],[data-hy-done],[data-hy-mark],[data-hy-flip],[data-hy-rate],[data-hy-fc-all],[data-hy-qstart],[data-hy-opt],[data-hy-qnext],[data-hy-qexit],[data-hy-qprev],[data-hy-fcprev]');
+    const t = e.target.closest('[data-hy-tab],[data-hy-done],[data-hy-mark],[data-hy-ar],[data-hy-flip],[data-hy-rate],[data-hy-fc-all],[data-hy-qstart],[data-hy-opt],[data-hy-qnext],[data-hy-qexit],[data-hy-qprev],[data-hy-fcprev]');
     if(!t) return;
     const d = t.dataset;
     if(d.hyTab){ r.tab = d.hyTab; hyDraw(); window.scrollTo({ top:0, behavior:'smooth' }); }
@@ -8160,6 +8166,13 @@ function bindHyEvents(id){
       const si = Number(k.slice(1, k.indexOf('p'))), sec = r.item.content.sections[si], el = document.querySelector('.hy-sec[data-sec="' + si + '"] summary small');
       if(el && sec) el.textContent = sec.points.filter((p, pi) => r.prog.done['s' + si + 'p' + pi]).length + '/' + sec.points.length;
       hyUpdateTop();
+    }
+    else if(d.hyAr){
+      const k = d.hyAr; if(!r.arOpen) r.arOpen = new Set();
+      if(r.arOpen.has(k)) r.arOpen.delete(k); else r.arOpen.add(k);
+      const on = r.arAll || r.arOpen.has(k);
+      document.querySelectorAll('[data-ar-box="' + k + '"]').forEach(b => { b.hidden = !on; });
+      document.querySelectorAll('[data-hy-ar="' + k + '"]').forEach(b => { b.classList.toggle('on', on); b.textContent = on ? 'إخفاء العربي' : 'اشرحلي بالعربي'; });
     }
     else if(d.hyMark){
       const k = d.hyMark; if(r.prog.marks[k]) delete r.prog.marks[k]; else r.prog.marks[k] = 1;
@@ -8178,7 +8191,17 @@ function bindHyEvents(id){
     else if(t.hasAttribute('data-hy-qexit')){ r.qz = null; hyDraw(); }
   });
   root.addEventListener('input', (e) => { if(e.target.id === 'hySearch'){ r.query = e.target.value; hyApplyFilter(); } });
-  root.addEventListener('change', (e) => { if(e.target.id === 'hyOnlyChk'){ r.hyOnly = e.target.checked; hyApplyFilter(); } });
+  root.addEventListener('change', (e) => {
+    if(e.target.id === 'hyOnlyChk'){ r.hyOnly = e.target.checked; hyApplyFilter(); }
+    else if(e.target.id === 'hyArAllChk'){
+      r.arAll = e.target.checked;
+      document.querySelectorAll('#hyBody [data-ar-box]').forEach(b => {
+        const k = b.dataset.arBox, on = r.arAll || (r.arOpen && r.arOpen.has(k));
+        b.hidden = !on;
+        document.querySelectorAll('[data-hy-ar="' + k + '"]').forEach(x => { x.classList.toggle('on', on); x.textContent = on ? 'إخفاء العربي' : 'اشرحلي بالعربي'; });
+      });
+    }
+  });
   hyDraw();
 }
 
@@ -8221,6 +8244,11 @@ function injectHyStyles(){
     .hy-mini{ font-family:inherit; font-size:12.5px; font-weight:800; padding:5px 12px; border-radius:99px; border:1.5px solid var(--border); background:var(--card); color:var(--ink); cursor:pointer; }
     .hy-mini.on{ background:var(--teal); border-color:var(--teal); color:#fff; }
     .hy-mini.star.on{ background:#f59e0b; border-color:#f59e0b; }
+    .hy-ar{ margin-top:8px; padding:10px 12px; border-radius:10px; background:#ecfeff; border:1px solid #a5f3fc; color:#134e4a; font-size:14px; line-height:1.9; text-align:right; }
+    .hy-ar[hidden]{ display:none; }
+    .hy-ar-tag{ display:block; font-size:11.5px; font-weight:800; color:#0e7490; margin-bottom:3px; }
+    .hy-mini.ar{ border-color:#0e7490; color:#0e7490; }
+    .hy-mini.ar.on{ background:#0e7490; border-color:#0e7490; color:#fff; }
     .hy-table{ overflow-x:auto; margin-top:10px; }
     .hy-table table{ border-collapse:collapse; width:100%; min-width:420px; font-size:13.5px; }
     .hy-table th, .hy-table td{ border:1px solid var(--border); padding:8px 10px; text-align:start; }
