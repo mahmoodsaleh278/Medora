@@ -1170,6 +1170,33 @@ function questionToRow(q){
     options: q.options ?? null, correct_index: (q.correctIndex ?? null),
     pairs: q.pairs ?? null, model_answer: q.modelAnswer ?? null };
 }
+/* يحوّل خطأ Supabase إلى رسالة مفهومة (مع تلميح بالعربي + الكود + النص الأصلي) بدل رسالة عامة */
+function describeDbError(error){
+  const code = error && error.code ? String(error.code) : '';
+  const raw = String((error && (error.message || error.details || error.hint)) || error || 'خطأ غير معروف');
+  const hints = {
+    'PGRST204': 'عمود ناقص في جدول questions (غالبًا type أو pairs أو model_answer). أضِف العمود من SQL Editor ثم نفّذ: notify pgrst, \'reload schema\';',
+    '42703': 'عمود غير موجود في جدول questions.',
+    '42501': 'ممنوع بسبب صلاحيات (RLS). عدّل policy الإدخال على جدول questions.',
+    '22P02': 'نوع بيانات غير مطابق (مثلًا عمود id من نوع uuid والكود يرسل نصًا).',
+    '23502': 'عمود مطلوب (NOT NULL) وصلت قيمته فارغة (مثل options أو correct_index لأنواع التوصيل/المقالي).',
+    '23503': 'الكورس أو المحاضرة المختارة غير موجودة في قاعدة البيانات (Foreign Key).',
+    '23505': 'رقم السؤال (id) مكرر، جرّب مرة ثانية.',
+    '23514': 'قيمة مرفوضة بسبب check constraint (تحقّق من القيم المسموحة لـ type أو nature).',
+    'PGRST301': 'انتهت الجلسة، سجّل الدخول من جديد.',
+    'PGRST303': 'انتهت الجلسة، سجّل الدخول من جديد.'
+  };
+  let hint = hints[code] || '';
+  if(!hint && /jwt|token/i.test(raw)) hint = 'مشكلة في الجلسة، سجّل الدخول من جديد.';
+  if(!hint && /failed to fetch|networkerror|network request/i.test(raw)) hint = 'مشكلة في الاتصال بالإنترنت أو بالسيرفر.';
+  return { code, raw, hint };
+}
+function dbErrorHtml(title, error){
+  const d = describeDbError(error);
+  return `<div class="form-msg error">${escapeHtml(title)}`
+    + (d.hint ? `<br><b>السبب المحتمل:</b> ${escapeHtml(d.hint)}` : '')
+    + `<br><small dir="ltr" style="display:block;text-align:left;opacity:.85;word-break:break-word;">${d.code ? '['+escapeHtml(d.code)+'] ' : ''}${escapeHtml(d.raw)}</small></div>`;
+}
 async function loadQuestions(){
   state.questions = [];
   if(!supabaseClient || !state.session) return;
@@ -6008,7 +6035,7 @@ function modalAddQuestion(defaults){
     }
     state.questions.push(base);
     const { error } = await supabaseClient.from('questions').insert(questionToRow(base));
-    if(error){ console.error('add question failed', error); state.questions = state.questions.filter(x=>x!==base); msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ السؤال، حاول مرة أخرى.</div>`; return; }
+    if(error){ console.error('add question failed', error); state.questions = state.questions.filter(x=>x!==base); msgBox.innerHTML = dbErrorHtml('تعذّر حفظ السؤال.', error); return; }
     imgSession.markSaved([base.question, base.explanation]);
     closeModal(); render();
   });
@@ -6054,7 +6081,7 @@ function modalEditQuestion(questionId){
     delete q.options; delete q.correctIndex; delete q.pairs; delete q.modelAnswer;
     Object.assign(q, payload);
     const { error } = await supabaseClient.from('questions').update(questionToRow(q)).eq('id', questionId);
-    if(error){ console.error('edit question failed', error); msgBox.innerHTML = `<div class="form-msg error">تعذّر حفظ التعديلات، حاول مرة أخرى.</div>`; return; }
+    if(error){ console.error('edit question failed', error); msgBox.innerHTML = dbErrorHtml('تعذّر حفظ التعديلات.', error); return; }
     imgSession.markSaved([q.question, q.explanation]);
     qimgCleanup(oldImgPaths);
     closeModal(); render();
@@ -6367,7 +6394,7 @@ async function handleImportSave(){
   }
   state.questions.push(...toAdd);
   const { error } = await supabaseClient.from('questions').insert(toAdd.map(questionToRow));
-  if(error){ console.error('bulk import failed', error); alert('تعذّر حفظ الأسئلة المستوردة، حاول مرة أخرى.'); state.questions = state.questions.filter(x=>!toAdd.includes(x)); return; }
+  if(error){ console.error('bulk import failed', error); { const d = describeDbError(error); alert('تعذّر حفظ الأسئلة المستوردة.' + (d.hint ? '\n' + d.hint : '') + '\n\n' + (d.code ? '['+d.code+'] ' : '') + d.raw); } state.questions = state.questions.filter(x=>!toAdd.includes(x)); return; }
   closeModal();
   render();
 }
