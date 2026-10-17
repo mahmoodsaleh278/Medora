@@ -7552,7 +7552,7 @@ function hyBuildPrompt({ title, courseTitle, notes }){
   return `You convert a "High Yield" study file for nursing/dental students into structured interactive study data.
 Title: ${title}.${courseTitle ? ' Subject: ' + courseTitle + '.' : ''}
 Read the attached file carefully and output ONE valid JSON object and NOTHING else (no markdown, no code fences, no commentary).
-Keep the SAME language as the file (do not translate). Do not invent facts that are not in the file.
+Write EVERYTHING in English only (titles, points, mnemonics, flashcards, MCQs, explanations, summary). If the file is in Arabic or any other language, translate it into clear academic English and keep standard medical terms. Do not use any Arabic words in the output. Do not invent facts that are not in the file.
 ${notes ? 'Extra instructions from the admin: ' + notes + '\n' : ''}
 JSON schema:
 {
@@ -7807,7 +7807,7 @@ async function hyEnsureLoaded(id){
     if(data && (data.active !== false || isAdminSession())){
       r.item = hyMapRow(data); r.error = '';
       r.prog = await hyLoadProgress(r);
-    }else{ r.item = null; r.error = 'هذا الملف غير موجود أو غير متاح حاليًا.'; }
+    }else{ r.item = null; r.error = 'This file does not exist or is not available right now.'; }
   }catch(e){ console.error('hy load failed', e); r.item = null; r.error = hyErrMsg(e); }
   r.loading = false; r.loaded = true;
   if(hyRun === r && hyIdFromRoute(currentRoute()) === id) render();
@@ -7827,15 +7827,15 @@ function pageHighYield(id){
   const wrap = inner => `<section class="section"><div class="hy-wrap">${inner}</div></section>`;
   if(!state.session){
     return wrap(`<div class="wizard-card" style="text-align:center;"><h3>🔥 High Yield</h3>
-      <p class="hint">هذا المحتوى متاح للطلاب المسجّلين فقط. سجّل الدخول بحسابك على المنصة للمتابعة.</p>
-      <a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div>`);
+      <p class="hint">This content is available to registered students only. Please log in to your account to continue.</p>
+      <a href="/login" class="btn teal solid">Log in / Sign up</a></div>`);
   }
   if(!r.loaded || r.userKey !== hyUserKey()){
-    return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ تحميل المحتوى...</div>`);
+    return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> Loading...</div>`);
   }
-  if(!r.item) return wrap(`<div class="empty-state"><h3>المحتوى غير متاح</h3><p>${escapeHtml(r.error || 'تأكد من صحة الرابط أو تواصل مع الإدارة.')}</p></div>`);
+  if(!r.item) return wrap(`<div class="empty-state"><h3>Content unavailable</h3><p>${escapeHtml(r.error || 'Please check the link or contact the admin.')}</p></div>`);
   const c = r.item.content;
-  const tabs = [['review','📖 المراجعة', true], ['cards','🃏 البطاقات', c.flashcards.length > 0], ['quiz','❓ اختبر نفسك', c.mcqs.length > 0], ['saved','⭐ محفوظاتي', true]]
+  const tabs = [['review','📖 Review', true], ['cards','🃏 Flashcards', c.flashcards.length > 0], ['quiz','❓ Quiz', c.mcqs.length > 0], ['saved','⭐ Saved', true]]
     .filter(t => t[2]).map(t => `<button type="button" class="hy-tab ${r.tab === t[0] ? 'on' : ''}" data-hy-tab="${t[0]}">${t[1]}</button>`).join('');
   return wrap(`
     ${hyWatermarkCss() ? `<div class="hy-wm" style="${hyWatermarkCss()}"></div>` : ''}
@@ -7861,7 +7861,7 @@ function hyUpdateTop(){
   const pct = keys.length ? Math.round(done / keys.length * 100) : 0;
   const st = hyStreak(r.prog.days);
   const a = document.getElementById('hyStreakChip'), b = document.getElementById('hyPctChip'), f = document.getElementById('hyBarFill');
-  if(a) a.textContent = st ? ('🔥 ' + st + (st === 1 ? ' يوم' : ' أيام') + ' متتالية') : '🔥 ابدأ سلسلتك اليوم';
+  if(a) a.textContent = st ? ('🔥 ' + st + (st === 1 ? '-day streak' : '-day streak')) : '🔥 Start your streak today';
   if(b) b.textContent = keys.length ? ('✓ ' + done + '/' + keys.length + ' (' + pct + '%)') : '—';
   if(f) f.style.width = pct + '%';
 }
@@ -7872,8 +7872,8 @@ function hyPointHtml(p, key){
     <div class="hy-pt-text">${p.hy ? '<span class="hy-fire">🔥</span> ' : ''}${p.text}</div>
     ${p.mnemonic ? `<div class="hy-mn">💡 ${p.mnemonic}</div>` : ''}
     <div class="hy-pt-act">
-      <button type="button" class="hy-mini ${done ? 'on' : ''}" data-hy-done="${key}">${done ? '✓ فهمتها' : 'فهمتها؟'}</button>
-      <button type="button" class="hy-mini star ${mk ? 'on' : ''}" data-hy-mark="${key}" title="حفظ">${mk ? '★' : '☆'}</button>
+      <button type="button" class="hy-mini ${done ? 'on' : ''}" data-hy-done="${key}">${done ? '✓ Got it' : 'Got it?'}</button>
+      <button type="button" class="hy-mini star ${mk ? 'on' : ''}" data-hy-mark="${key}" title="Save">${mk ? '★' : '☆'}</button>
     </div></div>`;
 }
 function hyReviewHtml(){
@@ -7889,11 +7889,11 @@ function hyReviewHtml(){
   return `
     ${c.summary ? `<div class="hy-summary">${c.summary}</div>` : ''}
     <div class="hy-tools">
-      <input type="search" id="hySearch" placeholder="🔎 ابحث داخل الملف..." value="${escapeHtml(r.query)}">
-      <label class="hy-toggle"><input type="checkbox" id="hyOnlyChk" ${r.hyOnly ? 'checked' : ''}> 🔥 High Yield فقط (مراجعة سريعة)</label>
+      <input type="search" id="hySearch" placeholder="🔎 Search this file..." value="${escapeHtml(r.query)}">
+      <label class="hy-toggle"><input type="checkbox" id="hyOnlyChk" ${r.hyOnly ? 'checked' : ''}> 🔥 High Yield only (quick review)</label>
     </div>
-    <div id="hyNoRes" class="empty-state" hidden style="padding:18px;"><p>لا توجد نتائج مطابقة.</p></div>
-    ${secs || '<div class="empty-state"><p>لا توجد أقسام في هذا الملف.</p></div>'}`;
+    <div id="hyNoRes" class="empty-state" hidden style="padding:18px;"><p>No matching results.</p></div>
+    ${secs || '<div class="empty-state"><p>No sections in this file.</p></div>'}`;
 }
 function hyApplyFilter(){
   const r = hyRun; if(!r) return;
@@ -7929,22 +7929,25 @@ function hyCardsHtml(){
   const fc = r.fc;
   const mastered = cards.filter((c, i) => hyCardMastered(i)).length;
   if(fc.pos >= fc.queue.length){
-    return `<div class="wizard-card hy-center"><h3>🎉 خلّصت بطاقات اليوم</h3>
-      <p class="hint">أتقنت ${mastered} من ${cards.length} بطاقة. البطاقات الصعبة ترجع لك تلقائيًا بالموعد المناسب.</p>
-      <button class="btn teal solid" data-hy-fc-all>🔁 راجع كل البطاقات</button></div>`;
+    return `<div class="wizard-card hy-center"><h3>🎉 You're done for today</h3>
+      <p class="hint">You've mastered ${mastered} of ${cards.length} cards. Harder cards will come back automatically at the right time.</p>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <button class="btn" data-hy-fcprev>← Previous card</button>
+        <button class="btn teal solid" data-hy-fc-all>🔁 Review all cards</button></div></div>`;
   }
   const c = cards[fc.queue[fc.pos]];
   return `
-    <div class="hy-fc-meta">البطاقة ${fc.pos + 1} من ${fc.queue.length} • متقنة ${mastered}/${cards.length}</div>
+    <div class="hy-fc-meta">Card ${fc.pos + 1} of ${fc.queue.length} • Mastered ${mastered}/${cards.length}</div>
     <div class="hy-fc ${fc.flipped ? 'flipped' : ''}" data-hy-flip>
-      <div class="hy-fc-lbl">${fc.flipped ? 'الجواب' : 'السؤال'}</div>
+      <div class="hy-fc-lbl">${fc.flipped ? 'Answer' : 'Question'}</div>
       <div class="hy-fc-txt">${fc.flipped ? c.a : c.q}</div>
-      ${fc.flipped ? '' : '<div class="hint" style="margin:14px 0 0;">اضغط لإظهار الجواب</div>'}
+      ${fc.flipped ? '' : '<div class="hint" style="margin:14px 0 0;">Tap to reveal the answer</div>'}
     </div>
     ${fc.flipped ? `<div class="hy-rate">
-      <button class="hy-rate-btn bad" data-hy-rate="forgot">😵 نسيتها</button>
-      <button class="hy-rate-btn mid" data-hy-rate="unsure">🤔 مش متأكد</button>
-      <button class="hy-rate-btn good" data-hy-rate="know">✅ عرفتها</button></div>` : ''}`;
+      <button class="hy-rate-btn bad" data-hy-rate="forgot">😵 Forgot</button>
+      <button class="hy-rate-btn mid" data-hy-rate="unsure">🤔 Unsure</button>
+      <button class="hy-rate-btn good" data-hy-rate="know">✅ Knew it</button></div>` : ''}
+    ${fc.pos > 0 ? `<div style="margin-top:12px;"><button class="btn small" data-hy-fcprev>← Previous card</button></div>` : ''}`;
 }
 function hyRate(kind){
   const r = hyRun, fc = r.fc; if(!fc || fc.pos >= fc.queue.length) return;
@@ -7958,38 +7961,46 @@ function hyRate(kind){
   hyTouchDay(); hySave(); hyDraw();
 }
 
+function hyQzScore(){
+  const qz = hyRun.qz, qs = hyRun.item.content.mcqs;
+  return qz.order.filter((qi, p) => qz.answers[p] === qs[qi].correct).length;
+}
 function hyQuizHtml(){
   const r = hyRun, qs = r.item.content.mcqs, wrongIdx = qs.map((q, i) => i).filter(i => r.prog.wrong['m' + i]);
   const qz = r.qz;
   if(!qz){
     const b = r.prog.quiz;
-    return `<div class="wizard-card hy-center"><h3>❓ اختبر نفسك</h3>
-      <p class="hint">${qs.length} سؤال من محتوى الملف مع تفسير لكل إجابة.${b.attempts ? ` أفضل نتيجة لك: <b>${b.best}%</b> (${b.attempts} محاولة)` : ''}</p>
+    return `<div class="wizard-card hy-center"><h3>❓ Test yourself</h3>
+      <p class="hint">${qs.length} questions from this file, with an explanation for every answer.${b.attempts ? ` Your best score: <b>${b.best}%</b> (${b.attempts} attempt${b.attempts > 1 ? 's' : ''})` : ''}</p>
       <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-        <button class="btn teal solid" data-hy-qstart="all">ابدأ الاختبار</button>
-        ${wrongIdx.length ? `<button class="btn" data-hy-qstart="wrong">🔁 راجع أخطائي (${wrongIdx.length})</button>` : ''}
+        <button class="btn teal solid" data-hy-qstart="all">Start quiz</button>
+        ${wrongIdx.length ? `<button class="btn" data-hy-qstart="wrong">🔁 Review my mistakes (${wrongIdx.length})</button>` : ''}
       </div></div>`;
   }
   if(qz.pos >= qz.order.length){
-    const pct = Math.round(qz.score / qz.order.length * 100);
-    return `<div class="wizard-card hy-center"><h3>${pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '💪'} نتيجتك: ${pct}%</h3>
-      <p class="hint">أجبت صح على ${qz.score} من ${qz.order.length}.</p>
+    const score = hyQzScore(), pct = Math.round(score / qz.order.length * 100);
+    return `<div class="wizard-card hy-center"><h3>${pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '💪'} Your score: ${pct}%</h3>
+      <p class="hint">You answered ${score} of ${qz.order.length} correctly.</p>
       <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-        <button class="btn teal solid" data-hy-qstart="all">إعادة الاختبار</button>
-        ${wrongIdx.length ? `<button class="btn" data-hy-qstart="wrong">🔁 راجع أخطائي (${wrongIdx.length})</button>` : ''}
-        <button class="btn" data-hy-qexit>رجوع</button></div></div>`;
+        <button class="btn" data-hy-qprev>← Previous question</button>
+        <button class="btn teal solid" data-hy-qstart="all">Retake quiz</button>
+        ${wrongIdx.length ? `<button class="btn" data-hy-qstart="wrong">🔁 Review my mistakes (${wrongIdx.length})</button>` : ''}
+        <button class="btn" data-hy-qexit>Back</button></div></div>`;
   }
-  const qi = qz.order[qz.pos], q = qs[qi], answered = qz.picked != null;
+  const qi = qz.order[qz.pos], q = qs[qi], picked = qz.answers[qz.pos], answered = picked != null;
   return `<div class="wizard-card">
-    <div class="hy-fc-meta">السؤال ${qz.pos + 1} من ${qz.order.length}</div>
+    <div class="hy-fc-meta">Question ${qz.pos + 1} of ${qz.order.length}</div>
     <div class="hy-q">${q.q}</div>
     ${q.options.map((o, oi) => {
       let cls = '';
-      if(answered){ if(oi === q.correct) cls = 'right'; else if(oi === qz.picked) cls = 'wrong'; }
+      if(answered){ if(oi === q.correct) cls = 'right'; else if(oi === picked) cls = 'wrong'; }
       return `<button type="button" class="hy-opt ${cls}" data-hy-opt="${oi}" ${answered ? 'disabled' : ''}><b>${String.fromCharCode(65 + oi)}</b><span>${o}</span></button>`;
     }).join('')}
-    ${answered ? `<div class="hy-expl ${qz.picked === q.correct ? 'ok' : 'bad'}"><b>${qz.picked === q.correct ? '✅ إجابة صحيحة' : '❌ إجابة غير صحيحة'}</b>${q.explanation ? '<div>' + q.explanation + '</div>' : ''}</div>
-      <div style="text-align:center; margin-top:12px;"><button class="btn teal solid" data-hy-qnext>${qz.pos + 1 >= qz.order.length ? 'عرض النتيجة' : 'السؤال التالي ←'}</button></div>` : ''}
+    ${answered ? `<div class="hy-expl ${picked === q.correct ? 'ok' : 'bad'}"><b>${picked === q.correct ? '✅ Correct' : '❌ Incorrect'}</b>${q.explanation ? '<div>' + q.explanation + '</div>' : ''}</div>` : ''}
+    <div class="hy-nav">
+      ${qz.pos > 0 ? `<button class="btn" data-hy-qprev>← Previous</button>` : '<span></span>'}
+      ${answered ? `<button class="btn teal solid" data-hy-qnext>${qz.pos + 1 >= qz.order.length ? 'See result' : 'Next →'}</button>` : ''}
+    </div>
   </div>`;
 }
 function hyQuizStart(mode){
@@ -7997,24 +8008,33 @@ function hyQuizStart(mode){
   let order = qs.map((q, i) => i);
   if(mode === 'wrong') order = order.filter(i => r.prog.wrong['m' + i]);
   if(!order.length) order = qs.map((q, i) => i);
-  r.qz = { order: hyShuffle(order), pos:0, picked:null, score:0, mode };
+  r.qz = { order: hyShuffle(order), pos:0, answers:{}, mode, recorded:false };
   hyDraw();
 }
 function hyQuizPick(oi){
-  const r = hyRun, qz = r.qz; if(!qz || qz.picked != null) return;
+  const r = hyRun, qz = r.qz; if(!qz || qz.answers[qz.pos] != null) return;
   const qi = qz.order[qz.pos], q = r.item.content.mcqs[qi];
-  qz.picked = oi;
-  if(oi === q.correct){ qz.score++; delete r.prog.wrong['m' + qi]; } else r.prog.wrong['m' + qi] = 1;
+  qz.answers[qz.pos] = oi;
+  if(oi === q.correct) delete r.prog.wrong['m' + qi]; else r.prog.wrong['m' + qi] = 1;
   hyTouchDay(); hySave(); hyDraw();
 }
 function hyQuizNext(){
   const r = hyRun, qz = r.qz; if(!qz) return;
-  qz.pos++; qz.picked = null;
-  if(qz.pos >= qz.order.length && qz.mode === 'all'){
-    const pct = Math.round(qz.score / qz.order.length * 100), b = r.prog.quiz;
+  qz.pos++;
+  if(qz.pos >= qz.order.length && qz.mode === 'all' && !qz.recorded){
+    qz.recorded = true;
+    const pct = Math.round(hyQzScore() / qz.order.length * 100), b = r.prog.quiz;
     b.last = pct; b.best = Math.max(b.best || 0, pct); b.attempts = (b.attempts || 0) + 1; hySave();
   }
   hyDraw();
+}
+function hyQuizPrev(){
+  const qz = hyRun.qz; if(!qz || qz.pos <= 0) return;
+  qz.pos--; hyDraw();
+}
+function hyCardPrev(){
+  const fc = hyRun.fc; if(!fc || fc.pos <= 0) return;
+  fc.pos = Math.min(fc.pos, fc.queue.length) - 1; fc.flipped = false; hyDraw();
 }
 
 function hySavedHtml(){
@@ -8023,7 +8043,7 @@ function hySavedHtml(){
     const k = 's' + si + 'p' + pi;
     if(r.prog.marks[k]) rows.push(`<div class="hy-saved-sec">${escapeHtml(sec.title)}</div>` + hyPointHtml(p, k));
   }));
-  return rows.length ? rows.join('') : `<div class="empty-state"><h3>لا توجد محفوظات</h3><p>اضغط ☆ على أي نقطة في المراجعة لتظهر هنا.</p></div>`;
+  return rows.length ? rows.join('') : `<div class="empty-state"><h3>Nothing saved yet</h3><p>Tap ☆ on any point in Review and it will appear here.</p></div>`;
 }
 
 function hyDraw(){
@@ -8045,7 +8065,7 @@ function bindHyEvents(id){
   hyEnsureLoaded(id);
   const root = document.getElementById('hyRoot'); if(!root || !r.item) return;
   root.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-hy-tab],[data-hy-done],[data-hy-mark],[data-hy-flip],[data-hy-rate],[data-hy-fc-all],[data-hy-qstart],[data-hy-opt],[data-hy-qnext],[data-hy-qexit]');
+    const t = e.target.closest('[data-hy-tab],[data-hy-done],[data-hy-mark],[data-hy-flip],[data-hy-rate],[data-hy-fc-all],[data-hy-qstart],[data-hy-opt],[data-hy-qnext],[data-hy-qexit],[data-hy-qprev],[data-hy-fcprev]');
     if(!t) return;
     const d = t.dataset;
     if(d.hyTab){ r.tab = d.hyTab; hyDraw(); window.scrollTo({ top:0, behavior:'smooth' }); }
@@ -8054,7 +8074,7 @@ function bindHyEvents(id){
       hyTouchDay(); hySave();
       document.querySelectorAll('[data-k="' + k + '"]').forEach(row => {
         row.classList.toggle('done', !!r.prog.done[k]);
-        const b = row.querySelector('[data-hy-done]'); if(b){ b.classList.toggle('on', !!r.prog.done[k]); b.textContent = r.prog.done[k] ? '✓ فهمتها' : 'فهمتها؟'; }
+        const b = row.querySelector('[data-hy-done]'); if(b){ b.classList.toggle('on', !!r.prog.done[k]); b.textContent = r.prog.done[k] ? '✓ Got it' : 'Got it?'; }
       });
       const si = Number(k.slice(1, k.indexOf('p'))), sec = r.item.content.sections[si], el = document.querySelector('.hy-sec[data-sec="' + si + '"] summary small');
       if(el && sec) el.textContent = sec.points.filter((p, pi) => r.prog.done['s' + si + 'p' + pi]).length + '/' + sec.points.length;
@@ -8072,6 +8092,8 @@ function bindHyEvents(id){
     else if(d.hyQstart) hyQuizStart(d.hyQstart);
     else if(d.hyOpt != null) hyQuizPick(Number(d.hyOpt));
     else if(t.hasAttribute('data-hy-qnext')) hyQuizNext();
+    else if(t.hasAttribute('data-hy-qprev')) hyQuizPrev();
+    else if(t.hasAttribute('data-hy-fcprev')) hyCardPrev();
     else if(t.hasAttribute('data-hy-qexit')){ r.qz = null; hyDraw(); }
   });
   root.addEventListener('input', (e) => { if(e.target.id === 'hySearch'){ r.query = e.target.value; hyApplyFilter(); } });
@@ -8084,7 +8106,8 @@ function injectHyStyles(){
   const style = document.createElement('style');
   style.id = 'hyStyles';
   style.textContent = `
-    .hy-wrap{ max-width: 820px; margin: 0 auto; padding: 0 14px; }
+    .hy-wrap{ max-width: 820px; margin: 0 auto; padding: 0 14px; direction:ltr; text-align:left; font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; }
+    .hy-nav{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:14px; }
     .hy-wrap [hidden]{ display:none !important; }
     .hy-wm{ position:fixed; inset:0; pointer-events:none; z-index:40; }
     .hy-top{ position:sticky; top:0; z-index:30; background:var(--card); border:1px solid var(--border); border-radius:16px; padding:12px 14px; margin-bottom:14px; box-shadow:0 4px 16px rgba(0,0,0,.05); }
