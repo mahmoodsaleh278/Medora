@@ -3930,7 +3930,14 @@ function modalAdminResetStudentPassword(phone){
     msgBox.innerHTML = `<div class="form-msg">جارٍ الحفظ...</div>`;
     try{
       const { data, error } = await supabaseClient.functions.invoke('admin-reset-student-password', { body: { phone, newPassword } });
-      if(error || (data && data.error)){ msgBox.innerHTML = `<div class="form-msg error">تعذّر التعيين: ${escapeHtml((data && data.error) || error.message || '')}</div>`; return; }
+      if(error || (data && data.error)){
+        let reason = (data && data.error) || '';
+        if(!reason && error && error.context && typeof error.context.json === 'function'){
+          try{ const b = await error.context.json(); reason = b.error || b.message || JSON.stringify(b); }catch(_){}
+        }
+        if(!reason && error) reason = error.message || '';
+        msgBox.innerHTML = `<div class="form-msg error">تعذّر التعيين: ${escapeHtml(reason)}</div>`; return;
+      }
       msgBox.innerHTML = `<div class="form-msg success">تم ✅ أرسل للطالب كلمة السر هاي: <b style="direction:ltr; display:inline-block; user-select:all;">${escapeHtml(newPassword)}</b><br>ويقدر يغيّرها بعد الدخول من إعدادات حسابه.</div>`;
       e.target.querySelector('button[type=submit]').style.display = 'none';
     }catch(err){
