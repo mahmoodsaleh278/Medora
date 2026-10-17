@@ -3398,7 +3398,10 @@ function pageAdminAnalytics(){
                 <div>🧑‍🎓 <b>${escapeHtml(s.fullName||'—')}</b> <span style="color:var(--muted);">(${escapeHtml(s.phone||'')})</span></div>
                 <div style="color:var(--muted); margin-top:4px;">${escapeHtml(s.university||'جامعة غير محددة')} • ${escapeHtml(s.major||'تخصص غير محدد')}</div>
               </div>
-              <button class="btn danger small" data-del-student="${escapeHtml(s.phone)}">${ICONS.trash} حذف</button>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button class="btn teal small" data-reset-student-pw="${escapeHtml(s.phone)}">${ICONS.lock} تعيين كلمة سر جديدة</button>
+                <button class="btn danger small" data-del-student="${escapeHtml(s.phone)}">${ICONS.trash} حذف</button>
+              </div>
             </div>`).join('') : `<p style="color:var(--muted); font-size:13.5px;">لا يوجد طلاب مسجّلون بعد.</p>`}
         </div>
       </div>
@@ -3899,6 +3902,41 @@ async function deleteTeacher(teacherId){
   }catch(e){
     console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', e);
   }
+}
+
+/* تعيين كلمة سر مؤقتة جديدة لطالب نسي كلمة سره (من لوحة الأدمن).
+   كلمات السر مخزّنة مشفّرة (hash) في Supabase Auth ولا يمكن قراءتها أبدًا،
+   لذلك الحل الصحيح هو تعيين كلمة جديدة عبر Edge Function (admin-reset-student-password)
+   تعمل بمفتاح service role على السيرفر وتتحقق أن المتصل أدمن. */
+function modalAdminResetStudentPassword(phone){
+  const student = state.students.find(s=>s.phone===phone);
+  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const rnd = new Uint32Array(8); crypto.getRandomValues(rnd);
+  const suggested = Array.from(rnd).map(n=>chars[n % chars.length]).join('');
+  openModal(`
+    <h3>${ICONS.lock} تعيين كلمة سر جديدة</h3>
+    <p style="color:var(--muted); font-size:14.5px;">الطالب: <b>${escapeHtml(student ? (student.fullName||phone) : phone)}</b> (${escapeHtml(phone)})</p>
+    <form id="adminResetPwForm">
+      <div class="field"><label>كلمة السر الجديدة</label><input type="text" name="newPassword" value="${suggested}" required minlength="6" style="direction:ltr;"></div>
+      <div id="adminResetPwMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('adminResetPwForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const newPassword = new FormData(e.target).get('newPassword').trim();
+    const msgBox = document.getElementById('adminResetPwMsg');
+    if(newPassword.length < 6){ msgBox.innerHTML = `<div class="form-msg error">كلمة السر يجب أن تكون 6 أحرف على الأقل.</div>`; return; }
+    msgBox.innerHTML = `<div class="form-msg">جارٍ الحفظ...</div>`;
+    try{
+      const { data, error } = await supabaseClient.functions.invoke('admin-reset-student-password', { body: { phone, newPassword } });
+      if(error || (data && data.error)){ msgBox.innerHTML = `<div class="form-msg error">تعذّر التعيين: ${escapeHtml((data && data.error) || error.message || '')}</div>`; return; }
+      msgBox.innerHTML = `<div class="form-msg success">تم ✅ أرسل للطالب كلمة السر هاي: <b style="direction:ltr; display:inline-block; user-select:all;">${escapeHtml(newPassword)}</b><br>ويقدر يغيّرها بعد الدخول من إعدادات حسابه.</div>`;
+      e.target.querySelector('button[type=submit]').style.display = 'none';
+    }catch(err){
+      msgBox.innerHTML = `<div class="form-msg error">خطأ في الاتصال، حاول مرة أخرى.</div>`;
+    }
+  });
 }
 
 /* حذف حساب طالب من لوحة تحكم الأدمن: (1) إزالته فورًا من مصفوفة الطلاب
@@ -9154,6 +9192,9 @@ function bindPageEvents(route){
         const hay = (row.dataset.studentSearch||'').toLowerCase();
         row.style.display = hay.includes(q) ? '' : 'none';
       });
+    });
+    document.querySelectorAll('[data-reset-student-pw]').forEach(btn=>{
+      btn.addEventListener('click', ()=> modalAdminResetStudentPassword(btn.dataset.resetStudentPw));
     });
     document.querySelectorAll('[data-del-student]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
