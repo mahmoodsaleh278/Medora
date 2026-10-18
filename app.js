@@ -268,12 +268,19 @@ async function enforceDeviceLock(phone, userId){
   const deviceId = await ensureDeviceId();
   try{
     const { data: existing, error } = await supabaseClient
-      .from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
+      .from('student_devices').select('device_id, fp').eq('phone', phone).maybeSingle();
     if(error) return true; // لا نمنع الدخول بسبب خطأ شبكة عابر
     _deviceLockReason = null;
     if(existing){
-      if(existing.device_id === deviceId) return true;
-      // معرّف الجهاز لا يطابق: نحاول نقل الحساب لهذا الجهاز ضمن الحدود المسموحة (دالة rebind_my_device)
+      if(existing.device_id === deviceId){
+        // الصفوف القديمة بدون بصمة: نسجّلها الآن (نفس الجهاز) كي يعمل النقل التلقائي لاحقًا
+        if(!existing.fp){
+          try{ await supabaseClient.rpc('rebind_my_device', { p_device_id: deviceId, p_fp: deviceFingerprint(), p_label: navigator.userAgent.slice(0,140) }); }catch(e){}
+        }
+        return true;
+      }
+      // معرّف الجهاز لا يطابق: يُسمح فقط إذا كانت بصمة الجهاز مطابقة (نفس الجهاز الفعلي، متصفح آخر أو مسح تخزين).
+      // جهاز مختلف تمامًا يُرفض ويحتاج إعادة تعيين من المشرف.
       let res = null;
       try{
         const r = await supabaseClient.rpc('rebind_my_device', {
