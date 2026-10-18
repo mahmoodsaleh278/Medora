@@ -144,6 +144,9 @@ async function deleteData(key, shared=true){
    -- لتفعيل الإشعار الفوري (خروج تلقائي من الجهاز القديم فور إعادة التعيين
    -- دون انتظار تحديث الصفحة)، فعّل Realtime على الجدول:
    alter publication supabase_realtime add table public.student_devices;
+
+   -- ملاحظة: نقل الجهاز التلقائي (rebind_my_device) وجدول student_device_events
+   -- موجودان في ملف medora_device_rebind.sql — نفّذه مرة واحدة أيضًا.
 */
 
 /* هوية ثابتة لهذا المتصفح/الجهاز، تُخزَّن محليًا ولا تُشارَك أبدًا */
@@ -210,6 +213,22 @@ async function _idbSet(v){
   });
 }
 
+/* بصمة خفيفة للجهاز (لا تتغير بمسح التخزين): تُستخدم فقط لتسهيل نقل الحساب
+   تلقائيًا عند ضياع معرّف الجهاز (مثلًا ITP في سفاري على الآيفون). ليست هوية قوية. */
+function deviceFingerprint(){
+  try{
+    const s = [
+      navigator.platform, screen.width+'x'+screen.height, window.devicePixelRatio,
+      Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.language,
+      navigator.hardwareConcurrency, navigator.maxTouchPoints
+    ].join('|');
+    let h = 0; for(let i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i))|0; }
+    return 'fp'+h;
+  }catch(e){ return 'fp0'; }
+}
+/* سبب آخر منع دخول بسبب قفل الجهاز: 'denied' | 'cooldown' | null */
+let _deviceLockReason = null;
+
 /* النسخة الكاملة (async): تقرأ من الأماكن الثلاثة، تستعيد المفقود، وتنشئ ID جديد فقط
    إذا كانت الأماكن الثلاثة كلها فارغة (أول مرة فعلًا). */
 async function ensureDeviceId(){
@@ -220,6 +239,8 @@ async function ensureDeviceId(){
   _cookieSet(id);
   await _idbSet(id);
   _deviceIdCache = id;
+  // طلب تخزين دائم: يقلل مسح البيانات في المتصفحات الحديثة
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   return id;
 }
 
@@ -249,13 +270,24 @@ async function enforceDeviceLock(phone, userId){
     const { data: existing, error } = await supabaseClient
       .from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
     if(error) return true; // لا نمنع الدخول بسبب خطأ شبكة عابر
+    _deviceLockReason = null;
     if(existing){
       if(existing.device_id === deviceId) return true;
+      // معرّف الجهاز لا يطابق: نحاول نقل الحساب لهذا الجهاز ضمن الحدود المسموحة (دالة rebind_my_device)
+      let res = null;
+      try{
+        const r = await supabaseClient.rpc('rebind_my_device', {
+          p_device_id: deviceId, p_fp: deviceFingerprint(), p_label: navigator.userAgent.slice(0,140)
+        });
+        res = r && !r.error ? r.data : null;
+      }catch(e){ res = null; }
+      if(res === 'ok') return true;
+      _deviceLockReason = (res === 'cooldown') ? 'cooldown' : 'denied';
       await supabaseClient.auth.signOut();
       return false;
     }
     const { error: insErr } = await supabaseClient.from('student_devices').insert({
-      phone, user_id: userId, device_id: deviceId, device_label: navigator.userAgent.slice(0,140)
+      phone, user_id: userId, device_id: deviceId, device_label: navigator.userAgent.slice(0,140), fp: deviceFingerprint()
     });
     if(insErr && insErr.code === '23505'){
       // جهاز آخر سبقنا بجزء من الثانية بالتسجيل لنفس الحساب - نعيد التحقق منه
@@ -449,6 +481,7 @@ const I18N_PAIRS = [
   ['مدفوع، يتم التفعيل من قبل الإدارة','paid, activated by administration'],
   ['قسم مدفوع','Paid section'],
   ['اشترك الآن','Subscribe Now'], ['مجاني','Free'], ['مدفوع','Paid'], ['مفعّل','Active'],
+  ['تم نقل هذا الحساب إلى جهاز مؤخرًا. يرجى المحاولة بعد 12 ساعة، أو التواصل مع الإدارة لإعادة تعيين جهاز حسابك.','This account was recently moved to a device. Please try again after 12 hours, or contact administration to reset your account device.'],
   ['هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.','This account is already logged in on another device, and only one device can be used per account. To log in from this device, contact administration to reset your account device.'],
   ['إدارة بنك الأسئلة (إضافة / تعديل / حذف)','Manage Question Bank (Add / Edit / Delete)'],
   ['ابدأ اختبارًا من بنك الأسئلة','Start a Quiz from the Question Bank'],
@@ -10258,7 +10291,9 @@ async function handleAuthSubmit(e){
       const finalPhone = meta.phone || phone;
       const allowed = await enforceDeviceLock(finalPhone, data.user.id);
       if(!allowed){
-        msgBox.innerHTML = `<div class="form-msg error">${ICONS.lock} هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`;
+        msgBox.innerHTML = (_deviceLockReason === 'cooldown')
+          ? `<div class="form-msg error">${ICONS.lock} تم نقل هذا الحساب إلى جهاز مؤخرًا. يرجى المحاولة بعد 12 ساعة، أو التواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`
+          : `<div class="form-msg error">${ICONS.lock} هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`;
         return;
       }
       state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null, major: meta.major||null, avatar: meta.avatar||null };
