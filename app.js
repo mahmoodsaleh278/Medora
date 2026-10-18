@@ -217,17 +217,23 @@ async function _idbSet(v){
    تلقائيًا عند ضياع معرّف الجهاز (مثلًا ITP في سفاري على الآيفون). ليست هوية قوية. */
 function deviceFingerprint(){
   try{
-    const s = [
-      navigator.platform, screen.width+'x'+screen.height, window.devicePixelRatio,
-      Intl.DateTimeFormat().resolvedOptions().timeZone, navigator.language,
-      navigator.hardwareConcurrency, navigator.maxTouchPoints
-    ].join('|');
-    let h = 0; for(let i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i))|0; }
-    return 'fp'+h;
+    // نستخدم فقط خصائص ثابتة بين المتصفحات على نفس الجهاز (بدون اللغة/الزوم/عدد الأنوية)
+    const ua = navigator.userAgent || '';
+    const os = /iPhone|iPad|iPod/.test(ua) ? 'ios'
+             : /Android/.test(ua) ? 'android'
+             : /Windows/.test(ua) ? 'win'
+             : /Mac/.test(ua) ? (navigator.maxTouchPoints > 1 ? 'ios' : 'mac')
+             : /Linux/.test(ua) ? 'linux' : 'other';
+    const w = Math.max(screen.width, screen.height), h = Math.min(screen.width, screen.height);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const s = [os, w+'x'+h, screen.colorDepth, tz].join('|');
+    let hash = 0; for(let i=0;i<s.length;i++){ hash = (hash*31 + s.charCodeAt(i))|0; }
+    return 'fp2'+hash;
   }catch(e){ return 'fp0'; }
 }
 /* سبب آخر منع دخول بسبب قفل الجهاز: 'denied' | 'cooldown' | null */
 let _deviceLockReason = null;
+let _deviceLockDebug = '';
 
 /* النسخة الكاملة (async): تقرأ من الأماكن الثلاثة، تستعيد المفقود، وتنشئ ID جديد فقط
    إذا كانت الأماكن الثلاثة كلها فارغة (أول مرة فعلًا). */
@@ -274,7 +280,7 @@ async function enforceDeviceLock(phone, userId){
     if(existing){
       if(existing.device_id === deviceId){
         // الصفوف القديمة بدون بصمة: نسجّلها الآن (نفس الجهاز) كي يعمل النقل التلقائي لاحقًا
-        if(!existing.fp){
+        if(existing.fp !== deviceFingerprint()){
           try{ await supabaseClient.rpc('rebind_my_device', { p_device_id: deviceId, p_fp: deviceFingerprint(), p_label: navigator.userAgent.slice(0,140) }); }catch(e){}
         }
         return true;
@@ -287,7 +293,8 @@ async function enforceDeviceLock(phone, userId){
           p_device_id: deviceId, p_fp: deviceFingerprint(), p_label: navigator.userAgent.slice(0,140)
         });
         res = r && !r.error ? r.data : null;
-      }catch(e){ res = null; }
+        _deviceLockDebug = (r && r.error) ? ('rpc error: '+(r.error.code||'')+' '+(r.error.message||'')) : ('result: '+res);
+      }catch(e){ res = null; _deviceLockDebug = 'exception: '+(e && e.message); }
       if(res === 'ok') return true;
       _deviceLockReason = (res === 'cooldown') ? 'cooldown' : 'denied';
       await supabaseClient.auth.signOut();
@@ -10300,7 +10307,7 @@ async function handleAuthSubmit(e){
       if(!allowed){
         msgBox.innerHTML = (_deviceLockReason === 'cooldown')
           ? `<div class="form-msg error">${ICONS.lock} تم نقل هذا الحساب إلى جهاز مؤخرًا. يرجى المحاولة بعد 12 ساعة، أو التواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`
-          : `<div class="form-msg error">${ICONS.lock} هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.</div>`;
+          : `<div class="form-msg error">${ICONS.lock} هذا الحساب مسجَّل دخول بالفعل على جهاز آخر، ولا يمكن استخدام أكثر من جهاز واحد لنفس الحساب. للدخول من هذا الجهاز، تواصل مع الإدارة لإعادة تعيين جهاز حسابك.<br><small dir="ltr" style="opacity:.6">[debug] ${escapeHtml(_deviceLockDebug)} | ${escapeHtml(deviceFingerprint())}</small></div>`;
         return;
       }
       state.session = { type:'student', phone: finalPhone, name: meta.fullName||phone, university: meta.university||null, major: meta.major||null, avatar: meta.avatar||null };
