@@ -6539,12 +6539,12 @@ ${qContext}
 - لا تخترع معلومات غير موجودة في الملف المرفق أو في أسئلة الامتحانات السابقة.`;
 }
 
-async function generateAiSummary({ fileBase64, mimeType, prompt }){
+async function generateAiSummary({ fileBase64, mimeType, prompt, json }){
   if(!AI_SUMMARY_ENDPOINT) throw new Error('لم يتم إعداد الاتصال بخدمة الذكاء الاصطناعي بعد.');
   const res = await fetch(AI_SUMMARY_ENDPOINT, {
     method:'POST',
     headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+SUPABASE_ANON_KEY, 'apikey':SUPABASE_PUBLISHABLE_KEY },
-    body: JSON.stringify({ fileBase64, mimeType, prompt })
+    body: JSON.stringify({ fileBase64, mimeType, prompt, json: json === true })
   });
   if(!res.ok){
     let detail = '';
@@ -7615,18 +7615,52 @@ function hyMapRow(r){
   return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', active:r.active !== false,
     createdAt:Number(r.created_at) || 0, content: hyNormalize(r.content) };
 }
+/* يصلّح JSON المقطوع أو المكسور (الـ AI غالبًا بيقطع الرد لو طلع طويل، أو بيحط أسطر جديدة داخل النصوص) */
+function hyRepairJson(str){
+  let out = '', inStr = false, esc = false, safe = -1, safeStack = [];
+  const stack = [];
+  for(let i = 0; i < str.length; i++){
+    const ch = str[i];
+    if(inStr){
+      if(esc){ out += ch; esc = false; continue; }
+      if(ch === '\\'){ out += ch; esc = true; continue; }
+      if(ch === '"'){ inStr = false; out += ch; continue; }
+      if(ch === '\n'){ out += '\\n'; continue; }
+      if(ch === '\r') continue;
+      if(ch === '\t'){ out += '\\t'; continue; }
+      out += ch; continue;
+    }
+    if(ch === '"'){ inStr = true; out += ch; continue; }
+    if(ch === '{' || ch === '['){ stack.push(ch === '{' ? '}' : ']'); out += ch; continue; }
+    if(ch === '}' || ch === ']'){ stack.pop(); out += ch; safe = out.length; safeStack = stack.slice(); continue; }
+    out += ch;
+  }
+  let res;
+  if(!stack.length && !inStr) res = out;                       /* مش مقطوع، بس ممكن فيه فواصل زايدة */
+  else if(safe > 0) res = out.slice(0, safe) + safeStack.reverse().join('');   /* مقطوع: نرجع لآخر عنصر مكتمل ونسكّر الأقواس */
+  else throw new Error('no json');
+  return res.replace(/,(\s*[}\]])/g, '$1');
+}
 function hyParseAiJson(txt){
   const tryParse = str => {
     let t = String(str || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
-    const a = t.indexOf('{'), b = t.lastIndexOf('}');
-    if(a < 0 || b <= a) throw new Error('no json');
-    return JSON.parse(t.slice(a, b + 1));
+    const a = t.indexOf('{');
+    if(a < 0) throw new Error('no json');
+    const b = t.lastIndexOf('}');
+    if(b > a){ try{ return JSON.parse(t.slice(a, b + 1)); }catch(e){} }
+    const fixed = JSON.parse(hyRepairJson(t.slice(a)));
+    console.warn('HY: AI output was repaired (probably truncated or had raw newlines).');
+    return fixed;
   };
   try{ return tryParse(txt); }
   catch(e){
     /* لو الخدمة غلّفت الرد بوسوم HTML نشيلها ونعيد المحاولة */
     const d = document.createElement('div'); d.innerHTML = String(txt || '');
-    try{ return tryParse(d.textContent); }catch(e2){ throw new Error('تعذّر فهم ناتج الذكاء الاصطناعي. جرّب مرة ثانية أو استخدم الإدخال اليدوي.'); }
+    try{ return tryParse(d.textContent); }
+    catch(e2){
+      console.error('HY: could not parse AI output. Raw output:', txt);
+      throw new Error('تعذّر فهم ناتج الذكاء الاصطناعي. جرّب مرة ثانية أو استخدم الإدخال اليدوي.');
+    }
   }
 }
 function hyBuildPrompt({ title, courseTitle, notes }){
@@ -7752,7 +7786,7 @@ function hyModalStep1(){
       const course = state.courses.find(c => c.id === fd.get('course'));
       const fileBase64 = await fileToBase64(file);
       const prompt = hyBuildPrompt({ title, courseTitle: course ? course.title : '', notes: (fd.get('notes') || '').trim() });
-      const out = await generateAiSummary({ fileBase64, mimeType, prompt });
+      const out = await generateAiSummary({ fileBase64, mimeType, prompt, json:true });
       const raw = hyParseAiJson(out);
       hyModalStep2({ id:null, title, description:(raw.summary ? examStripHtml(String(raw.summary)).slice(0, 300) : ''), courseId:fd.get('course') || '', active:true, raw });
     }catch(err){
