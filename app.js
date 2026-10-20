@@ -237,33 +237,43 @@ function getDeviceId(){
   return id;
 }
 
-/* يتحقّق أن الجهاز الحالي هو الجهاز الوحيد المسموح له بهذا الحساب.
-   - إن لم يوجد صف بعد: هذا أول دخول على الإطلاق، فيُسجَّل هذا الجهاز كجهازه الوحيد.
-   - إن وُجد صف ويطابق جهازنا: الدخول مسموح.
-   - إن وُجد صف ولا يطابق: يُسجَّل الخروج فورًا ويُمنع الدخول (بغض النظر عن الوقت،
-     وليس فقط عند التزامن اللحظي)، إلى أن يعيد المشرف تعيين جهاز الحساب. */
+/* بصمة تقريبية للجهاز الفعلي (نظام التشغيل + حجم الشاشة + المنطقة الزمنية): ثابتة بين المتصفحات
+   على نفس الجهاز، فتسمح باستخدام أكثر من متصفح على نفس التلفون/الكمبيوتر. */
+function getFingerprint(){
+  const ua = navigator.userAgent;
+  const os = /Android/i.test(ua) ? 'android'
+    : (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) ? 'ios'
+    : /Windows/i.test(ua) ? 'win' : /Mac/i.test(ua) ? 'mac' : /Linux/i.test(ua) ? 'linux' : 'other';
+  const w = Math.min(screen.width, screen.height), h = Math.max(screen.width, screen.height);
+  let tz = ''; try{ tz = Intl.DateTimeFormat().resolvedOptions().timeZone; }catch(e){}
+  return [os, w+'x'+h, tz].join('|');
+}
+
+/* يتحقّق من الجهاز عبر دالة claim_device على السيرفر (Supabase):
+   - متصفح معروف للحساب: مسموح.
+   - نفس الجهاز الفعلي (نفس البصمة) بمتصفح جديد: يُضاف تلقائيًا (حد أقصى 5 متصفحات).
+   - جهاز مختلف: تبديل واحد كل 20 يومًا، وبعدها يُمنع إلى أن يعيد المشرف تعيين الجهاز. */
 async function enforceDeviceLock(phone, userId){
   if(!supabaseClient) return true;
   const deviceId = await ensureDeviceId();
+  const args = { p_device_id: deviceId, p_label: navigator.userAgent.slice(0,140), p_fp: getFingerprint() };
   try{
-    const { data: existing, error } = await supabaseClient
-      .from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
-    if(error) return true; // لا نمنع الدخول بسبب خطأ شبكة عابر
-    if(existing){
-      if(existing.device_id === deviceId) return true;
+    let { data: res, error } = await supabaseClient.rpc('claim_device', args);
+    if(error) return true; // ما نمنع الدخول بسبب خطأ شبكة عابر
+
+    if(res === 'none'){
+      const { error: insErr } = await supabaseClient.from('student_devices').insert({
+        phone, user_id: userId, device_id: deviceId, known_ids: [deviceId],
+        fp: args.p_fp, device_label: args.p_label
+      });
+      if(!insErr) return true;
+      if(insErr.code !== '23505') return true;
+      res = (await supabaseClient.rpc('claim_device', args)).data; // سباق مع جهاز آخر
+    }
+
+    if(res === 'blocked'){
       await supabaseClient.auth.signOut();
       return false;
-    }
-    const { error: insErr } = await supabaseClient.from('student_devices').insert({
-      phone, user_id: userId, device_id: deviceId, device_label: navigator.userAgent.slice(0,140)
-    });
-    if(insErr && insErr.code === '23505'){
-      // جهاز آخر سبقنا بجزء من الثانية بالتسجيل لنفس الحساب - نعيد التحقق منه
-      const { data: raceRow } = await supabaseClient.from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
-      if(raceRow && raceRow.device_id !== deviceId){
-        await supabaseClient.auth.signOut();
-        return false;
-      }
     }
     return true;
   }catch(e){ return true; }
@@ -320,13 +330,14 @@ function watchDeviceLock(phone){
       if(!session){ scheduleNext(); return; }
 
       const { data, error } = await supabaseClient
-        .from('student_devices').select('device_id').eq('phone', phone).maybeSingle();
+        .from('student_devices').select('device_id, known_ids').eq('phone', phone).maybeSingle();
       if(error){ scheduleNext(); return; }
 
-      if(data && data.device_id === deviceId){
+      const mine = data && (data.device_id === deviceId || (data.known_ids || []).includes(deviceId));
+      if(mine){
         missingStrikes = 0;                  // كل شيء سليم
-      } else if(data && data.device_id !== deviceId){
-        await kick(); return;                // الصف موجود بجهاز آخر: واضح
+      } else if(data){
+        await kick(); return;                // الصف موجود بجهاز آخر
       } else {
         missingStrikes++;                    // الصف غير موجود: نؤكد مرتين قبل الطرد
         if(missingStrikes >= 2){ await kick(); return; }
@@ -10459,4 +10470,17 @@ function applyFontScale(size){
   if(personalFontScale) applyFontScale(personalFontScale);
   await render();
   window.__PRERENDER_READY__ = true; /* إشارة لسكربت الـ prerender إن الصفحة جاهزة */
+})();
+
+/* ---- تنبيه المتصفح الداخلي (واتساب/فيسبوك/إنستغرام...) + طلب تثبيت التخزين ---- */
+(function(){
+  try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
+  if(/FBAN|FBAV|Instagram|WhatsApp|Telegram|; wv\)/i.test(navigator.userAgent)){
+    document.addEventListener('DOMContentLoaded', function(){
+      const b = document.createElement('div');
+      b.style.cssText = 'background:#fff3cd;color:#664d03;padding:10px 14px;text-align:center;font-size:13.5px;position:sticky;top:0;z-index:9999;';
+      b.textContent = 'للحصول على أفضل تجربة وتجنّب مشاكل تسجيل الدخول، افتح الموقع من متصفح كروم أو سفاري (اضغط ⋮ ثم "فتح في المتصفح").';
+      document.body.prepend(b);
+    });
+  }
 })();
