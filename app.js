@@ -3941,7 +3941,10 @@ function modalCreateTeacher(){
       email: pseudoEmail, password,
       options: { data: { username, fullName } }
     });
-    if(error){ msgBox.innerHTML = `<div class="form-msg error">تعذّر إنشاء الحساب: ${escapeHtml(error.message||'')}</div>`; return; }
+    if(error){
+      const already = /already|registered|exists/i.test(error.message||'');
+      msgBox.innerHTML = `<div class="form-msg error">${already ? 'اسم المستخدم هذا محجوز بحساب موجود في نظام الدخول (Supabase Auth). إذا كنت حذفت مدرّسًا بنفس الاسم قبل، يعني حذفه الفعلي ما تم؛ احذفه من Authentication → Users في Supabase أو تأكد من نشر دالة delete-teacher.' : 'تعذّر إنشاء الحساب: ' + escapeHtml(error.message||'')}</div>`; return;
+    }
     if(!data.user){ msgBox.innerHTML = `<div class="form-msg error">تعذّر إنشاء الحساب.</div>`; return; }
     /* منح دور المدرّس يتم من السيرفر عبر دالة محمية (تتحقق إن المستدعي أدمن) وبجلسة الأدمن، مو بجلسة الحساب المؤقت */
     const { error: roleErr } = await supabaseClient.rpc('set_teacher_role', { p_user: data.user.id });
@@ -4001,17 +4004,31 @@ function modalEditTeacher(teacherId){
    المتصل فعلًا هو admin قبل تنفيذ الحذف. بعد هذا الحذف الفعلي، يقدر أي حد
    يسجّل حساب مدرّس جديد بنفس اسم المستخدم من غير مشاكل "already registered". */
 async function deleteTeacher(teacherId){
+  /* أولًا نحذف حساب الدخول فعليًا من Supabase Auth. إذا فشل الحذف نوقف العملية ونبلّغ الأدمن،
+     بدل ما نحذفه من القوائم ويضل محجوز بالـ Auth (وهاد سبب رسالة "already registered" عند إعادة إنشائه). */
+  let authErr = '';
+  try{
+    const { data, error } = await supabaseClient.functions.invoke('delete-teacher', { body: { teacherId } });
+    if(error || (data && data.error)){
+      authErr = (data && data.error) || '';
+      if(!authErr && error && error.context && typeof error.context.json === 'function'){
+        try{ const b = await error.context.json(); authErr = b.error || b.message || JSON.stringify(b); }catch(_){}
+      }
+      if(!authErr && error) authErr = error.message || 'خطأ غير معروف';
+    }
+  }catch(e){
+    authErr = 'خطأ اتصال: ' + (e && e.message ? e.message : e);
+  }
+  if(authErr){
+    console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', authErr);
+    alert('تعذّر حذف حساب المدرّس من نظام الدخول، لذلك لم يتم الحذف.\nالسبب: ' + authErr);
+    return;
+  }
   state.teachers = state.teachers.filter(t=>t.id!==teacherId);
   await setData('teachers', state.teachers, true);
   let coursesChanged = false;
   state.courses.forEach(c=>{ if(c.teacherId===teacherId){ c.teacherId = null; coursesChanged = true; } });
   if(coursesChanged) await setData('courses', state.courses, true);
-  try{
-    const { error } = await supabaseClient.functions.invoke('delete-teacher', { body: { teacherId } });
-    if(error) console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', error);
-  }catch(e){
-    console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', e);
-  }
 }
 
 /* تعيين كلمة سر مؤقتة جديدة لطالب نسي كلمة سره (من لوحة الأدمن).
