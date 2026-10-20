@@ -7752,7 +7752,7 @@ function pageAdminHighYield(){
   <section class="section"><div class="container">
     <div class="toolbar">
       <h2>🔥 High Yield التفاعلي</h2>
-      <div class="toolbar-actions"><button class="btn teal solid" id="hyCreateBtn">${ICONS.plus} رفع ملف جديد</button></div>
+      <div class="toolbar-actions"><button class="btn" id="hyManualTopBtn">{ } إضافة JSON يدوي</button><button class="btn teal solid" id="hyCreateBtn">${ICONS.plus} رفع ملف جديد</button></div>
     </div>
     <p class="hint" style="margin:-10px 0 20px;">ارفع ملف High Yield جاهز (PDF أو صورة) وسيتحوّل إلى صفحة تفاعلية: نقاط قابلة للتتبّع، بطاقات مراجعة، وأسئلة تدريبية. راجعه وعدّله ثم انسخ الرابط وأرسله للطلاب — لا يفتحه إلا من لديه حساب مسجّل على المنصة.</p>
     ${hyAdmin.items.length ? hyAdmin.items.map(hyAdminCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>لا توجد ملفات بعد.</p></div>`}
@@ -7784,8 +7784,7 @@ function hyModalStep1(){
   const msg = document.getElementById('hyGenMsg');
   document.getElementById('hyManualBtn').addEventListener('click', () => {
     const fd = new FormData(form);
-    hyModalStep2({ id:null, title:(fd.get('title') || '').trim(), description:'', courseId:fd.get('course') || '', active:true,
-      raw:{ summary:'', sections:[{ title:'', points:[{ text:'', hy:true, mnemonic:'', ar:'' }], table:'' }], flashcards:[{ q:'', a:'' }], mcqs:[{ q:'', options:['','','',''], correct:0, explanation:'' }] } });
+    hyModalStep2({ id:null, title:(fd.get('title') || '').trim(), description:'', courseId:fd.get('course') || '', active:true, manual:true, raw:{} });
   });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -7829,11 +7828,17 @@ function hyModalStep2(d){
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small" id="hySaveBtn">💾 حفظ</button></div>
     </form>`, true);
   const ta = document.getElementById('hyJson');
-  ta.value = JSON.stringify(d.raw, null, 2);
+  /* الإدخال اليدوي: خانة فاضية للصق مباشرة. وبنقبل JSON ملفوف بـ ```json أو فيه فواصل زايدة */
+  const parseManual = v => { try{ return JSON.parse(v); }catch(e){ try{ return hyParseAiJson(v); }catch(_){ throw e; } } };
+  if(d.manual){
+    ta.value = '';
+    ta.placeholder = '{\n  "summary": "...",\n  "sections": [ { "title": "...", "points": [ { "text": "...", "hy": true, "mnemonic": "", "ar": "..." } ], "table": "" } ],\n  "flashcards": [ { "q": "...", "a": "..." } ],\n  "mcqs": [ { "q": "...", "options": ["...","...","...","..."], "correct": 0, "explanation": "..." } ]\n}';
+  } else ta.value = JSON.stringify(d.raw, null, 2);
   const stats = document.getElementById('hyJsonStats');
   const refresh = () => {
+    if(!ta.value.trim()){ stats.textContent = 'الصق الـ JSON هون ⬆'; stats.style.color = 'var(--muted)'; return; }
     try{
-      const c = hyCounts(hyNormalize(JSON.parse(ta.value)));
+      const c = hyCounts(hyNormalize(parseManual(ta.value)));
       stats.innerHTML = `✔ JSON صالح — ${c.sections} قسم، ${c.points} نقطة (${c.hy} 🔥)، ${c.cards} بطاقة، ${c.mcqs} سؤال`;
       stats.style.color = 'var(--teal)';
     }catch(e){ stats.textContent = '⚠ JSON غير صالح: ' + e.message; stats.style.color = 'var(--danger)'; }
@@ -7844,7 +7849,7 @@ function hyModalStep2(d){
     e.preventDefault();
     const fd = new FormData(e.target), msg = document.getElementById('hyFormMsg');
     let content;
-    try{ content = hyNormalize(JSON.parse(ta.value)); }catch(err){ msg.innerHTML = `<div class="form-msg error">JSON غير صالح: ${escapeHtml(err.message)}</div>`; return; }
+    try{ content = hyNormalize(parseManual(ta.value)); }catch(err){ msg.innerHTML = `<div class="form-msg error">JSON غير صالح: ${escapeHtml(err.message)}</div>`; return; }
     const c = hyCounts(content);
     if(!c.points && !c.cards && !c.mcqs){ msg.innerHTML = `<div class="form-msg error">المحتوى فارغ — أضف نقطة أو بطاقة أو سؤالًا واحدًا على الأقل.</div>`; return; }
     const btn = document.getElementById('hySaveBtn'); btn.disabled = true;
@@ -7861,6 +7866,7 @@ function bindHyAdminEvents(){
   hyLoadAdmin();
   const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
   on('hyCreateBtn', hyModalStep1);
+  on('hyManualTopBtn', () => hyModalStep2({ id:null, title:'', description:'', courseId:'', active:true, manual:true, raw:{} }));
   on('hyRefreshBtn', () => { hyAdmin.error = ''; hyAdmin.loaded = false; hyLoadAdmin(true); });
   const find = id => hyAdmin.items.find(x => x.id === id);
   document.querySelectorAll('[data-hy-copy]').forEach(b => b.addEventListener('click', () => {
