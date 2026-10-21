@@ -660,7 +660,7 @@ function courseSections(courseId){
    فبدل 14 استعلام select منفصل (واحد لكل مفتاح عبر getData)، نجيبهم كلهم
    بطلب واحد via `.in('key', [...])` ثم نوزّع النتائج محليًا. */
 const INIT_DATA_KEYS = ['courses','lectures',
-  'content','design','notifications','teachers','books'];
+  'content','design','notifications','teachers','books','store_settings'];
 async function fetchInitDataBulk(){
   if(!supabaseClient) return {};
   try{
@@ -691,6 +691,7 @@ async function initData(){
   state.coupons = []; state.bankCoupons = []; state.bankAccess = [];
   state.notifications = Array.isArray(pick('notifications')) ? pick('notifications') : [];
   state.books = Array.isArray(pick('books')) ? pick('books') : [];
+  state.storeSettings = Object.assign({ visible:false }, pick('store_settings') || {});   // MEDIX STORE: مخفي افتراضيًا
   state.content = Object.assign({}, CONTENT_DEFAULTS, pick('content'));
   state.design = Object.assign({}, DESIGN_DEFAULTS, pick('design'));
   await loadUserData();
@@ -1459,6 +1460,28 @@ function isLibraryAllowed(){
   return designVal('libraryEnabled') !== false;
 }
 
+/* ---------------- MEDIX STORE ----------------
+   الكود كله بملف مستقل store.js (بيتحمّل كسوليًا عند فتح /store فقط).
+   الإظهار/الإخفاء: state.storeSettings.visible (بيتحكم فيه المشرف من صفحة المتجر)،
+   والأدمن دائمًا بيشوفه. */
+function isStoreAllowed(){
+  if(isAdminSession()) return true;
+  return !!(state.storeSettings && state.storeSettings.visible === true);
+}
+let storeModuleFailed = false;
+function ensureStoreModule(){ return loadScriptOnce('/store.js?v=1', ()=>!!window.MedixStore); }
+function pageStore(){
+  if(!isStoreAllowed()){
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>هذه الصفحة غير متاحة حاليًا</h3><p><a href="/home" style="color:var(--teal); font-weight:800;">العودة للرئيسية</a></p></div></div></section>`;
+  }
+  if(window.MedixStore) return window.MedixStore.page();
+  if(storeModuleFailed){
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>تعذّر تحميل المتجر</h3><p>تأكد من اتصالك بالإنترنت ثم أعد تحميل الصفحة.</p></div></div></section>`;
+  }
+  ensureStoreModule().then(()=>{ if(currentRoute()==='store') render(); }).catch(()=>{ storeModuleFailed = true; if(currentRoute()==='store') render(); });
+  return `<div style="min-height:60vh; display:flex; align-items:center; justify-content:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`;
+}
+
 function priceBadgeHtml(c, isAdmin){
   if(isAdmin){
     if(courseIsAllFree(c)) return `<span class="lecture-tier-tag">🆓 مجاني</span>`;
@@ -1612,6 +1635,10 @@ function renderNavState(){
   const footerLibraryLinkEl = document.getElementById('footerLibraryLink');
   if(footerLibraryLinkEl) footerLibraryLinkEl.classList.toggle('hidden', !libAllowed);
 
+  // MEDIX STORE: الروابط بتظهر فقط إذا المتجر مفعّل (أو للمشرف)
+  const storeAllowedNow = isStoreAllowed();
+  ['navStoreLink','footerStoreLink'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.toggle('hidden', !storeAllowedNow); });
+
   if(footerDesc) footerDesc.innerHTML = `${cval('footer_desc')}${editBtn('footer_desc')}`;
   const footerCopy = document.getElementById('footerCopyText');
   if(footerCopy) footerCopy.innerHTML = `${cval('footer_copy')}${editBtn('footer_copy')}`;
@@ -1624,6 +1651,7 @@ function renderNavState(){
         <a href="/admin-coupons" class="btn small" style="border-color:#fff;color:#fff;">🎟️ الكوبونات</a>
         <a href="/admin-exams" class="btn small" style="border-color:#fff;color:#fff;">📝 الاختبارات</a>
         <a href="/admin-highyield" class="btn small" style="border-color:#fff;color:#fff;">🔥 High Yield</a>
+        <a href="/store" class="btn small" style="border-color:#fff;color:#fff;">🛍️ المتجر</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
       </div>`;
@@ -7430,6 +7458,10 @@ function updateSeoMeta(route){
       setPageMeta({ title: 'مكتبة التمريض', description: 'مكتبة مرجعية تضم كتب ومراجع التمريض بصيغة PDF لدعم محاضراتك وتخصصك على منصة MEDORA.' });
       break;
 
+    case 'store':
+      setPageMeta({ title: 'MEDIX STORE', description: 'متجر MEDIX STORE لمنتجات ومستلزمات طلاب التمريض وطب الأسنان في الأردن.' });
+      break;
+
     case 'about':
       setPageMeta({ title: 'من نحن', description: 'تعرّف على منصة MEDORA ورسالتها بخدمة طلاب التمريض وطب الأسنان.' });
       break;
@@ -7507,6 +7539,7 @@ async function render(){
       case 'student-settings': html = pageStudentSettings(); break;
       case 'bank': html = pageBank(); break;
       case 'library': html = pageLibrary(); break;
+      case 'store': html = pageStore(); break;
       case 'about': html = pageAbout(); break;
       case 'contact': html = pageContact(); break;
       case 'privacy': html = pagePrivacy(); break;
@@ -9947,6 +9980,7 @@ function bindPageEvents(route){
     });
   }
 
+  if(route === 'store' && window.MedixStore && isStoreAllowed()) window.MedixStore.bind();
   if(route === 'library'){
     document.querySelectorAll('[data-lib-crumb-depth]').forEach(el=>{
       el.addEventListener('click', ()=>{
