@@ -146,6 +146,7 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .mx-plate{position:absolute;inset:14%;border-radius:2.5rem;background:#fff;box-shadow:var(--m-lift)}
 .mx-ha{position:absolute;inset:22%;display:grid;place-items:center;transform:translateZ(60px);filter:drop-shadow(0 18px 18px rgba(15,41,66,.18))}
 .mx-ha img{width:100%;height:100%;object-fit:contain}
+.mx-ha.logo{inset:16%;filter:none}
 .mx-fade{animation:mxfade .3s ease both;width:100%;height:100%}@keyframes mxfade{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
 .mx-hcard{margin:1.25rem auto 0;max-width:24rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;border:1px solid var(--m-line);border-radius:1rem;background:var(--m-surface);padding:1rem;box-shadow:var(--m-lift)}
 .mx-hcard .t{min-width:0}.mx-hcard b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.9rem;color:var(--m-fg)}
@@ -304,10 +305,10 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
   function heroVisualHtml(){
     const L = slides(); if(S.slide >= L.length) S.slide = 0;
     const p = L[S.slide];
-    const vis = p ? (imgOf(p) ? `<img src="${esc(imgOf(p))}" alt="${esc(p.title)}">` : art(artKey(p))) : art('steth');
+    const vis = p ? (imgOf(p) ? `<img src="${esc(imgOf(p))}" alt="${esc(p.title)}">` : art(artKey(p))) : `<img src="${esc(LOGO_URL)}" alt="MEDIX STORE">`;
     return `<div class="mx-stage" id="mxStage"><div class="mx-tilt" id="mxTilt">
         <svg viewBox="0 0 400 400" fill="none" aria-hidden="true"><ellipse cx="200" cy="215" rx="178" ry="116" transform="rotate(-14 200 215)" stroke="#2EA89E" stroke-width="10" stroke-linecap="round" stroke-dasharray="520 400"/><circle cx="352" cy="148" r="17" fill="#fff" stroke="#2EA89E" stroke-width="8"/><circle cx="352" cy="148" r="5" fill="#2EA89E"/></svg>
-        <div class="mx-plate"></div><div class="mx-ha"><div class="mx-fade">${vis}</div></div></div></div>
+        <div class="mx-plate"></div><div class="mx-ha ${p ? '' : 'logo'}"><div class="mx-fade">${vis}</div></div></div></div>
       <div class="mx-hcard">
         ${p ? `<div class="t"><b>${esc(p.title)}</b><span class="mx-muted" style="font-size:.9rem">${fmt(p.price)}${p.old_price ? ` <s>${fmt(p.old_price)}</s>` : ''}</span></div>
           <button class="mx-btn navy sm" data-act="add" data-id="${esc(p.id)}">أضف للسلة</button>`
