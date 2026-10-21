@@ -1469,7 +1469,7 @@ function isStoreAllowed(){
   return !!(state.storeSettings && state.storeSettings.visible === true);
 }
 let storeModuleFailed = false;
-function ensureStoreModule(){ return loadScriptOnce('/store.js?v=1', ()=>!!window.MedixStore); }
+function ensureStoreModule(){ return loadScriptOnce('/store.js?v=2', ()=>!!window.MedixStore); }
 function pageStore(){
   if(!isStoreAllowed()){
     return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>هذه الصفحة غير متاحة حاليًا</h3><p><a href="/home" style="color:var(--teal); font-weight:800;">العودة للرئيسية</a></p></div></div></section>`;
@@ -7557,6 +7557,9 @@ async function render(){
   const scrollBefore = window.scrollY;
   document.getElementById('app').innerHTML = html;
   updateSeoMeta(route);
+  /* MEDIX STORE: صفحة كاملة بهيدرها الخاص، فنخفي هيدر/فوتر المنصة أثناء وجودها */
+  document.body.classList.toggle('mx-full', route === 'store' && !!window.MedixStore && isStoreAllowed());
+  if(route !== 'store') document.body.style.overflow = '';
   renderNavState();
   renderNotifPanel();
   bindPageEvents(route);
