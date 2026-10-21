@@ -7565,7 +7565,7 @@ function updateWatermark(route){
 document.addEventListener('copy', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
 document.addEventListener('cut', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
 document.addEventListener('contextmenu', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
-document.addEventListener('selectstart', (e)=>{ if(document.body.classList.contains('copy-protected') && !(document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName))) e.preventDefault(); });
+document.addEventListener('selectstart', (e)=>{ if(document.body.classList.contains('copy-protected') && !hyHlSelectable(e.target) && !(document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName))) e.preventDefault(); });
 document.addEventListener('dragstart', (e)=>{ if(document.body.classList.contains('copy-protected')) e.preventDefault(); });
 document.addEventListener('keydown', (e)=>{
   if(!document.body.classList.contains('copy-protected')) return;
@@ -7909,7 +7909,7 @@ function bindHyAdminEvents(){
 }
 
 /* ============================ جهة الطالب ============================ */
-function hyEmptyProg(){ return { done:{}, marks:{}, cards:{}, wrong:{}, quiz:{ best:0, last:0, attempts:0 }, days:[] }; }
+function hyEmptyProg(){ return { done:{}, marks:{}, cards:{}, wrong:{}, hl:{}, quiz:{ best:0, last:0, attempts:0 }, days:[] }; }
 function hyNewRun(id){
   return { id, loading:false, loaded:false, userKey:null, item:null, error:'', prog:hyEmptyProg(), uid:null,
     tab:'review', query:'', hyOnly:false, open:null, fc:null, qz:null };
@@ -8021,9 +8021,9 @@ function hyPointHtml(p, key){
   if(!r.arOpen) r.arOpen = new Set();
   const arOn = !!p.ar && (r.arAll || r.arOpen.has(key));
   return `<div class="hy-pt ${p.hy ? 'hy' : ''} ${done ? 'done' : ''}" data-k="${key}">
-    <div class="hy-pt-text">${p.hy ? '<span class="hy-fire">🔥</span> ' : ''}${p.text}</div>
-    ${p.mnemonic ? `<div class="hy-mn">💡 ${p.mnemonic}</div>` : ''}
-    ${p.ar ? `<div class="hy-ar" dir="rtl" data-ar-box="${key}" ${arOn ? '' : 'hidden'}><span class="hy-ar-tag">🇯🇴 شرح بالعربي</span>${p.ar}</div>` : ''}
+    <div class="hy-pt-text">${p.hy ? '<span class="hy-fire">🔥</span> ' : ''}<span class="hy-txt" data-hl-k="${key}">${p.text}</span></div>
+    ${p.mnemonic ? `<div class="hy-mn">💡 <span class="hy-txt" data-hl-k="${key}:m">${p.mnemonic}</span></div>` : ''}
+    ${p.ar ? `<div class="hy-ar" dir="rtl" data-ar-box="${key}" ${arOn ? '' : 'hidden'}><span class="hy-ar-tag">🇯🇴 شرح بالعربي</span><span class="hy-txt" data-hl-k="${key}:a">${p.ar}</span></div>` : ''}
     <div class="hy-pt-act">
       ${p.ar ? `<button type="button" class="hy-mini ar ${arOn ? 'on' : ''}" data-hy-ar="${key}">${arOn ? 'إخفاء العربي' : 'اشرحلي بالعربي'}</button>` : ''}
       <button type="button" class="hy-mini ${done ? 'on' : ''}" data-hy-done="${key}">${done ? '✓ Got it' : 'Got it?'}</button>
@@ -8045,8 +8045,10 @@ function hyReviewHtml(){
     <div class="hy-tools">
       <input type="search" id="hySearch" placeholder="🔎 Search this file..." value="${escapeHtml(r.query)}">
       <label class="hy-toggle"><input type="checkbox" id="hyOnlyChk" ${r.hyOnly ? 'checked' : ''}> 🔥 High Yield only (quick review)</label>
+      <label class="hy-toggle"><input type="checkbox" id="hyHlOnlyChk" ${r.hlOnly ? 'checked' : ''}> 🖍️ My highlights only (<span id="hyHlCount">${hyHlTotal()}</span>)</label>
       ${c.sections.some(sec => sec.points.some(p => p.ar)) ? `<label class="hy-toggle"><input type="checkbox" id="hyArAllChk" ${r.arAll ? 'checked' : ''}> 🇯🇴 عرض الشرح بالعربي لكل النقاط</label>` : ''}
     </div>
+    <div class="hy-hl-hint">🖍️ Select any text to highlight it — tap a highlight to change its color or remove it. 🟡 Important · 🔴 Not understood · 🟢 Memorized</div>
     <div id="hyNoRes" class="empty-state" hidden style="padding:18px;"><p>No matching results.</p></div>
     ${secs || '<div class="empty-state"><p>No sections in this file.</p></div>'}`;
 }
@@ -8057,19 +8059,19 @@ function hyApplyFilter(){
   document.querySelectorAll('#hyBody .hy-sec').forEach(sec => {
     let vis = 0;
     sec.querySelectorAll('.hy-pt').forEach(p => {
-      const ok = (!r.hyOnly || p.classList.contains('hy')) && (!q || p.textContent.toLowerCase().includes(q));
+      const ok = (!r.hyOnly || p.classList.contains('hy')) && (!r.hlOnly || !!p.querySelector('mark.hy-hl')) && (!q || p.textContent.toLowerCase().includes(q));
       p.hidden = !ok; if(ok) vis++;
     });
     const tbl = sec.querySelector('.hy-table');
     if(tbl){
-      tbl.hidden = !!(r.hyOnly || (q && !tbl.textContent.toLowerCase().includes(q)));
+      tbl.hidden = !!(r.hyOnly || r.hlOnly || (q && !tbl.textContent.toLowerCase().includes(q)));
       if(!tbl.hidden && q) vis++;
     }
-    sec.hidden = (r.hyOnly || q) ? vis === 0 : false;
+    sec.hidden = (r.hyOnly || r.hlOnly || q) ? vis === 0 : false;
     if(q && vis > 0) sec.open = true;
     if(!sec.hidden) any = true;
   });
-  const nr = document.getElementById('hyNoRes'); if(nr) nr.hidden = any || !(r.hyOnly || q);
+  const nr = document.getElementById('hyNoRes'); if(nr) nr.hidden = any || !(r.hyOnly || r.hlOnly || q);
 }
 
 function hyCardMastered(i){ const st = hyRun.prog.cards['c' + i]; return !!(st && st.box >= 3); }
@@ -8205,6 +8207,7 @@ function hyDraw(){
   const r = hyRun, body = document.getElementById('hyBody'); if(!r || !r.item || !body) return;
   document.querySelectorAll('.hy-tab').forEach(b => b.classList.toggle('on', b.dataset.hyTab === r.tab));
   body.innerHTML = r.tab === 'cards' ? hyCardsHtml() : r.tab === 'quiz' ? hyQuizHtml() : r.tab === 'saved' ? hySavedHtml() : hyReviewHtml();
+  hyHlHide(); hyPaintAll();
   if(r.tab === 'review'){
     hyApplyFilter();
     body.querySelectorAll('details.hy-sec').forEach(d => d.addEventListener('toggle', () => {
@@ -8261,6 +8264,7 @@ function bindHyEvents(id){
   root.addEventListener('input', (e) => { if(e.target.id === 'hySearch'){ r.query = e.target.value; hyApplyFilter(); } });
   root.addEventListener('change', (e) => {
     if(e.target.id === 'hyOnlyChk'){ r.hyOnly = e.target.checked; hyApplyFilter(); }
+    else if(e.target.id === 'hyHlOnlyChk'){ r.hlOnly = e.target.checked; hyApplyFilter(); }
     else if(e.target.id === 'hyArAllChk'){
       r.arAll = e.target.checked;
       document.querySelectorAll('#hyBody [data-ar-box]').forEach(b => {
@@ -8340,11 +8344,212 @@ function injectHyStyles(){
     .hy-expl.ok{ background:color-mix(in srgb, #16a34a 10%, var(--card)); } .hy-expl.bad{ background:color-mix(in srgb, #ef4444 10%, var(--card)); }
     .hy-stats-row{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0; }
     .hy-stats-row span{ font-size:12.5px; font-weight:700; padding:4px 10px; border-radius:99px; background:var(--bg); border:1px solid var(--border); color:var(--muted); }
+    .hy-txt{ -webkit-user-select:text; user-select:text; -webkit-touch-callout:none; }
+    mark.hy-hl{ color:inherit; border-radius:4px; padding:1px 0; cursor:pointer; -webkit-box-decoration-break:clone; box-decoration-break:clone; }
+    mark.hy-hl-y{ background:rgba(250,204,21,.5); }
+    mark.hy-hl-r{ background:rgba(248,113,113,.42); }
+    mark.hy-hl-g{ background:rgba(74,222,128,.42); }
+    .hy-hl-hint{ font-size:12.5px; color:var(--muted); line-height:1.7; margin:-2px 0 12px; }
+    #hyHlBar{ position:fixed; z-index:10050; display:flex; align-items:center; gap:9px; padding:7px 11px; border-radius:999px; background:#1f2937; box-shadow:0 8px 24px rgba(0,0,0,.3); direction:ltr; }
+    #hyHlBar[hidden]{ display:none; }
+    #hyHlBar button{ width:30px; height:30px; border-radius:50%; padding:0; cursor:pointer; -webkit-user-select:none; user-select:none; }
+    #hyHlBar .hy-hl-dot{ border:2px solid rgba(255,255,255,.85); }
+    #hyHlBar .hy-hl-dot.hy-hl-y{ background:#facc15; }
+    #hyHlBar .hy-hl-dot.hy-hl-r{ background:#f87171; }
+    #hyHlBar .hy-hl-dot.hy-hl-g{ background:#4ade80; }
+    #hyHlBar .hy-hl-x{ border:0; background:rgba(255,255,255,.16); color:#fff; font-size:14px; font-weight:800; }
     @media (max-width:560px){ .hy-rate-btn{ font-size:12px; } .hy-fc-txt{ font-size:16px; } }
   `;
   document.head.appendChild(style);
 }
 injectHyStyles();
+
+/* =========================================================================
+   تظليل النصوص داخل High Yield
+   - الطالب يحدّد نصًا داخل أي نقطة (أو الـ mnemonic أو الشرح العربي) فيظهر شريط ألوان عائم.
+   - التظليل يُخزَّن ضمن تقدّم الطالب: prog.hl = { "s2p5": [ {s,e,c,t} ], "s2p5:m": [...], "s2p5:a": [...] }
+     s/e = موضع البداية والنهاية داخل نص العنصر، c = اللون (y/r/g)، t = نسخة من النص للتحقق.
+   - النسخ والقص والقائمة اليمنى تبقى ممنوعة؛ الاستثناء الوحيد هو السماح بالتحديد داخل .hy-txt.
+   ========================================================================= */
+const HY_HL_COLORS = [['y','Important'], ['r','Not understood'], ['g','Memorized']];
+const HY_HL_MAX = 300;
+let hyHlState = null, hyHlBarEl = null, hyHlRaf = 0, hyHlPressed = false, hyHlPressTimer = null;
+
+function hyHlSelectable(t){
+  const el = t && t.nodeType === 3 ? t.parentElement : t;
+  return !!(el && el.closest && el.closest('.hy-txt'));
+}
+function hyHlTotal(){
+  const hl = hyRun && hyRun.prog && hyRun.prog.hl;
+  if(!hl || typeof hl !== 'object') return 0;
+  return Object.keys(hl).reduce((n, k) => n + (Array.isArray(hl[k]) ? hl[k].length : 0), 0);
+}
+function hyHlRefreshCount(){ const c = document.getElementById('hyHlCount'); if(c) c.textContent = hyHlTotal(); }
+
+/* يشيل التظليلات الحالية من العنصر ويرسمها من جديد حسب القائمة */
+function hyPaintEl(el, list){
+  el.querySelectorAll('mark.hy-hl').forEach(m => m.replaceWith(...m.childNodes));
+  el.normalize();
+  if(!Array.isArray(list) || !list.length) return;
+  const full = el.textContent;
+  for(let i = list.length - 1; i >= 0; i--){            /* نصحّح المواقع لو تغيّر النص (تعديل المشرف) أو نحذف اللي ما عاد له وجود */
+    const h = list[i];
+    if(!h || !h.t || !(h.e > h.s)){ list.splice(i, 1); continue; }
+    if(full.slice(h.s, h.e) !== h.t){
+      const j = full.indexOf(h.t);
+      if(j < 0){ list.splice(i, 1); continue; }
+      h.s = j; h.e = j + h.t.length;
+    }
+  }
+  list.sort((a, b) => a.s - b.s);
+  for(let i = list.length - 1; i > 0; i--){ if(list[i].s < list[i - 1].e) list.splice(i, 1); }   /* ما بنسمح بتداخل */
+  const nodes = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let pos = 0, n;
+  while((n = w.nextNode())){ nodes.push({ n, s:pos, e:pos + n.nodeValue.length }); pos += n.nodeValue.length; }
+  nodes.forEach(nd => {
+    const hits = [];
+    list.forEach((h, i) => { if(h.e > nd.s && h.s < nd.e) hits.push({ h, i }); });
+    if(!hits.length) return;
+    const txt = nd.n.nodeValue, frag = document.createDocumentFragment();
+    let cur = 0;
+    hits.forEach(({ h, i }) => {
+      const a = Math.max(h.s, nd.s) - nd.s, b = Math.min(h.e, nd.e) - nd.s;
+      if(a > cur) frag.appendChild(document.createTextNode(txt.slice(cur, a)));
+      const m = document.createElement('mark');
+      m.className = 'hy-hl hy-hl-' + (h.c || 'y'); m.dataset.hlI = i; m.textContent = txt.slice(a, b);
+      frag.appendChild(m); cur = b;
+    });
+    if(cur < txt.length) frag.appendChild(document.createTextNode(txt.slice(cur)));
+    nd.n.parentNode.replaceChild(frag, nd.n);
+  });
+}
+function hyPaintAll(){
+  const r = hyRun; if(!r || !r.prog) return;
+  const hl = (r.prog.hl && typeof r.prog.hl === 'object') ? r.prog.hl : (r.prog.hl = {});
+  document.querySelectorAll('#hyBody .hy-txt').forEach(el => hyPaintEl(el, hl[el.dataset.hlK]));
+  hyHlRefreshCount();
+}
+
+/* موضع بداية/نهاية الـ Range داخل نص عنصر معيّن */
+function hyHlOffsets(range, el){
+  const full = document.createRange(); full.selectNodeContents(el);
+  let s, e;
+  if(range.compareBoundaryPoints(Range.START_TO_START, full) <= 0) s = 0;
+  else { const pre = document.createRange(); pre.setStart(el, 0); pre.setEnd(range.startContainer, range.startOffset); s = pre.toString().length; }
+  if(range.compareBoundaryPoints(Range.END_TO_END, full) >= 0) e = el.textContent.length;
+  else { const pre = document.createRange(); pre.setStart(el, 0); pre.setEnd(range.endContainer, range.endOffset); e = pre.toString().length; }
+  return [s, e];
+}
+/* يقصّ المجال [s,e) من قائمة التظليلات (بدون تداخل) */
+function hyHlSubtract(list, s, e){
+  const out = [];
+  list.forEach(h => {
+    if(h.e <= s || h.s >= e){ out.push(h); return; }
+    if(h.s < s) out.push({ s:h.s, e:s, c:h.c, t:(h.t || '').slice(0, s - h.s) });
+    if(h.e > e) out.push({ s:e, e:h.e, c:h.c, t:(h.t || '').slice(e - h.s) });
+  });
+  return out;
+}
+
+function hyHlBar(){
+  if(hyHlBarEl) return hyHlBarEl;
+  const b = document.createElement('div');
+  b.id = 'hyHlBar'; b.hidden = true;
+  b.innerHTML = HY_HL_COLORS.map(c => `<button type="button" class="hy-hl-dot hy-hl-${c[0]}" data-hl-c="${c[0]}" title="${c[1]}" aria-label="${c[1]}"></button>`).join('')
+    + `<button type="button" class="hy-hl-x" data-hl-c="" title="Remove highlight" aria-label="Remove highlight">✕</button>`;
+  b.addEventListener('mousedown', e => e.preventDefault());           /* يحافظ على التحديد بالماوس */
+  b.addEventListener('pointerdown', () => {                            /* على اللمس ممكن يختفي التحديد قبل الـ click، فنثبّت الشريط لحظيًا */
+    hyHlPressed = true; clearTimeout(hyHlPressTimer);
+    hyHlPressTimer = setTimeout(() => { hyHlPressed = false; }, 1200);
+  });
+  b.addEventListener('click', e => {
+    const btn = e.target.closest('[data-hl-c]'); if(!btn) return;
+    e.preventDefault(); e.stopPropagation();
+    hyHlApply(btn.dataset.hlC || null);
+  });
+  document.body.appendChild(b);
+  return (hyHlBarEl = b);
+}
+function hyHlShow(rect, state){
+  const b = hyHlBar(); hyHlState = state; b.hidden = false;
+  const bw = b.offsetWidth || 170, bh = b.offsetHeight || 46;
+  const coarse = !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);   /* على اللمس نحط الشريط تحت التحديد عشان ما يتغطّى بقائمة النظام */
+  let top = coarse ? rect.bottom + 24 : rect.top - bh - 8;
+  if(top < 8) top = rect.bottom + (coarse ? 24 : 8);
+  if(top + bh > window.innerHeight - 8) top = Math.max(8, rect.top - bh - 8);
+  let left = rect.left + rect.width / 2 - bw / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
+  b.style.top = top + 'px'; b.style.left = left + 'px';
+}
+function hyHlHide(){ hyHlState = null; if(hyHlBarEl) hyHlBarEl.hidden = true; }
+
+function hyHlOnSelection(){
+  cancelAnimationFrame(hyHlRaf);
+  hyHlRaf = requestAnimationFrame(() => {
+    if(hyHlPressed) return;
+    const root = document.getElementById('hyBody'), sel = window.getSelection();
+    if(!root || !hyRun || !hyRun.item || !sel || sel.rangeCount === 0 || sel.isCollapsed){
+      if(hyHlState && hyHlState.mode === 'mark' && root) return;     /* شريط تعديل تظليل موجود: ما نخبّيه بتغيّر التحديد */
+      hyHlHide(); return;
+    }
+    const range = sel.getRangeAt(0);
+    if(!root.contains(range.commonAncestorContainer)){ hyHlHide(); return; }
+    const items = [];
+    root.querySelectorAll('.hy-txt').forEach(el => {
+      if(!range.intersectsNode(el)) return;
+      const txt = el.textContent; let [s, e] = hyHlOffsets(range, el);
+      while(s < e && /\s/.test(txt[s])) s++;
+      while(e > s && /\s/.test(txt[e - 1])) e--;
+      if(e > s) items.push({ key: el.dataset.hlK, s, e, t: txt.slice(s, e) });
+    });
+    if(!items.length){ hyHlHide(); return; }
+    hyHlShow(range.getBoundingClientRect(), { mode:'sel', items });
+  });
+}
+
+/* تطبيق لون (أو null = إزالة) على التحديد الحالي أو على تظليل مفتوح */
+function hyHlApply(color){
+  const r = hyRun, st = hyHlState; if(!r || !r.item || !st) return;
+  hyHlPressed = false;
+  if(!r.prog.hl || typeof r.prog.hl !== 'object') r.prog.hl = {};
+  const hl = r.prog.hl, keys = new Set();
+  if(st.mode === 'sel'){
+    if(color && hyHlTotal() >= HY_HL_MAX){ alert('Highlight limit reached for this file. Remove some highlights first.'); return; }
+    st.items.forEach(it => {
+      const list = hyHlSubtract(Array.isArray(hl[it.key]) ? hl[it.key] : [], it.s, it.e);
+      if(color) list.push({ s:it.s, e:it.e, c:color, t:it.t });
+      list.sort((a, b) => a.s - b.s);
+      if(list.length) hl[it.key] = list; else delete hl[it.key];
+      keys.add(it.key);
+    });
+  }else{
+    const list = hl[st.key], h = list && list[st.idx];
+    if(h){
+      if(color) h.c = color; else list.splice(st.idx, 1);
+      if(!list.length) delete hl[st.key];
+    }
+    keys.add(st.key);
+  }
+  document.querySelectorAll('#hyBody .hy-txt').forEach(el => { if(keys.has(el.dataset.hlK)) hyPaintEl(el, hl[el.dataset.hlK]); });
+  try{ window.getSelection().removeAllRanges(); }catch(e){}
+  hyHlHide(); hyTouchDay(); hySave(); hyHlRefreshCount();
+  if(r.tab === 'review' && r.hlOnly) hyApplyFilter();
+}
+
+document.addEventListener('selectionchange', hyHlOnSelection);
+document.addEventListener('click', (e) => {
+  if(!document.getElementById('hyRoot') || !hyRun || !hyRun.item){ hyHlHide(); return; }
+  if(e.target.closest && e.target.closest('#hyHlBar')) return;
+  const sel = window.getSelection();
+  if(sel && !sel.isCollapsed) return;
+  const m = e.target.closest && e.target.closest('mark.hy-hl'), host = m && m.closest('.hy-txt');
+  if(m && host) hyHlShow(m.getBoundingClientRect(), { mode:'mark', key:host.dataset.hlK, idx:Number(m.dataset.hlI) });
+  else hyHlHide();
+});
+window.addEventListener('scroll', () => {
+  if(!hyHlState) return;
+  if(hyHlState.mode === 'sel') hyHlOnSelection(); else hyHlHide();
+}, { passive:true });
 
 /* =========================================================================
    الاختبارات المشاركة بالرابط (Exams)
