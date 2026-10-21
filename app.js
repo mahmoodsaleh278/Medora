@@ -7613,14 +7613,24 @@ function hyNormalize(raw){
   const s = x => sanitizeSummaryHtml(String(x == null ? '' : x));
   const t = x => String(x == null ? '' : x).trim();
   const out = { summary: s(raw.summary), sections: [], flashcards: [], mcqs: [] };
-  (Array.isArray(raw.sections) ? raw.sections : []).forEach(sec => {
+  /* خريطة لإعادة ترقيم الـ ref لو انحذفت أقسام/نقاط فاضية أثناء التنظيف: 's{قديم}p{قديم}' -> 's{جديد}p{جديد}' */
+  const refMap = {};
+  const refKey = x => { const m = /^s(\d+)\s*[-_]?\s*p(\d+)$/i.exec(t(x)); return m ? ('s' + Number(m[1]) + 'p' + Number(m[2])) : ''; };
+  (Array.isArray(raw.sections) ? raw.sections : []).forEach((sec, rsi) => {
     if(!sec) return;
-    const points = (Array.isArray(sec.points) ? sec.points : [])
-      .map(p => typeof p === 'string' ? { text:p } : p)
-      .filter(p => p && t(p.text))
-      .map(p => ({ text: s(p.text), hy: !!p.hy, mnemonic: s(p.mnemonic || ''), ar: s(p.ar || '') }));
+    const points = [], rawIdx = [];
+    (Array.isArray(sec.points) ? sec.points : []).forEach((p0, rpi) => {
+      const p = typeof p0 === 'string' ? { text:p0 } : p0;
+      if(!p || !t(p.text)) return;
+      points.push({ text: s(p.text), hy: !!p.hy, mnemonic: s(p.mnemonic || ''), ar: s(p.ar || '') });
+      rawIdx.push(rpi);
+    });
     const table = sec.table ? s(sec.table) : '';
-    if(t(sec.title) && (points.length || table)) out.sections.push({ title: t(sec.title), points, table });
+    if(t(sec.title) && (points.length || table)){
+      const si = out.sections.length;
+      out.sections.push({ title: t(sec.title), points, table });
+      rawIdx.forEach((rpi, pi) => { refMap['s' + rsi + 'p' + rpi] = 's' + si + 'p' + pi; });
+    }
   });
   (Array.isArray(raw.flashcards) ? raw.flashcards : []).forEach(c => {
     if(c && t(c.q) && t(c.a)) out.flashcards.push({ q: s(c.q), a: s(c.a) });
@@ -7630,14 +7640,14 @@ function hyNormalize(raw){
     const options = m.options.map(o => s(o)).filter(o => t(o));
     const correct = Number(m.correct);
     if(options.length < 2 || !Number.isInteger(correct) || correct < 0 || correct >= options.length) return;
-    out.mcqs.push({ q: s(m.q), options, correct, explanation: s(m.explanation || '') });
+    out.mcqs.push({ q: s(m.q), options, correct, explanation: s(m.explanation || ''), ref: refMap[refKey(m.ref)] || '' });
   });
   return out;
 }
 function hyCounts(c){
   let points = 0, hy = 0;
   c.sections.forEach(sec => sec.points.forEach(p => { points++; if(p.hy) hy++; }));
-  return { sections: c.sections.length, points, hy, cards: c.flashcards.length, mcqs: c.mcqs.length };
+  return { sections: c.sections.length, points, hy, cards: c.flashcards.length, mcqs: c.mcqs.length, linked: c.mcqs.filter(m => m.ref).length };
 }
 function hyMapRow(r){
   return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', active:r.active !== false,
@@ -7702,13 +7712,14 @@ JSON schema:
  "summary": "2-3 sentence overview of the file",
  "sections": [ { "title": "section heading", "points": [ { "text": "one concise high-yield fact", "hy": true, "mnemonic": "optional memory trick, or empty string", "ar": "simple Arabic explanation of the point" } ], "table": "optional full HTML <table> if the file contains a comparison/classification table, else empty string" } ],
  "flashcards": [ { "q": "short question", "a": "short answer" } ],
- "mcqs": [ { "q": "question", "options": ["A","B","C","D"], "correct": 0, "explanation": "why the correct option is right" } ]
+ "mcqs": [ { "q": "question", "options": ["A","B","C","D"], "correct": 0, "explanation": "why the correct option is right", "ref": "s0p0" } ]
 }
 Rules:
 - Follow the structure of the file: one section per heading/topic. Points must be short (one idea each). Set "hy": true only for the most exam-critical points.
 - If the file has tables, reproduce them as HTML tables (<table><tr><th>/<td>) in the section's "table" field.
 - For EVERY point add an "ar" field: a short, simple Arabic explanation (1-2 sentences, easy Jordanian-friendly Modern Standard Arabic) that helps a student who understands Arabic better than English grasp the idea. Write each key medical term in English inside parentheses right after its Arabic equivalent, e.g. "ارتفاع ضغط الدم (Hypertension) يعني ...". Keep drug names, lab values, doses and abbreviations in English exactly as in the file. Do not add facts that are not in the point.
 - Create 15-30 flashcards and 10-20 MCQs (4 options each, "correct" is the zero-based index of the right option) based ONLY on the file content.
+- For EVERY MCQ add a "ref" field: the id of the single point that contains its answer, written as "s<section>p<point>" using ZERO-BASED indexes of the sections and points exactly as you list them in your own "sections" output (the first point of the first section is "s0p0"). The ref must refer to a point that really exists in your output. If no single point fits, use an empty string.
 - Inside string values you may use only these tags: <b>, <i>, <u>, <br>, and <table>/<tr>/<th>/<td> for tables. Escape double quotes inside strings properly so the JSON stays valid.`;
 }
 
@@ -7738,7 +7749,7 @@ function hyAdminCardHtml(it){
       <span class="hy-chip ${it.active ? 'ok' : 'off'}">${it.active ? 'منشور' : 'متوقف'}</span>
     </div>
     <div class="hy-stats-row">
-      <span>${c.sections} قسم</span><span>${c.points} نقطة (${c.hy} 🔥)</span><span>${c.cards} بطاقة</span><span>${c.mcqs} سؤال</span>
+      <span>${c.sections} قسم</span><span>${c.points} نقطة (${c.hy} 🔥)</span><span>${c.cards} بطاقة</span><span>${c.mcqs} سؤال${c.mcqs ? ' (' + c.linked + ' مربوط بنقاط)' : ''}</span>
     </div>
     <div class="exam-link-row">
       <input type="text" readonly value="${escapeHtml(hyLink(it.id))}" onclick="this.select()">
@@ -7746,6 +7757,7 @@ function hyAdminCardHtml(it){
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <button class="btn small" data-hy-open="${it.id}">👁 فتح</button>
+      <button class="btn small" data-hy-stats="${it.id}">📊 إحصائيات</button>
       <button class="btn small edit" data-hy-edit="${it.id}">${ICONS.edit} تعديل</button>
       <button class="btn small" data-hy-toggle="${it.id}">${it.active ? '⏸ إيقاف' : '▶️ تفعيل'}</button>
       <button class="btn small danger" data-hy-del="${it.id}">${ICONS.trash} حذف</button>
@@ -7887,6 +7899,7 @@ function bindHyAdminEvents(){
     else prompt('انسخ الرابط:', link);
   }));
   document.querySelectorAll('[data-hy-open]').forEach(b => b.addEventListener('click', () => navigate('hy/' + b.dataset.hyOpen)));
+  document.querySelectorAll('[data-hy-stats]').forEach(b => b.addEventListener('click', () => { const it = find(b.dataset.hyStats); if(it) hyShowStats(it); }));
   document.querySelectorAll('[data-hy-edit]').forEach(b => b.addEventListener('click', () => {
     const it = find(b.dataset.hyEdit); if(!it) return;
     hyModalStep2({ id:it.id, title:it.title, description:it.description, courseId:it.courseId, active:it.active, createdAt:it.createdAt, raw:it.content });
@@ -7906,6 +7919,75 @@ function bindHyAdminEvents(){
       hyAdmin.items = hyAdmin.items.filter(x => x.id !== it.id); render();
     });
   }));
+}
+
+
+/* ---------- إحصائيات الأدمن (تعتمد على دالة hy_admin_stats — راجع highyield_stats.sql) ---------- */
+function hyStatsErr(e){
+  const m = String((e && (e.message || e.details)) || '');
+  if((e && (e.code === 'PGRST202' || e.code === '42883')) || /hy_admin_stats/.test(m)) return 'دالة الإحصائيات غير موجودة بعد — شغّل ملف highyield_stats.sql من Supabase أولًا.';
+  if(/NOT_ADMIN/.test(m)) return 'غير مصرّح.';
+  return hyErrMsg(e);
+}
+async function hyShowStats(it){
+  openModal(`<h3>📊 إحصائيات: ${escapeHtml(it.title)}</h3>
+    <div id="hyStBody" style="text-align:center; padding:24px;"><span class="loading-dot"></span> جارِ التحميل...</div>
+    <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إغلاق</button></div>`, true);
+  const cb = document.getElementById('cancelModal'); if(cb) cb.addEventListener('click', closeModal);
+  let html;
+  try{
+    const { data, error } = await supabaseClient.rpc('hy_admin_stats', { p_id: it.id });
+    if(error) throw error;
+    html = hyStatsHtml(it, data || {});
+  }catch(e){ console.error('hy stats failed', e); html = `<div class="form-msg error">${escapeHtml(hyStatsErr(e))}</div>`; }
+  const box = document.getElementById('hyStBody'); if(!box) return;   /* المشرف سكّر النافذة */
+  box.removeAttribute('style'); box.innerHTML = html;
+}
+function hyStatsHtml(it, d){
+  const c = it.content, secs = c.sections, total = hyCounts(c).points;
+  const st = Array.isArray(d.students) ? d.students : [], n = st.length;
+  if(!n) return `<div class="empty-state" style="padding:22px;"><p>لا يوجد طلاب فتحوا هذا الملف بعد.</p></div>`;
+  const doneMap = d.done || {}, wrongMap = d.wrong || {}, now = Date.now();
+  const active7 = st.filter(x => now - Number(x.updated || 0) <= 7 * 864e5).length;
+  const avgPct = total ? Math.round(st.reduce((a, x) => a + Math.min(Number(x.done) || 0, total), 0) / (n * total) * 100) : 0;
+  const finished = total ? st.filter(x => (Number(x.done) || 0) >= total).length : 0;
+  const quizzers = st.filter(x => Number(x.attempts) > 0);
+  const avgBest = quizzers.length ? Math.round(quizzers.reduce((a, x) => a + (Number(x.best) || 0), 0) / quizzers.length) : null;
+  const card = (v, l) => `<div class="hy-st-card"><b>${v}</b><span>${l}</span></div>`;
+  const pct = x => Math.max(0, Math.min(100, x));
+
+  const secRows = secs.map((sec, si) => {
+    let sum = 0; sec.points.forEach((p, pi) => { sum += Number(doneMap['s' + si + 'p' + pi]) || 0; });
+    const p = sec.points.length ? Math.round(sum / (sec.points.length * n) * 100) : 0;
+    return `<div class="hy-st-row"><span>${escapeHtml(sec.title)}</span><b>${p}%</b><div class="hy-st-bar" style="grid-column:1/-1;"><i style="width:${pct(p)}%"></i></div></div>`;
+  }).join('');
+
+  const missed = Object.keys(wrongMap).filter(k => /^m\d+$/.test(k) && c.mcqs[Number(k.slice(1))])
+    .map(k => ({ i: Number(k.slice(1)), n: Number(wrongMap[k]) || 0 })).filter(x => x.n > 0)
+    .sort((a, b) => b.n - a.n).slice(0, 8);
+  const missedRows = missed.map(x => {
+    const q = c.mcqs[x.i], txt = examStripHtml(q.q);
+    let where = '';
+    const m = /^s(\d+)p(\d+)$/.exec(q.ref || '');
+    if(m && secs[Number(m[1])]) where = `<div class="hint" style="margin:2px 0 0;">📖 ${escapeHtml(secs[Number(m[1])].title)}</div>`;
+    return `<div class="hy-st-row"><span>${escapeHtml(txt.length > 120 ? txt.slice(0, 120) + '…' : txt)}${where}</span><b>${x.n} (${Math.round(x.n / n * 100)}%)</b></div>`;
+  }).join('');
+
+  const rows = st.slice(0, 100).map(x => {
+    const p = total ? Math.round(Math.min(Number(x.done) || 0, total) / total * 100) : 0;
+    return `<tr><td>${escapeHtml(x.name || '—')}</td><td dir="ltr">${escapeHtml(x.phone || '—')}</td><td>${p}%</td><td>${Number(x.attempts) ? (Number(x.best) || 0) + '%' : '—'}</td><td>${Number(x.attempts) || 0}</td><td>${examFmtDate(Number(x.updated) || 0)}</td></tr>`;
+  }).join('');
+
+  return `
+    <div class="hy-st-grid">
+      ${card(n, 'طالب فتح الملف')}${card(active7, 'نشط آخر 7 أيام')}${card(avgPct + '%', 'متوسط الإنجاز')}
+      ${card(finished, 'أنهى كل النقاط')}${card(quizzers.length, 'أنهى الكويز')}${card(avgBest == null ? '—' : avgBest + '%', 'متوسط أفضل علامة')}
+    </div>
+    <div class="hy-st-h">الإنجاز حسب القسم</div>${secRows || '<p class="hint">لا توجد أقسام.</p>'}
+    <div class="hy-st-h">أكثر الأسئلة غلطًا <small class="hint">(عدد الطلاب اللي سؤالهم لسا مغلوط حاليًا)</small></div>
+    ${missedRows || '<p class="hint">لا توجد أخطاء مسجّلة بعد.</p>'}
+    <div class="hy-st-h">الطلاب${n > 100 ? ' (آخر 100 نشاطًا)' : ''}</div>
+    <div class="hy-st-table"><table><thead><tr><th>الاسم</th><th>الهاتف</th><th>الإنجاز</th><th>أفضل علامة</th><th>محاولات</th><th>آخر نشاط</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 /* ============================ جهة الطالب ============================ */
@@ -7937,7 +8019,7 @@ async function hyFlush(){
   const r = hyRun; if(!r || !r.item || !r.prog) return;
   try{ localStorage.setItem(hyLocalKey(r), JSON.stringify(r.prog)); }catch(e){}
   try{
-    const uid = await hyUid(r); if(!uid) return;
+    const uid = await hyUid(r); if(!uid || isAdminSession()) return;   /* معاينة المشرف ما تنحفظ حتى ما تلوّث الإحصائيات */
     await supabaseClient.from('high_yield_progress').upsert({ user_id:uid, hy_id:r.id, data:r.prog, updated_at:new Date().toISOString() }, { onConflict:'user_id,hy_id' });
   }catch(e){ console.warn('hy progress save failed', e); }
 }
@@ -7957,6 +8039,7 @@ async function hyEnsureLoaded(id){
     if(data && (data.active !== false || isAdminSession())){
       r.item = hyMapRow(data); r.error = '';
       r.prog = await hyLoadProgress(r);
+      if(state.session.type === 'student' && !r.prog.opened){ r.prog.opened = Date.now(); hySave(); }   /* يُحسب كطالب فتح الملف حتى لو ما تفاعل */
     }else{ r.item = null; r.error = 'This file does not exist or is not available right now.'; }
   }catch(e){ console.error('hy load failed', e); r.item = null; r.error = hyErrMsg(e); }
   r.loading = false; r.loaded = true;
@@ -8041,6 +8124,7 @@ function hyReviewHtml(){
         ${sec.table ? `<div class="hy-table">${sec.table}</div>` : ''}
       </div></details>`).join('');
   return `
+    ${r.fromQuiz ? `<div class="hy-back"><button type="button" class="btn small teal solid" data-hy-backquiz>↩ Back to the quiz</button></div>` : ''}
     ${c.summary ? `<div class="hy-summary">${c.summary}</div>` : ''}
     <div class="hy-tools">
       <input type="search" id="hySearch" placeholder="🔎 Search this file..." value="${escapeHtml(r.query)}">
@@ -8138,6 +8222,7 @@ function hyQuizHtml(){
     const score = hyQzScore(), pct = Math.round(score / qz.order.length * 100);
     return `<div class="wizard-card hy-center"><h3>${pct >= 80 ? '🏆' : pct >= 50 ? '👍' : '💪'} Your score: ${pct}%</h3>
       <p class="hint">You answered ${score} of ${qz.order.length} correctly.</p>
+      ${hyWeakPointsHtml()}
       <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
         <button class="btn" data-hy-qprev>← Previous question</button>
         <button class="btn teal solid" data-hy-qstart="all">Retake quiz</button>
@@ -8153,7 +8238,7 @@ function hyQuizHtml(){
       if(answered){ if(oi === q.correct) cls = 'right'; else if(oi === picked) cls = 'wrong'; }
       return `<button type="button" class="hy-opt ${cls}" data-hy-opt="${oi}" ${answered ? 'disabled' : ''}><b>${String.fromCharCode(65 + oi)}</b><span>${o}</span></button>`;
     }).join('')}
-    ${answered ? `<div class="hy-expl ${picked === q.correct ? 'ok' : 'bad'}"><b>${picked === q.correct ? '✅ Correct' : '❌ Incorrect'}</b>${q.explanation ? '<div>' + q.explanation + '</div>' : ''}</div>` : ''}
+    ${answered ? `<div class="hy-expl ${picked === q.correct ? 'ok' : 'bad'}"><b>${picked === q.correct ? '✅ Correct' : '❌ Incorrect'}</b>${q.explanation ? '<div>' + q.explanation + '</div>' : ''}${(picked !== q.correct && hyRefOk(q.ref)) ? '<div style="margin-top:10px;"><button type="button" class="hy-mini hy-goto" data-hy-goto="' + q.ref + '">📖 Review this point</button></div>' : ''}</div>` : ''}
     <div class="hy-nav">
       ${qz.pos > 0 ? `<button class="btn" data-hy-qprev>← Previous</button>` : '<span></span>'}
       ${answered ? `<button class="btn teal solid" data-hy-qnext>${qz.pos + 1 >= qz.order.length ? 'See result' : 'Next →'}</button>` : ''}
@@ -8203,6 +8288,38 @@ function hySavedHtml(){
   return rows.length ? rows.join('') : `<div class="empty-state"><h3>Nothing saved yet</h3><p>Tap ☆ on any point in Review and it will appear here.</p></div>`;
 }
 
+/* ---------- ربط أسئلة الكويز بالنقاط ---------- */
+function hyRefOk(ref){
+  const m = /^s(\d+)p(\d+)$/.exec(ref || ''); if(!m || !hyRun || !hyRun.item) return false;
+  const sec = hyRun.item.content.sections[Number(m[1])];
+  return !!(sec && sec.points[Number(m[2])]);
+}
+function hyGoto(ref){
+  const r = hyRun; if(!r || !r.item || !hyRefOk(ref)) return;
+  const si = Number(/^s(\d+)p/.exec(ref)[1]);
+  r.tab = 'review'; r.query = ''; r.hyOnly = false; r.hlOnly = false;
+  r.fromQuiz = !!r.qz;                      /* لو جاي من الكويز نعرض زر الرجوع */
+  if(!r.open) r.open = new Set();
+  r.open.add(si);
+  hyDraw();
+  requestAnimationFrame(() => {
+    const el = document.querySelector('#hyBody .hy-pt[data-k="' + ref + '"]'); if(!el) return;
+    el.scrollIntoView({ block:'center', behavior:'smooth' });
+    el.classList.add('hy-flash'); setTimeout(() => el.classList.remove('hy-flash'), 2300);
+  });
+}
+function hyWeakPointsHtml(){
+  const r = hyRun, qz = r.qz, qs = r.item.content.mcqs, secs = r.item.content.sections, seen = new Set(), rows = [];
+  qz.order.forEach((qi, p) => {
+    const q = qs[qi];
+    if(qz.answers[p] == null || qz.answers[p] === q.correct || !hyRefOk(q.ref) || seen.has(q.ref)) return;
+    seen.add(q.ref);
+    const m = /^s(\d+)p(\d+)$/.exec(q.ref), sec = secs[Number(m[1])], txt = examStripHtml(sec.points[Number(m[2])].text);
+    rows.push(`<button type="button" class="hy-weak" data-hy-goto="${q.ref}"><small>${escapeHtml(sec.title)}</small><span>${escapeHtml(txt.length > 90 ? txt.slice(0, 90) + '…' : txt)}</span></button>`);
+  });
+  return rows.length ? `<div class="hy-weak-box"><div class="hy-weak-ttl">📖 Points to review (${rows.length})</div>${rows.join('')}</div>` : '';
+}
+
 function hyDraw(){
   const r = hyRun, body = document.getElementById('hyBody'); if(!r || !r.item || !body) return;
   document.querySelectorAll('.hy-tab').forEach(b => b.classList.toggle('on', b.dataset.hyTab === r.tab));
@@ -8223,10 +8340,10 @@ function bindHyEvents(id){
   hyEnsureLoaded(id);
   const root = document.getElementById('hyRoot'); if(!root || !r.item) return;
   root.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-hy-tab],[data-hy-done],[data-hy-mark],[data-hy-ar],[data-hy-flip],[data-hy-rate],[data-hy-fc-all],[data-hy-qstart],[data-hy-opt],[data-hy-qnext],[data-hy-qexit],[data-hy-qprev],[data-hy-fcprev]');
+    const t = e.target.closest('[data-hy-tab],[data-hy-done],[data-hy-mark],[data-hy-ar],[data-hy-flip],[data-hy-rate],[data-hy-fc-all],[data-hy-qstart],[data-hy-opt],[data-hy-qnext],[data-hy-qexit],[data-hy-qprev],[data-hy-fcprev],[data-hy-goto],[data-hy-backquiz]');
     if(!t) return;
     const d = t.dataset;
-    if(d.hyTab){ r.tab = d.hyTab; hyDraw(); window.scrollTo({ top:0, behavior:'smooth' }); }
+    if(d.hyTab){ r.tab = d.hyTab; r.fromQuiz = false; hyDraw(); window.scrollTo({ top:0, behavior:'smooth' }); }
     else if(d.hyDone){
       const k = d.hyDone; if(r.prog.done[k]) delete r.prog.done[k]; else r.prog.done[k] = 1;
       hyTouchDay(); hySave();
@@ -8254,6 +8371,8 @@ function bindHyEvents(id){
     else if(t.hasAttribute('data-hy-flip')){ r.fc.flipped = true; hyDraw(); }
     else if(d.hyRate) hyRate(d.hyRate);
     else if(t.hasAttribute('data-hy-fc-all')){ r.fc = { queue: hyBuildQueue(true), pos:0, flipped:false }; hyDraw(); }
+    else if(d.hyGoto) hyGoto(d.hyGoto);
+    else if(t.hasAttribute('data-hy-backquiz')){ r.fromQuiz = false; r.tab = 'quiz'; hyDraw(); window.scrollTo({ top:0, behavior:'smooth' }); }
     else if(d.hyQstart) hyQuizStart(d.hyQstart);
     else if(d.hyOpt != null) hyQuizPick(Number(d.hyOpt));
     else if(t.hasAttribute('data-hy-qnext')) hyQuizNext();
@@ -8358,6 +8477,28 @@ function injectHyStyles(){
     #hyHlBar .hy-hl-dot.hy-hl-r{ background:#f87171; }
     #hyHlBar .hy-hl-dot.hy-hl-g{ background:#4ade80; }
     #hyHlBar .hy-hl-x{ border:0; background:rgba(255,255,255,.16); color:#fff; font-size:14px; font-weight:800; }
+    .hy-goto{ border-color:#0e7490; color:#0e7490; }
+    .hy-flash{ animation:hyFlash 2.3s ease-out; }
+    @keyframes hyFlash{ 0%,55%{ box-shadow:0 0 0 3px #f59e0b; border-color:#f59e0b; } 100%{ box-shadow:0 0 0 0 rgba(245,158,11,0); } }
+    .hy-back{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:60; }
+    .hy-back .btn{ box-shadow:0 8px 22px rgba(0,0,0,.25); }
+    .hy-weak-box{ text-align:start; margin:14px 0; }
+    .hy-weak-ttl{ font-weight:800; font-size:14px; margin-bottom:8px; }
+    .hy-weak{ display:flex; flex-direction:column; gap:2px; width:100%; text-align:start; font-family:inherit; padding:10px 12px; margin-bottom:6px; border-radius:12px; border:1.5px solid var(--border); background:var(--bg); color:var(--ink); cursor:pointer; }
+    .hy-weak small{ color:var(--teal); font-weight:800; font-size:11.5px; }
+    .hy-weak span{ font-size:13.5px; line-height:1.6; }
+    .hy-st-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; margin:12px 0; }
+    .hy-st-card{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:10px 12px; text-align:center; }
+    .hy-st-card b{ display:block; font-size:22px; color:var(--teal); }
+    .hy-st-card span{ font-size:12px; color:var(--muted); font-weight:700; }
+    .hy-st-h{ font-weight:800; font-size:14px; margin:18px 0 8px; }
+    .hy-st-row{ display:grid; grid-template-columns:1fr auto; gap:4px 12px; align-items:center; margin-bottom:9px; font-size:13px; line-height:1.6; }
+    .hy-st-bar{ height:8px; border-radius:99px; background:var(--bg); border:1px solid var(--border); overflow:hidden; }
+    .hy-st-bar i{ display:block; height:100%; background:var(--teal); }
+    .hy-st-table{ overflow:auto; max-height:280px; border:1px solid var(--border); border-radius:12px; }
+    .hy-st-table table{ border-collapse:collapse; width:100%; min-width:560px; font-size:12.5px; }
+    .hy-st-table th, .hy-st-table td{ padding:7px 9px; border-bottom:1px solid var(--border); text-align:start; white-space:nowrap; }
+    .hy-st-table th{ position:sticky; top:0; background:var(--bg); }
     @media (max-width:560px){ .hy-rate-btn{ font-size:12px; } .hy-fc-txt{ font-size:16px; } }
   `;
   document.head.appendChild(style);
