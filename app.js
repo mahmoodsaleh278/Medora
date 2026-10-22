@@ -10279,7 +10279,7 @@ function pageHub(id){
   const groups = hubGroupItems(shown);
   const nLec = hubGroupItems(all).length;
 
-  const stats = `<span class="hub-stat">🎓 ${nLec} محاضرة</span>${nHy ? `<span class="hub-stat">📖 ${nHy} ملخص</span>` : ''}${nEx ? `<span class="hub-stat">📝 ${nEx} اختبار</span>` : ''}`;
+  const stats = `${nHy ? `<span class="hub-stat">📖 ${nHy} ملخص</span>` : ''}${nEx ? `<span class="hub-stat">📝 ${nEx} اختبار</span>` : ''}`;
   const choice = (v, label, n) => `<button type="button" class="hub-choice ${r.filter === v ? 'on' : ''}" data-hub-filter="${v}">${label}<b>${n}</b></button>`;
   const chooser = (nHy && nEx) ? `
     <p class="hub-ask">شو بدك تعمل اليوم؟ 👇</p>
