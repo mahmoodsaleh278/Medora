@@ -1651,6 +1651,7 @@ function renderNavState(){
         <a href="/admin-coupons" class="btn small" style="border-color:#fff;color:#fff;">🎟️ الكوبونات</a>
         <a href="/admin-exams" class="btn small" style="border-color:#fff;color:#fff;">📝 الاختبارات</a>
         <a href="/admin-highyield" class="btn small" style="border-color:#fff;color:#fff;">🔥 High Yield</a>
+        <a href="/admin-hubs" class="btn small" style="border-color:#fff;color:#fff;">📁 المجلدات</a>
         <a href="/store" class="btn small" style="border-color:#fff;color:#fff;">🛍️ المتجر</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
@@ -7407,6 +7408,7 @@ function setPageMeta({ title, description, noindex } = {}){
    noindex عشان ما تنفهرس بمحركات البحث. */
 function updateSeoMeta(route){
   if(route.startsWith('hy/')){ setPageMeta({ title: 'High Yield', noindex: true }); return; }
+  if(route.startsWith('folder/')){ setPageMeta({ title: (hubRun && hubRun.data && hubRun.data.title) ? hubRun.data.title : 'مجلد المادة', noindex: true }); return; }
   if(route.startsWith('exam/')){
     setPageMeta({ title: (examRun && examRun.info && examRun.info.title) ? examRun.info.title : 'اختبار', noindex: true });
     return;
@@ -7509,6 +7511,9 @@ function updateSeoMeta(route){
     case 'admin-highyield':
       setPageMeta({ title: 'High Yield التفاعلي', noindex: true });
       break;
+    case 'admin-hubs':
+      setPageMeta({ title: 'مجلدات المواد', noindex: true });
+      break;
 
     default:
       setPageMeta({ description: DEFAULT_DESCRIPTION });
@@ -7528,6 +7533,8 @@ async function render(){
     html = pageExam(examIdFromRoute(route));
   } else if(route.startsWith('hy/')){
     html = pageHighYield(hyIdFromRoute(route));
+  } else if(route.startsWith('folder/')){
+    html = pageHub(hubIdFromRoute(route));
   } else {
     switch(route){
       case 'home': html = pageHome(); break;
@@ -7550,6 +7557,7 @@ async function render(){
       case 'admin-coupons': html = pageAdminCoupons(); break;
       case 'admin-exams': html = pageAdminExams(); break;
       case 'admin-highyield': html = pageAdminHighYield(); break;
+      case 'admin-hubs': html = pageAdminHubs(); break;
       default: html = pageHome();
     }
   }
@@ -9915,6 +9923,352 @@ function bindAdminExamsEvents(){
   }));
 }
 
+/* =========================================================================
+   مجلدات المواد (Study Hubs)
+   - المشرف: صفحة /admin-hubs لإنشاء مجلد يجمع ملفات High Yield + اختبارات لنفس المادة،
+     ويرتّبها ويسمّي المحاضرات، ثم ينسخ رابطًا واحدًا /folder/<id> ويرسله للطلاب.
+   - الطالب: يفتح الرابط، يسجّل دخوله، يختار (ملخصات / أسئلة) ثم المحاضرة، ويُحوَّل
+     لنفس صفحات /hy/<id> و /exam/<id> الحالية — فكل التتبّع والنتائج والإحصائيات تبقى كما هي.
+   - الجدول والدالة المطلوبة: study_hubs و hub_get (راجع hubs.sql).
+   ========================================================================= */
+const HUB_BACK_KEY = 'medora_hub_back';
+let hubAdmin = { loaded:false, loading:false, error:'', items:[], hys:[], exams:[] };
+let hubRun = null;
+
+function hubLink(id){ return location.origin + '/folder/' + id; }
+function hubIdFromRoute(route){ return route && route.startsWith('folder/') ? decodeURIComponent(route.slice(7).split('/')[0]) : null; }
+function hubAttr(s){ return escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
+function hubErrMsg(e){
+  const m = String((e && (e.message || e.details)) || '');
+  if(e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202' || e.code === '42883')) return 'نظام المجلدات غير مفعّل بعد — شغّل ملف hubs.sql من Supabase أولًا.';
+  if(/NOT_AUTHENTICATED/.test(m)) return 'سجّل الدخول أولًا للمتابعة.';
+  return (typeof isNetworkOrServerError === 'function' && isNetworkOrServerError(e)) ? SERVER_BUSY_MSG : 'حدث خطأ غير متوقع، حاول مرة أخرى.';
+}
+function hubMapRow(r){
+  const items = (Array.isArray(r.items) ? r.items : [])
+    .filter(i => i && (i.type === 'hy' || i.type === 'exam') && i.id)
+    .map(i => ({ type:i.type, id:String(i.id), lecture:String(i.lecture || '') }));
+  return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', items,
+    active:r.active !== false, createdAt:Number(r.created_at) || 0 };
+}
+
+function injectHubStyles(){
+  if(document.getElementById('hubStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'hubStyles';
+  style.textContent = `
+    .hub-wrap{ max-width: 820px; margin: 0 auto; padding: 0 14px; }
+    .hub-head{ background:var(--card); border:1px solid var(--border); border-radius:18px; padding:20px; margin-bottom:16px; }
+    .hub-head h2{ margin:0 0 6px; font-size:22px; }
+    .hub-head p{ margin:0; color:var(--muted); font-size:14px; line-height:1.8; white-space:pre-line; }
+    .hub-ask{ font-weight:800; font-size:14px; margin:0 0 10px; }
+    .hub-choose{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+    .hub-choice{ flex:1; min-width:120px; font-family:inherit; font-weight:800; font-size:14px; padding:12px 14px; border-radius:14px; border:1.5px solid var(--border); background:var(--card); color:var(--ink); cursor:pointer; }
+    .hub-choice b{ display:inline-block; margin-inline-start:6px; font-size:12px; padding:1px 8px; border-radius:99px; background:var(--bg); color:var(--muted); }
+    .hub-choice.on{ border-color:var(--teal); background:var(--teal-light); color:var(--teal); }
+    .hub-choice.on b{ background:var(--teal); color:#fff; }
+    .hub-lec{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:14px 16px; margin-bottom:10px; }
+    .hub-lec-title{ font-weight:800; font-size:15.5px; margin-bottom:10px; }
+    .hub-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+    .hub-go{ font-family:inherit; font-weight:800; font-size:13.5px; padding:10px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--bg); color:var(--ink); cursor:pointer; text-align:start; }
+    .hub-go small{ display:block; font-weight:600; font-size:11.5px; color:var(--muted); margin-top:2px; }
+    .hub-go.hy{ border-color:#f59e0b; background:#fffbeb; color:#b45309; }
+    .hub-go.exam{ border-color:var(--teal); background:var(--teal-light); color:var(--teal); }
+    .hub-go:hover{ filter:brightness(.97); }
+    .hub-back{ display:inline-block; margin:10px 16px 0; font-weight:800; font-size:13.5px; color:var(--teal); text-decoration:none; }
+    .hub-pick-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+    .hub-pick{ max-height:210px; overflow:auto; border:1px solid var(--border); border-radius:12px; padding:6px; background:var(--bg); margin-top:6px; }
+    .hub-pick-row{ display:flex; gap:8px; align-items:flex-start; padding:7px; border-radius:8px; cursor:pointer; font-size:13px; line-height:1.5; }
+    .hub-pick-row:hover{ background:var(--card); }
+    .hub-sel-row{ display:grid; grid-template-columns:auto 1fr; gap:6px 10px; align-items:center; padding:10px; border:1px solid var(--border); border-radius:12px; margin-bottom:8px; background:var(--card); }
+    .hub-sel-row .t{ font-size:13px; font-weight:700; }
+    .hub-sel-row input[type=text]{ grid-column:1 / -1; }
+    .hub-sel-row .ctl{ grid-column:1 / -1; display:flex; gap:6px; }
+    @media (max-width: 640px){ .hub-pick-grid{ grid-template-columns:1fr; } }
+  `;
+  document.head.appendChild(style);
+}
+injectHubStyles();
+
+/* ============================ جهة المشرف ============================ */
+async function hubLoadAdmin(force){
+  if(hubAdmin.loading || (hubAdmin.loaded && !force)) return;
+  hubAdmin.loading = true; hubAdmin.error = '';
+  try{
+    const { data, error } = await supabaseClient.from('study_hubs').select('*').order('created_at', { ascending:false });
+    if(error) throw error;
+    hubAdmin.items = (data || []).map(hubMapRow);
+    const [hy, ex] = await Promise.all([
+      supabaseClient.from('high_yields').select('id,title,course_id,active,created_at').order('created_at', { ascending:false }),
+      supabaseClient.from('exams').select('id,title,course_id,active,created_at').order('created_at', { ascending:false }),
+    ]);
+    hubAdmin.hys = hy.data || []; hubAdmin.exams = ex.data || [];
+  }catch(e){ console.error('hubLoadAdmin failed', e); hubAdmin.error = hubErrMsg(e); }
+  hubAdmin.loading = false; hubAdmin.loaded = true;
+  if(currentRoute() === 'admin-hubs') render();
+}
+
+function hubAdminCardHtml(h){
+  const course = state.courses.find(x => x.id === h.courseId);
+  const nHy = h.items.filter(i => i.type === 'hy').length, nEx = h.items.filter(i => i.type === 'exam').length;
+  const link = hubLink(h.id);
+  const waText = encodeURIComponent(`${h.title}\n${link}`);
+  return `
+  <div class="card-panel" style="margin-bottom:16px; padding:20px 22px;">
+    <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <div>
+        <h3 style="margin:0 0 6px; font-size:18px;" class="i18n-skip">📁 ${escapeHtml(h.title)}</h3>
+        <div style="font-size:13px; color:var(--muted);" class="i18n-skip">${course ? escapeHtml(course.title) + ' • ' : ''}${nHy} ملخص • ${nEx} اختبار • ${examFmtDate(h.createdAt)}</div>
+      </div>
+      <span class="lecture-tier-tag ${h.active ? '' : 'locked'}">${h.active ? '🟢 منشور' : '🔴 متوقف'}</span>
+    </div>
+    <div class="exam-link-row">
+      <input type="text" readonly value="${hubAttr(link)}" onclick="this.select()">
+      <button class="btn small teal" data-hub-copy="${hubAttr(h.id)}">📋 نسخ الرابط</button>
+      <a class="btn small" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">${ICONS.whatsapp} واتساب</a>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn small" data-hub-open="${hubAttr(h.id)}">👁 فتح</button>
+      <button class="btn small edit" data-hub-edit="${hubAttr(h.id)}">${ICONS.edit} تعديل</button>
+      <button class="btn small" data-hub-toggle="${hubAttr(h.id)}">${h.active ? '⏸ إيقاف' : '▶️ تفعيل'}</button>
+      <button class="btn small danger" data-hub-del="${hubAttr(h.id)}">${ICONS.trash} حذف</button>
+    </div>
+  </div>`;
+}
+
+function pageAdminHubs(){
+  if(!isAdminSession()){
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
+  }
+  if(hubAdmin.error) return `<section class="section"><div class="container"><div class="empty-state"><h3>تعذّر التحميل</h3><p>${escapeHtml(hubAdmin.error)}</p><button class="btn small" id="hubRefreshBtn">🔄 إعادة المحاولة</button></div></div></section>`;
+  if(!hubAdmin.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
+  return `
+  <section class="section"><div class="container">
+    <div class="toolbar">
+      <h2>📁 مجلدات المواد</h2>
+      <div class="toolbar-actions"><button class="btn teal solid" id="hubCreateBtn">${ICONS.plus} مجلد جديد</button></div>
+    </div>
+    <p class="hint" style="margin:-10px 0 20px;">اجمع ملفات High Yield والاختبارات الخاصة بنفس المادة داخل مجلد واحد، وأرسل للطلاب رابطًا واحدًا. الطالب يختار إذا بده يدرس ملخص أو يحل أسئلة، ثم يختار المحاضرة. لا يفتحه إلا من لديه حساب مسجّل.</p>
+    ${hubAdmin.items.length ? hubAdmin.items.map(hubAdminCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>لا توجد مجلدات بعد.</p></div>`}
+  </div></section>`;
+}
+
+function hubModal(d){
+  const sel = (d.items || []).map(x => ({ type:x.type, id:x.id, lecture:x.lecture || '' }));
+  const titleOf = (type, id) => {
+    const x = (type === 'hy' ? hubAdmin.hys : hubAdmin.exams).find(y => y.id === id);
+    return x ? x.title : null;
+  };
+  openModal(`
+    <h3>${d.id ? '✏️ تعديل المجلد' : '📁 مجلد جديد'}</h3>
+    <form id="hubForm">
+      <div class="field"><label>اسم المجلد</label><input type="text" name="title" required maxlength="120" value="${hubAttr(d.title)}" placeholder="مثال: Medical Surgical Nursing — الميد"></div>
+      <div class="field"><label>وصف / تعليمات للطلاب (اختياري)</label><textarea name="description" rows="2" maxlength="400">${escapeHtml(d.description || '')}</textarea></div>
+      <div class="field"><label>المادة</label><select name="course" class="bank-select">${hyCourseOptions(d.courseId)}</select></div>
+      <div class="field"><label>اختر المحتوى</label>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <input type="text" id="hubSearch" placeholder="ابحث بالعنوان..." style="flex:1; min-width:160px;">
+          <label style="display:flex; gap:6px; align-items:center; font-size:13px;"><input type="checkbox" id="hubAllCourses"> إظهار كل المواد</label>
+        </div>
+      </div>
+      <div class="hub-pick-grid">
+        <div><b>🔥 ملخصات High Yield</b><div class="hub-pick" id="hubPickHy"></div></div>
+        <div><b>📝 اختبارات</b><div class="hub-pick" id="hubPickEx"></div></div>
+      </div>
+      <div class="field"><label>المحتوى داخل المجلد — رتّبه وسمِّ المحاضرة</label>
+        <div id="hubSelList"></div>
+        <datalist id="hubLecList"></datalist>
+        <div class="hint">اكتب نفس اسم المحاضرة للملخص والاختبار ليظهروا للطالب تحت محاضرة واحدة. إذا تركته فاضي يظهر العنصر باسمه.</div>
+      </div>
+      <label style="display:flex; gap:8px; align-items:center; margin:8px 0;"><input type="checkbox" name="active" ${d.active ? 'checked' : ''}> منشور (يظهر للطلاب)</label>
+      <div id="hubFormMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small" id="hubSaveBtn">💾 حفظ</button></div>
+    </form>`, true);
+
+  const form = document.getElementById('hubForm');
+  const renderPick = () => {
+    const qv = (document.getElementById('hubSearch').value || '').trim().toLowerCase();
+    const course = form.elements['course'].value;
+    const all = document.getElementById('hubAllCourses').checked;
+    const mk = (arr, type) => {
+      const rows = arr.filter(x => (all || !course || !x.course_id || x.course_id === course) && (!qv || String(x.title).toLowerCase().includes(qv)));
+      return rows.length ? rows.map(x => `<label class="hub-pick-row"><input type="checkbox" data-hub-pick="${type}:${hubAttr(x.id)}" ${sel.some(s => s.type === type && s.id === x.id) ? 'checked' : ''}><span class="i18n-skip">${escapeHtml(x.title)}${x.active === false ? ' <em>(متوقف)</em>' : ''}</span></label>`).join('')
+        : `<div class="hint" style="padding:8px; margin:0;">لا يوجد.</div>`;
+    };
+    document.getElementById('hubPickHy').innerHTML = mk(hubAdmin.hys, 'hy');
+    document.getElementById('hubPickEx').innerHTML = mk(hubAdmin.exams, 'exam');
+  };
+  const renderSel = () => {
+    const box = document.getElementById('hubSelList');
+    box.innerHTML = sel.length ? sel.map((s, i) => {
+      const t = titleOf(s.type, s.id);
+      return `<div class="hub-sel-row">
+        <span>${s.type === 'hy' ? '🔥' : '📝'}</span><span class="t i18n-skip">${t == null ? '(محذوف)' : escapeHtml(t)}</span>
+        <input type="text" data-hub-lec="${i}" list="hubLecList" maxlength="120" value="${hubAttr(s.lecture)}" placeholder="اسم المحاضرة (مثال: Lecture 3 — Cardiovascular)">
+        <div class="ctl">
+          <button type="button" class="btn small" data-hub-up="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="btn small" data-hub-down="${i}" ${i === sel.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="btn small danger" data-hub-rm="${i}">✕</button>
+        </div></div>`;
+    }).join('') : `<div class="hint">لم تختر أي محتوى بعد.</div>`;
+    const names = [...new Set(sel.map(s => s.lecture.trim()).filter(Boolean))];
+    document.getElementById('hubLecList').innerHTML = names.map(n => `<option value="${hubAttr(n)}"></option>`).join('');
+  };
+  renderPick(); renderSel();
+
+  document.getElementById('hubSearch').addEventListener('input', renderPick);
+  document.getElementById('hubAllCourses').addEventListener('change', renderPick);
+  form.elements['course'].addEventListener('change', renderPick);
+  form.addEventListener('change', (e) => {
+    const p = e.target.closest('[data-hub-pick]'); if(!p) return;
+    const [type, ...rest] = p.dataset.hubPick.split(':'), id = rest.join(':');
+    const at = sel.findIndex(s => s.type === type && s.id === id);
+    if(p.checked && at < 0) sel.push({ type, id, lecture:'' });
+    if(!p.checked && at >= 0) sel.splice(at, 1);
+    renderSel();
+  });
+  form.addEventListener('input', (e) => {
+    const l = e.target.closest('[data-hub-lec]'); if(!l) return;
+    sel[Number(l.dataset.hubLec)].lecture = l.value;
+  });
+  form.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-hub-up],[data-hub-down],[data-hub-rm]'); if(!b) return;
+    if(b.dataset.hubUp != null){ const i = Number(b.dataset.hubUp); if(i > 0){ [sel[i-1], sel[i]] = [sel[i], sel[i-1]]; } }
+    else if(b.dataset.hubDown != null){ const i = Number(b.dataset.hubDown); if(i < sel.length - 1){ [sel[i+1], sel[i]] = [sel[i], sel[i+1]]; } }
+    else { sel.splice(Number(b.dataset.hubRm), 1); }
+    renderSel(); renderPick();
+  });
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form), msg = document.getElementById('hubFormMsg');
+    const title = (fd.get('title') || '').trim();
+    if(!title){ msg.innerHTML = `<div class="form-msg error">اكتب اسمًا للمجلد.</div>`; return; }
+    if(!sel.length){ msg.innerHTML = `<div class="form-msg error">اختر ملخصًا أو اختبارًا واحدًا على الأقل.</div>`; return; }
+    const btn = document.getElementById('hubSaveBtn'); btn.disabled = true;
+    const row = { id: d.id || hyNewId(), title, description:(fd.get('description') || '').trim(), course_id: fd.get('course') || null,
+      items: sel.map(s => ({ type:s.type, id:s.id, lecture:s.lecture.trim() })), active: !!fd.get('active'), created_at: d.createdAt || Date.now() };
+    const { error } = await supabaseClient.from('study_hubs').upsert(row);
+    if(error){ console.error('hub save failed', error); btn.disabled = false; msg.innerHTML = `<div class="form-msg error">${escapeHtml(hubErrMsg(error))}</div>`; return; }
+    closeModal(); await hubLoadAdmin(true);
+  });
+}
+
+function bindHubAdminEvents(){
+  hubLoadAdmin();
+  const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  on('hubCreateBtn', () => hubModal({ id:null, title:'', description:'', courseId:'', active:true, items:[] }));
+  on('hubRefreshBtn', () => { hubAdmin.error = ''; hubAdmin.loaded = false; hubLoadAdmin(true); });
+  const find = id => hubAdmin.items.find(x => x.id === id);
+  document.querySelectorAll('[data-hub-copy]').forEach(b => b.addEventListener('click', () => {
+    const link = hubLink(b.dataset.hubCopy);
+    const done = () => { const o = b.innerHTML; b.innerHTML = '✅ تم النسخ'; setTimeout(() => { b.innerHTML = o; }, 1600); };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done).catch(() => prompt('انسخ الرابط:', link));
+    else prompt('انسخ الرابط:', link);
+  }));
+  document.querySelectorAll('[data-hub-open]').forEach(b => b.addEventListener('click', () => navigate('folder/' + b.dataset.hubOpen)));
+  document.querySelectorAll('[data-hub-edit]').forEach(b => b.addEventListener('click', () => { const h = find(b.dataset.hubEdit); if(h) hubModal(h); }));
+  document.querySelectorAll('[data-hub-toggle]').forEach(b => b.addEventListener('click', async () => {
+    const h = find(b.dataset.hubToggle); if(!h) return;
+    b.disabled = true;
+    const { error } = await supabaseClient.from('study_hubs').update({ active: !h.active }).eq('id', h.id);
+    if(error){ alert(hubErrMsg(error)); b.disabled = false; return; }
+    h.active = !h.active; render();
+  }));
+  document.querySelectorAll('[data-hub-del]').forEach(b => b.addEventListener('click', () => {
+    const h = find(b.dataset.hubDel); if(!h) return;
+    confirmDelete('سيتم حذف المجلد فقط (الملخصات والاختبارات نفسها تبقى كما هي). هل أنت متأكد؟', async () => {
+      const { error } = await supabaseClient.from('study_hubs').delete().eq('id', h.id);
+      if(error){ alert(hubErrMsg(error)); return; }
+      hubAdmin.items = hubAdmin.items.filter(x => x.id !== h.id);
+    });
+  }));
+}
+
+/* ============================ جهة الطالب ============================ */
+function hubNewRun(id){ return { id, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'all' }; }
+
+async function hubEnsureLoaded(id){
+  const r = hubRun; if(!r || !state.session) return;
+  const key = examUserKey();
+  if(r.loading || (r.loaded && r.userKey === key)) return;
+  r.loading = true; r.userKey = key;
+  try{
+    const { data, error } = await supabaseClient.rpc('hub_get', { p_id: id });
+    if(error) throw error;
+    if(data){ r.data = data; r.error = ''; }
+    else { r.data = null; r.error = 'هذا المجلد غير موجود أو غير متاح حاليًا.'; }
+  }catch(e){ console.error('hub load failed', e); r.data = null; r.error = hubErrMsg(e); }
+  r.loading = false; r.loaded = true;
+  if(hubRun === r && hubIdFromRoute(currentRoute()) === id) render();
+}
+
+function pageHub(id){
+  const wrap = inner => `<section class="section"><div class="hub-wrap">${inner}</div></section>`;
+  if(!supabaseClient) return wrap(`<div class="empty-state"><h3>إعدادات الاتصال غير مكتملة</h3></div>`);
+  if(!hubRun || hubRun.id !== id) hubRun = hubNewRun(id);
+  const r = hubRun;
+  if(!state.session){
+    return wrap(`<div class="wizard-card" style="text-align:center;"><h3>📁 مجلد المادة</h3>
+      <p class="hint">هذا المحتوى متاح للطلاب المسجّلين فقط. سجّل الدخول بحسابك على المنصة للمتابعة.</p>
+      <a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div>`);
+  }
+  if(!r.loaded || r.userKey !== examUserKey()){
+    return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
+  }
+  if(!r.data) return wrap(`<div class="empty-state"><h3>المجلد غير متاح</h3><p>${escapeHtml(r.error || 'تأكد من صحة الرابط أو تواصل مع المشرف.')}</p></div>`);
+
+  const all = Array.isArray(r.data.items) ? r.data.items : [];
+  const nHy = all.filter(i => i.type === 'hy').length, nEx = all.filter(i => i.type === 'exam').length;
+  if(nHy === 0 || nEx === 0) r.filter = 'all';
+  const shown = all.filter(i => r.filter === 'all' || i.type === r.filter);
+
+  const groups = [], byKey = {};
+  shown.forEach(i => {
+    const lec = String(i.lecture || '').trim();
+    const key = lec ? 'L:' + lec : 'I:' + i.type + ':' + i.id;
+    if(!byKey[key]){ byKey[key] = { label: lec || i.title, items: [] }; groups.push(byKey[key]); }
+    byKey[key].items.push(i);
+  });
+
+  const choice = (v, label, n) => `<button type="button" class="hub-choice ${r.filter === v ? 'on' : ''}" data-hub-filter="${v}">${label}<b>${n}</b></button>`;
+  const chooser = (nHy && nEx) ? `
+    <p class="hub-ask">شو بدك تعمل؟ اختار نوع المحتوى ثم المحاضرة 👇</p>
+    <div class="hub-choose">${choice('all', '📚 الكل', all.length)}${choice('hy', '📖 ملخصات', nHy)}${choice('exam', '📝 أسئلة واختبارات', nEx)}</div>` : '';
+
+  const goBtn = (i, multi) => {
+    const isHy = i.type === 'hy';
+    const sub = isHy ? (Number(i.count) ? i.count + ' نقطة' : '') : (Number(i.count) ? i.count + ' سؤال' : '');
+    return `<button type="button" class="hub-go ${i.type}" data-hub-go="${hubAttr(i.type + ':' + i.id)}">${isHy ? '📖 ملخص High Yield' : '📝 حل الأسئلة'}${multi ? ' — <span class="i18n-skip">' + escapeHtml(i.title) + '</span>' : ''}${sub ? '<small>' + sub + '</small>' : ''}</button>`;
+  };
+  const list = groups.map(g => {
+    const nh = g.items.filter(i => i.type === 'hy').length, ne = g.items.length - nh;
+    return `<div class="hub-lec"><div class="hub-lec-title i18n-skip">${escapeHtml(g.label)}</div>
+      <div class="hub-actions">${g.items.map(i => goBtn(i, (i.type === 'hy' ? nh : ne) > 1)).join('')}</div></div>`;
+  }).join('');
+
+  return wrap(`
+    <div class="hub-head">
+      <h2 class="i18n-skip">📁 ${escapeHtml(r.data.title)}</h2>
+      ${r.data.description ? `<p class="i18n-skip">${escapeHtml(r.data.description)}</p>` : ''}
+    </div>
+    ${chooser}
+    ${list || `<div class="empty-state"><p>لا يوجد محتوى في هذا المجلد حاليًا.</p></div>`}`);
+}
+
+function bindHubEvents(id){
+  if(!state.session){ setAfterLoginRoute('folder/' + id); return; }
+  hubEnsureLoaded(id);
+  document.querySelectorAll('[data-hub-filter]').forEach(b => b.addEventListener('click', () => {
+    if(hubRun){ hubRun.filter = b.dataset.hubFilter; render(); }
+  }));
+  document.querySelectorAll('[data-hub-go]').forEach(b => b.addEventListener('click', () => {
+    const [type, ...rest] = b.dataset.hubGo.split(':'), tid = rest.join(':');
+    try{ sessionStorage.setItem(HUB_BACK_KEY, id); }catch(e){}
+    navigate((type === 'hy' ? 'hy/' : 'exam/') + tid);
+  }));
+}
+
 function bindPageEvents(route){
   /* الاختبارات: لو الطالب غادر صفحة الاختبار أثناء الحل نحفظ تقدّمه ونوقف المؤقتات (المحاولة تبقى محفوظة بالسيرفر وتُستأنف من الرابط) */
   if(examRun && !route.startsWith('exam/')){
@@ -9922,9 +10276,21 @@ function bindPageEvents(route){
     examStopTimers(); examRun = null;
   }
   if(hyRun && !route.startsWith('hy/')){ hyFlush(); hyRun = null; }
-  if(route !== 'login' && !route.startsWith('exam/') && !route.startsWith('hy/')){ try{ sessionStorage.removeItem(EXAM_RETURN_KEY); }catch(e){} }
+  if(hubRun && !route.startsWith('folder/')) hubRun = null;
+  /* زر الرجوع للمجلد: يظهر فوق صفحة الملخص/الاختبار إذا الطالب وصلها من مجلد */
+  if(route.startsWith('hy/') || route.startsWith('exam/')){
+    let back = null; try{ back = sessionStorage.getItem(HUB_BACK_KEY); }catch(e){}
+    const app = document.getElementById('app');
+    if(back && app && !app.querySelector('.hub-back')){
+      const a = document.createElement('a'); a.className = 'hub-back'; a.href = '/folder/' + encodeURIComponent(back);
+      a.textContent = '→ رجوع إلى المجلد'; app.insertBefore(a, app.firstChild);
+    }
+  } else if(!route.startsWith('folder/')){ try{ sessionStorage.removeItem(HUB_BACK_KEY); }catch(e){} }
+  if(route !== 'login' && !route.startsWith('exam/') && !route.startsWith('hy/') && !route.startsWith('folder/')){ try{ sessionStorage.removeItem(EXAM_RETURN_KEY); }catch(e){} }
   if(route.startsWith('hy/')) bindHyEvents(hyIdFromRoute(route));
   if(route === 'admin-highyield') bindHyAdminEvents();
+  if(route.startsWith('folder/')) bindHubEvents(hubIdFromRoute(route));
+  if(route === 'admin-hubs') bindHubAdminEvents();
   if(route.startsWith('exam/')) bindExamEvents(examIdFromRoute(route));
   if(route === 'admin-exams') bindAdminExamsEvents();
   document.querySelectorAll('[data-self-enroll]').forEach(btn=>{
