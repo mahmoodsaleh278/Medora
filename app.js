@@ -7408,7 +7408,7 @@ function setPageMeta({ title, description, noindex } = {}){
    noindex عشان ما تنفهرس بمحركات البحث. */
 function updateSeoMeta(route){
   if(route.startsWith('hy/')){ setPageMeta({ title: 'High Yield', noindex: true }); return; }
-  if(route.startsWith('folder/')){ setPageMeta({ title: (hubRun && hubRun.data && hubRun.data.title) ? hubRun.data.title : 'مجلد المادة', noindex: true }); return; }
+  if(route.startsWith('folder/')){ setPageMeta({ title: (hubRun && ((hubRun.data && hubRun.data.title) || (hubRun.pub && hubRun.pub.title))) || 'مجلد المادة', noindex: true }); return; }
   if(route.startsWith('exam/')){
     setPageMeta({ title: (examRun && examRun.info && examRun.info.title) ? examRun.info.title : 'اختبار', noindex: true });
     return;
@@ -9957,24 +9957,44 @@ function injectHubStyles(){
   const style = document.createElement('style');
   style.id = 'hubStyles';
   style.textContent = `
-    .hub-wrap{ max-width: 820px; margin: 0 auto; padding: 0 14px; }
-    .hub-head{ background:var(--card); border:1px solid var(--border); border-radius:18px; padding:20px; margin-bottom:16px; }
-    .hub-head h2{ margin:0 0 6px; font-size:22px; }
-    .hub-head p{ margin:0; color:var(--muted); font-size:14px; line-height:1.8; white-space:pre-line; }
-    .hub-ask{ font-weight:800; font-size:14px; margin:0 0 10px; }
-    .hub-choose{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
-    .hub-choice{ flex:1; min-width:120px; font-family:inherit; font-weight:800; font-size:14px; padding:12px 14px; border-radius:14px; border:1.5px solid var(--border); background:var(--card); color:var(--ink); cursor:pointer; }
-    .hub-choice b{ display:inline-block; margin-inline-start:6px; font-size:12px; padding:1px 8px; border-radius:99px; background:var(--bg); color:var(--muted); }
-    .hub-choice.on{ border-color:var(--teal); background:var(--teal-light); color:var(--teal); }
-    .hub-choice.on b{ background:var(--teal); color:#fff; }
-    .hub-lec{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:14px 16px; margin-bottom:10px; }
-    .hub-lec-title{ font-weight:800; font-size:15.5px; margin-bottom:10px; }
-    .hub-actions{ display:flex; gap:8px; flex-wrap:wrap; }
-    .hub-go{ font-family:inherit; font-weight:800; font-size:13.5px; padding:10px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--bg); color:var(--ink); cursor:pointer; text-align:start; }
-    .hub-go small{ display:block; font-weight:600; font-size:11.5px; color:var(--muted); margin-top:2px; }
-    .hub-go.hy{ border-color:#f59e0b; background:#fffbeb; color:#b45309; }
-    .hub-go.exam{ border-color:var(--teal); background:var(--teal-light); color:var(--teal); }
-    .hub-go:hover{ filter:brightness(.97); }
+    .hub-wrap{ max-width: 980px; margin: 0 auto; padding: 0 14px; }
+    .hub-hero{ position:relative; overflow:hidden; border-radius:24px; padding:28px 26px; margin-bottom:20px; color:#fff;
+      background: linear-gradient(135deg, var(--teal) 0%, #0b4f5e 100%); box-shadow:0 10px 30px rgba(11,79,94,.22); }
+    .hub-hero::before{ content:''; position:absolute; width:260px; height:260px; border-radius:50%; background:rgba(255,255,255,.08); top:-90px; inset-inline-end:-60px; }
+    .hub-hero::after{ content:''; position:absolute; width:150px; height:150px; border-radius:50%; background:rgba(255,255,255,.06); bottom:-60px; inset-inline-start:30px; }
+    .hub-hero > *{ position:relative; z-index:1; }
+    .hub-hero-ic{ width:54px; height:54px; border-radius:16px; background:rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center; font-size:28px; margin-bottom:14px; }
+    .hub-hero h1{ margin:0 0 8px; font-size:26px; line-height:1.4; font-weight:800; color:#fff; }
+    .hub-hero p{ margin:0; font-size:14.5px; line-height:1.9; opacity:.92; white-space:pre-line; max-width:640px; }
+    .hub-stats{ display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+    .hub-stat{ font-size:12.5px; font-weight:800; padding:6px 13px; border-radius:99px; background:rgba(255,255,255,.17); backdrop-filter:blur(4px); }
+    .hub-ask{ font-weight:800; font-size:15px; margin:0 0 10px; }
+    .hub-choose{ display:flex; gap:6px; padding:5px; background:var(--card); border:1px solid var(--border); border-radius:16px; margin-bottom:16px; }
+    .hub-choice{ flex:1; font-family:inherit; font-weight:800; font-size:13.5px; padding:11px 8px; border-radius:12px; border:0; background:transparent; color:var(--muted); cursor:pointer; transition:.15s; }
+    .hub-choice b{ display:inline-block; margin-inline-start:5px; font-size:11.5px; padding:1px 8px; border-radius:99px; background:var(--bg); }
+    .hub-choice.on{ background:var(--teal); color:#fff; box-shadow:0 4px 12px rgba(0,0,0,.12); }
+    .hub-choice.on b{ background:rgba(255,255,255,.25); color:#fff; }
+    .hub-search{ width:100%; box-sizing:border-box; padding:12px 16px; border-radius:14px; border:1.5px solid var(--border); background:var(--card); color:var(--ink); font-family:inherit; font-size:14px; margin-bottom:16px; }
+    .hub-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:14px; }
+    .hub-lec{ background:var(--card); border:1px solid var(--border); border-radius:20px; padding:16px; transition:.15s; }
+    .hub-lec:hover{ box-shadow:0 8px 24px rgba(0,0,0,.07); transform:translateY(-2px); }
+    .hub-lec-head{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+    .hub-num{ flex:none; width:36px; height:36px; border-radius:12px; background:var(--teal-light); color:var(--teal); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:15px; }
+    .hub-lec-title{ font-weight:800; font-size:15px; line-height:1.5; }
+    .hub-tiles{ display:flex; flex-direction:column; gap:8px; }
+    .hub-tile{ display:flex; align-items:center; gap:12px; width:100%; box-sizing:border-box; font-family:inherit; text-align:start; cursor:pointer; padding:11px 12px; border-radius:14px; border:1.5px solid var(--border); background:var(--bg); color:var(--ink); transition:.15s; }
+    .hub-tile:hover{ transform:translateX(-2px); }
+    .hub-tile-ic{ flex:none; width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:19px; }
+    .hub-tile-tx{ flex:1; min-width:0; }
+    .hub-tile-tx strong{ display:block; font-size:13.5px; font-weight:800; }
+    .hub-tile-tx small{ display:block; font-size:12px; color:var(--muted); margin-top:2px; font-weight:600; }
+    .hub-tile-go{ flex:none; font-size:20px; color:var(--muted); line-height:1; }
+    .hub-tile.hy{ border-color:color-mix(in srgb, #f59e0b 45%, var(--border)); background:color-mix(in srgb, #f59e0b 9%, var(--card)); }
+    .hub-tile.hy .hub-tile-ic{ background:color-mix(in srgb, #f59e0b 22%, var(--card)); }
+    .hub-tile.hy strong{ color:#d97706; }
+    .hub-tile.exam{ border-color:color-mix(in srgb, var(--teal) 45%, var(--border)); background:color-mix(in srgb, var(--teal) 8%, var(--card)); }
+    .hub-tile.exam .hub-tile-ic{ background:color-mix(in srgb, var(--teal) 20%, var(--card)); }
+    .hub-tile.exam strong{ color:var(--teal); }
     .hub-back{ display:inline-block; margin:10px 16px 0; font-weight:800; font-size:13.5px; color:var(--teal); text-decoration:none; }
     .hub-pick-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
     .hub-pick{ max-height:210px; overflow:auto; border:1px solid var(--border); border-radius:12px; padding:6px; background:var(--bg); margin-top:6px; }
@@ -9984,7 +10004,7 @@ function injectHubStyles(){
     .hub-sel-row .t{ font-size:13px; font-weight:700; }
     .hub-sel-row input[type=text]{ grid-column:1 / -1; }
     .hub-sel-row .ctl{ grid-column:1 / -1; display:flex; gap:6px; }
-    @media (max-width: 640px){ .hub-pick-grid{ grid-template-columns:1fr; } }
+    @media (max-width: 640px){ .hub-pick-grid{ grid-template-columns:1fr; } .hub-hero{ padding:22px 18px; } .hub-hero h1{ font-size:21px; } .hub-grid{ grid-template-columns:1fr; } }
   `;
   document.head.appendChild(style);
 }
@@ -10186,7 +10206,19 @@ function bindHubAdminEvents(){
 }
 
 /* ============================ جهة الطالب ============================ */
-function hubNewRun(id){ return { id, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'all' }; }
+function hubNewRun(id){ return { id, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'all', pub:null, pubLoading:false, pubLoaded:false }; }
+
+/* اسم ووصف المجلد متاحان حتى قبل تسجيل الدخول (دالة hub_public_info) عشان يظهر اسم المجلد على صفحة الدخول */
+async function hubEnsurePublic(id){
+  const r = hubRun; if(!r || r.pubLoading || r.pubLoaded) return;
+  r.pubLoading = true;
+  try{
+    const { data, error } = await supabaseClient.rpc('hub_public_info', { p_id: id });
+    if(!error && data) r.pub = data;
+  }catch(e){ console.warn('hub public info failed', e); }
+  r.pubLoading = false; r.pubLoaded = true;
+  if(hubRun === r && hubIdFromRoute(currentRoute()) === id) render();
+}
 
 async function hubEnsureLoaded(id){
   const r = hubRun; if(!r || !state.session) return;
@@ -10203,18 +10235,40 @@ async function hubEnsureLoaded(id){
   if(hubRun === r && hubIdFromRoute(currentRoute()) === id) render();
 }
 
+function hubHeroHtml(title, desc, stats){
+  return `<div class="hub-hero">
+    <div class="hub-hero-ic">📁</div>
+    <h1 class="i18n-skip">${escapeHtml(title)}</h1>
+    ${desc ? `<p class="i18n-skip">${escapeHtml(desc)}</p>` : ''}
+    ${stats ? `<div class="hub-stats">${stats}</div>` : ''}
+  </div>`;
+}
+function hubGroupItems(items){
+  const groups = [], byKey = {};
+  items.forEach(i => {
+    const lec = String(i.lecture || '').trim();
+    const key = lec ? 'L:' + lec : 'I:' + i.type + ':' + i.id;
+    if(!byKey[key]){ byKey[key] = { label: lec || i.title, items: [] }; groups.push(byKey[key]); }
+    byKey[key].items.push(i);
+  });
+  return groups;
+}
+
 function pageHub(id){
   const wrap = inner => `<section class="section"><div class="hub-wrap">${inner}</div></section>`;
   if(!supabaseClient) return wrap(`<div class="empty-state"><h3>إعدادات الاتصال غير مكتملة</h3></div>`);
   if(!hubRun || hubRun.id !== id) hubRun = hubNewRun(id);
   const r = hubRun;
   if(!state.session){
-    return wrap(`<div class="wizard-card" style="text-align:center;"><h3>📁 مجلد المادة</h3>
-      <p class="hint">هذا المحتوى متاح للطلاب المسجّلين فقط. سجّل الدخول بحسابك على المنصة للمتابعة.</p>
-      <a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div>`);
+    const p = r.pub;
+    if(!p && !r.pubLoaded) return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
+    return wrap(`${hubHeroHtml(p ? p.title : 'مجلد المادة', p ? p.description : '', '')}
+      <div class="wizard-card" style="text-align:center;">
+        <p class="hint" style="margin-top:0;">محتوى هذا المجلد متاح للطلاب المسجّلين فقط. سجّل الدخول بحسابك على المنصة للمتابعة.</p>
+        <a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div>`);
   }
   if(!r.loaded || r.userKey !== examUserKey()){
-    return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
+    return wrap(`${r.pub ? hubHeroHtml(r.pub.title, r.pub.description, '') : ''}<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
   }
   if(!r.data) return wrap(`<div class="empty-state"><h3>المجلد غير متاح</h3><p>${escapeHtml(r.error || 'تأكد من صحة الرابط أو تواصل مع المشرف.')}</p></div>`);
 
@@ -10222,43 +10276,47 @@ function pageHub(id){
   const nHy = all.filter(i => i.type === 'hy').length, nEx = all.filter(i => i.type === 'exam').length;
   if(nHy === 0 || nEx === 0) r.filter = 'all';
   const shown = all.filter(i => r.filter === 'all' || i.type === r.filter);
+  const groups = hubGroupItems(shown);
+  const nLec = hubGroupItems(all).length;
 
-  const groups = [], byKey = {};
-  shown.forEach(i => {
-    const lec = String(i.lecture || '').trim();
-    const key = lec ? 'L:' + lec : 'I:' + i.type + ':' + i.id;
-    if(!byKey[key]){ byKey[key] = { label: lec || i.title, items: [] }; groups.push(byKey[key]); }
-    byKey[key].items.push(i);
-  });
-
+  const stats = `<span class="hub-stat">🎓 ${nLec} محاضرة</span>${nHy ? `<span class="hub-stat">📖 ${nHy} ملخص</span>` : ''}${nEx ? `<span class="hub-stat">📝 ${nEx} اختبار</span>` : ''}`;
   const choice = (v, label, n) => `<button type="button" class="hub-choice ${r.filter === v ? 'on' : ''}" data-hub-filter="${v}">${label}<b>${n}</b></button>`;
   const chooser = (nHy && nEx) ? `
-    <p class="hub-ask">شو بدك تعمل؟ اختار نوع المحتوى ثم المحاضرة 👇</p>
-    <div class="hub-choose">${choice('all', '📚 الكل', all.length)}${choice('hy', '📖 ملخصات', nHy)}${choice('exam', '📝 أسئلة واختبارات', nEx)}</div>` : '';
+    <p class="hub-ask">شو بدك تعمل اليوم؟ 👇</p>
+    <div class="hub-choose">${choice('all', '📚 الكل', all.length)}${choice('hy', '📖 ملخصات', nHy)}${choice('exam', '📝 أسئلة', nEx)}</div>` : '';
+  const search = nLec > 5 ? `<input type="search" class="hub-search" id="hubSearchInput" placeholder="🔎 ابحث عن محاضرة...">` : '';
 
-  const goBtn = (i, multi) => {
+  const tile = (i, multi) => {
     const isHy = i.type === 'hy';
-    const sub = isHy ? (Number(i.count) ? i.count + ' نقطة' : '') : (Number(i.count) ? i.count + ' سؤال' : '');
-    return `<button type="button" class="hub-go ${i.type}" data-hub-go="${hubAttr(i.type + ':' + i.id)}">${isHy ? '📖 ملخص High Yield' : '📝 حل الأسئلة'}${multi ? ' — <span class="i18n-skip">' + escapeHtml(i.title) + '</span>' : ''}${sub ? '<small>' + sub + '</small>' : ''}</button>`;
+    const n = Number(i.count) || 0;
+    const sub = multi ? `<span class="i18n-skip">${escapeHtml(i.title)}</span>` : (n ? (isHy ? n + ' نقطة مهمة' : n + ' سؤال') : '');
+    return `<button type="button" class="hub-tile ${i.type}" data-hub-go="${hubAttr(i.type + ':' + i.id)}">
+      <span class="hub-tile-ic">${isHy ? '📖' : '📝'}</span>
+      <span class="hub-tile-tx"><strong>${isHy ? 'ملخص High Yield' : 'حل الأسئلة'}</strong>${sub ? `<small>${sub}</small>` : ''}</span>
+      <span class="hub-tile-go">‹</span></button>`;
   };
-  const list = groups.map(g => {
+  const cards = groups.map((g, gi) => {
     const nh = g.items.filter(i => i.type === 'hy').length, ne = g.items.length - nh;
-    return `<div class="hub-lec"><div class="hub-lec-title i18n-skip">${escapeHtml(g.label)}</div>
-      <div class="hub-actions">${g.items.map(i => goBtn(i, (i.type === 'hy' ? nh : ne) > 1)).join('')}</div></div>`;
+    return `<div class="hub-lec" data-hub-name="${hubAttr(g.label.toLowerCase())}">
+      <div class="hub-lec-head"><span class="hub-num">${gi + 1}</span><div class="hub-lec-title i18n-skip">${escapeHtml(g.label)}</div></div>
+      <div class="hub-tiles">${g.items.map(i => tile(i, (i.type === 'hy' ? nh : ne) > 1)).join('')}</div></div>`;
   }).join('');
 
   return wrap(`
-    <div class="hub-head">
-      <h2 class="i18n-skip">📁 ${escapeHtml(r.data.title)}</h2>
-      ${r.data.description ? `<p class="i18n-skip">${escapeHtml(r.data.description)}</p>` : ''}
-    </div>
-    ${chooser}
-    ${list || `<div class="empty-state"><p>لا يوجد محتوى في هذا المجلد حاليًا.</p></div>`}`);
+    ${hubHeroHtml(r.data.title, r.data.description, stats)}
+    ${chooser}${search}
+    ${cards ? `<div class="hub-grid" id="hubGrid">${cards}</div>` : `<div class="empty-state"><p>لا يوجد محتوى في هذا المجلد حاليًا.</p></div>`}`);
 }
 
 function bindHubEvents(id){
+  hubEnsurePublic(id);
   if(!state.session){ setAfterLoginRoute('folder/' + id); return; }
   hubEnsureLoaded(id);
+  const si = document.getElementById('hubSearchInput');
+  if(si) si.addEventListener('input', () => {
+    const q = si.value.trim().toLowerCase();
+    document.querySelectorAll('#hubGrid .hub-lec').forEach(c => { c.style.display = (!q || c.dataset.hubName.includes(q)) ? '' : 'none'; });
+  });
   document.querySelectorAll('[data-hub-filter]').forEach(b => b.addEventListener('click', () => {
     if(hubRun){ hubRun.filter = b.dataset.hubFilter; render(); }
   }));
