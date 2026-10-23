@@ -4130,10 +4130,15 @@ async function deleteStudent(phone){
   try{ await supabaseClient.from('enrollments').delete().eq('phone', phone); }catch(e){ console.error(e); }
   state.lectureProgress = state.lectureProgress.filter(p=>p.phone!==phone);
   try{
-    const { error } = await supabaseClient.functions.invoke('deleteStudent-phone-', { body: { phone } });
-    if(error){
-      console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', error);
-      alert('تنبيه: تم حذف الطالب من قوائم الموقع، لكن حسابه الفعلي على Supabase Auth لم يُحذف (خطأ: ' + (error.message||error) + '). راجعي الأمر يدويًا.');
+    const { data, error } = await supabaseClient.functions.invoke('deleteStudent-phone-', { body: { phone } });
+    if(error || (data && data.error)){
+      let reason = (data && data.error) || '';
+      if(!reason && error && error.context && typeof error.context.json === 'function'){
+        try{ const b = await error.context.json(); reason = b.error || b.message || JSON.stringify(b); }catch(_){}
+      }
+      if(!reason && error) reason = error.message || 'خطأ غير معروف';
+      console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', reason);
+      alert('تنبيه: تم حذف الطالب من قوائم الموقع، لكن حسابه الفعلي على Supabase Auth لم يُحذف (خطأ: ' + reason + '). راجعي الأمر يدويًا.');
     }
   }catch(e){
     console.error('تعذّر حذف حساب الدخول فعليًا من Auth:', e);
