@@ -6630,10 +6630,8 @@ async function generateAiSummary({ fileBase64, mimeType, prompt, json }){
    بصرف النظر عن لغة واجهة الموقع الحالية)
    ========================================================= */
 async function downloadSummaryAsPdf(title, htmlContent, meta){
-  if(typeof html2pdf === 'undefined'){
-    alert('PDF export is not available right now. Please check your internet connection and try again.');
-    return;
-  }
+  // ملاحظة: مكتبة html2pdf بتتحمّل كسولًا (lazy) جوا try بالأسفل عبر ensureHtml2PdfLib()،
+  // فما لازم نفحص وجودها هون قبل ما نحمّلها، وإلا الفحص بيفشل دايمًا أول مرة.
   meta = meta || {};
   // العنوان المخزّن بيجي غالبًا بصيغة "اسم المحاضرة — Highyield Summary"،
   // فبنشيل هاي الزيادة من العنوان الرئيسي ونعرض "High Yield" كعنصر تصميم مستقل
@@ -6704,8 +6702,11 @@ async function downloadSummaryAsPdf(title, htmlContent, meta){
   document.body.appendChild(wrap);
   try{
     // نحمّل مكتبة html2pdf أول مرة تُستخدم فقط (بدل ما تكون محمّلة إجباريًا بكل صفحة)
-    await ensureHtml2PdfLib();
-    if(typeof html2pdf === 'undefined') throw new Error('تعذّر تحميل مكتبة تصدير PDF.');
+    try{ await ensureHtml2PdfLib(); }catch(e){}
+    if(typeof html2pdf === 'undefined'){
+      alert('PDF export is not available right now. Please check your internet connection and try again.');
+      return;
+    }
     // ننتظر تحميل كل الصور (الشعار وأي صور داخل الملخص) قبل التقاط الصفحة،
     // وإلا يلتقط html2canvas العنصر قبل اكتمال الرسم فيطلع فارغ/ناقص
     const imgs = Array.from(wrap.querySelectorAll('img'));
