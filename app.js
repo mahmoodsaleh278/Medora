@@ -6322,7 +6322,7 @@ const AR_OPTION_LETTER_MAP = {'أ':0,'ا':0,'ب':1,'ج':2,'د':3,'ه':4,'و':5};
 const EN_OPTION_LETTER_MAP = {A:0,B:1,C:2,D:3,E:4,F:5};
 function letterToOptionIndex(raw){
   if(!raw) return null;
-  const ch = raw.trim().charAt(0);
+  const ch = raw.trim().replace(/^[\(\[\s*_]+/, '').charAt(0);
   const upper = ch.toUpperCase();
   if(EN_OPTION_LETTER_MAP.hasOwnProperty(upper)) return EN_OPTION_LETTER_MAP[upper];
   if(AR_OPTION_LETTER_MAP.hasOwnProperty(ch)) return AR_OPTION_LETTER_MAP[ch];
@@ -6330,53 +6330,90 @@ function letterToOptionIndex(raw){
   return null;
 }
 
-const IMPORT_QUESTION_START_RE = /^\(?\s*(?:[Qq](?:uestion)?\.?\s*|السؤال\s*)?(\d{1,3})\s*[\.\)\-:]\s*(.+)$/;
-const IMPORT_OPTION_RE = /^\(?\s*([A-Da-dأبجده])\s*[\)\.\-:]\s+(.+)$/;
-const IMPORT_OPTION_NUM_RE = /^\(?\s*([1-6])\s*\)\s+(.+)$/;
-const IMPORT_ANSWER_RE = /^(?:Answer|Correct\s*Answer|الإجابة(?:\s*الصحيحة)?|الجواب(?:\s*الصحيح)?)\s*[:\-]?\s*(.+)$/i;
-const IMPORT_EXPLAIN_RE = /^(?:Explanation|تفسير|توضيح|شرح)\s*[:\-]?\s*(.*)$/i;
+const IMPORT_QUESTION_START_RE = /^\(?\s*(?:[Qq](?:uestion)?\.?\s*|السؤال\s*)?(\d{1,3})\s*(?:[\)\-:]|\.(?!\d))\s*(.+)$/;
+const IMPORT_OPTION_RE = /^\(?\s*([A-Fa-fأابجدهو])\s*(?:\)\s*|[\.\-:]\s+)(.+)$/;
+const IMPORT_OPTION_NUM_RE = /^\(?\s*([1-6])\s*\)\s*(.+)$/;
+const IMPORT_ANSWER_RE = /^(?:(?:(?:Correct|Right)\s*Answer|Answer|الإجابة|الاجابة|الجواب)(?:\s*(?:الصحيحة|الصحيحه|الصحيح))?\s*(?:is\s+)?[:\-–]?|Ans\s*[:\-–])\s*(.+)$/i;
+const IMPORT_EXPLAIN_RE = /^(?:Explanation|Rationale|(?:ال)?تفسير|(?:ال)?توضيح|(?:ال)?شرح)\s*[:\-–]?\s*(.*)$/i;
+
+/* تنظيف النص الملصوق: يشيل الرموز غير المرئية (RTL/LTR marks, zero-width)،
+   يحوّل الأرقام العربية/الفارسية لإنجليزية، ويوحّد المسافات والأقواس. */
+function normalizeImportText(raw){
+  return String(raw || '')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u00AD]/g, '')
+    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+    .replace(/[\u2028\u2029]/g, '\n')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+    .replace(/）/g, ')').replace(/（/g, '(').replace(/：/g, ':')
+    .replace(/\*\*|__/g, '');
+}
+function cleanImportLine(line){
+  return line
+    .replace(/^[\s•●▪◦‣▫■□○◯·*]+/, '')   // نقاط/رموز تعداد في بداية السطر
+    .replace(/^[-–—]\s+/, '')            // شرطة قائمة (- ) وليست "a-fib"
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+/* خيارات مكتوبة بسطر واحد: "A) x B) y C) z D) w" -> 4 أسطر */
+function splitInlineOptions(line){
+  if(!/^\(?\s*(?:[Aa]|[أا])\s*\)/.test(line)) return [line];
+  return line.split(/\s+(?=\(?\s*[B-Fb-fبجدهو]\s*\)\s*\S)/);
+}
 
 /* يقسّم نصًا خامًا (مستخرجًا من PDF/Word أو ملصوقًا يدويًا) إلى مصفوفة أسئلة
    منظمة: {question, options[4], correctIndex, correctFound, explanation}.
    هذا استخراج تقريبي "أفضل جهد ممكن" — يُعرض بعده على الأدمن للمراجعة والتعديل. */
 function parseQuestionsFromText(rawText){
-  const allLines = (rawText || '').replace(/\r/g,'').split('\n').map(l=>l.trim());
-  const hasNumbering = allLines.some(l=> l && IMPORT_QUESTION_START_RE.test(l) && l.length < 300);
+  const lines = [];
+  let blank = false;
+  normalizeImportText(rawText).split('\n').forEach(l=>{
+    const line = cleanImportLine(l);
+    if(!line){ blank = true; return; }
+    splitInlineOptions(line).forEach((part, i)=> lines.push({ text: part, blankBefore: blank && i === 0 }));
+    blank = false;
+  });
+
+  const hasNumbering = lines.some(l=> IMPORT_QUESTION_START_RE.test(l.text) && l.text.length < 300
+    && !IMPORT_OPTION_RE.test(l.text));
 
   const blocks = [];
-  if(hasNumbering){
-    let current = [];
-    allLines.forEach(line=>{
-      if(!line) return;
-      const m = IMPORT_QUESTION_START_RE.exec(line);
-      const currentHasOptions = current.some(l=> IMPORT_OPTION_RE.test(l) || IMPORT_OPTION_NUM_RE.test(l));
-      if(m && (current.length === 0 || currentHasOptions)){
-        if(current.length) blocks.push(current);
-        current = [m[2]];
-      } else {
-        current.push(line);
-      }
-    });
-    if(current.length) blocks.push(current);
-  } else {
-    // لا يوجد ترقيم واضح للأسئلة، نفصل حسب الأسطر الفارغة (فقرات)
-    let buff = [];
-    allLines.forEach(line=>{
-      if(!line){
-        if(buff.length){ blocks.push(buff); buff = []; }
-      } else buff.push(line);
-    });
-    if(buff.length) blocks.push(buff);
-  }
+  let cur = null;
+  const startBlock = (first)=>{ cur = { lines: first ? [first] : [], opts: 0, hasAnswer: false, inExpl: false }; blocks.push(cur); };
+
+  lines.forEach(({ text, blankBefore })=>{
+    const isOpt = IMPORT_OPTION_RE.test(text) || IMPORT_OPTION_NUM_RE.test(text);
+    const isAns = IMPORT_ANSWER_RE.test(text);
+    const isExp = IMPORT_EXPLAIN_RE.test(text);
+    const numOpt = IMPORT_OPTION_NUM_RE.exec(text);
+    // "1) ..." يُعتبر خيارًا (وليس سؤالًا جديدًا) إذا كان هو الخيار التالي بالترتيب
+    const isNextNumOpt = !!(cur && numOpt && !cur.inExpl && cur.lines.length > 0 && Number(numOpt[1]) === cur.opts + 1);
+    const qm = IMPORT_QUESTION_START_RE.exec(text);
+
+    if(!cur){
+      startBlock(hasNumbering && qm && !isNextNumOpt ? qm[2] : text);
+    } else if(hasNumbering && qm && !isNextNumOpt && !(IMPORT_OPTION_RE.test(text)) && (cur.lines.length === 0 || cur.opts > 0)){
+      startBlock(qm[2]);
+    } else if(!hasNumbering && !isOpt && !isAns && !isExp && cur.opts >= 2
+              && (cur.inExpl ? blankBefore : (blankBefore || cur.hasAnswer))){
+      startBlock(text);   // نص عادي بعد خيارات مكتملة => سؤال جديد
+    } else {
+      cur.lines.push(text);
+    }
+    if(isOpt && !cur.inExpl) cur.opts++;
+    if(isAns && !isOpt) cur.hasAnswer = true;
+    if(isExp && !isOpt && !isAns) cur.inExpl = true;
+  });
 
   const results = [];
-  blocks.forEach(blockLines=>{
+  blocks.forEach(block=>{
     const questionParts = [];
     const options = [];
     let correctIndex = null;
     const explanationParts = [];
     let inExplanation = false;
-    blockLines.forEach(line=>{
+    block.lines.forEach(line=>{
       if(!line) return;
       if(inExplanation){ explanationParts.push(line); return; }
       let m;
@@ -6393,6 +6430,7 @@ function parseQuestionsFromText(rawText){
         return;
       }
       if(options.length === 0) questionParts.push(line);
+      else options[options.length - 1] += ' ' + line;   // سطر ملفوف: كمّل الخيار السابق
     });
     const questionText = questionParts.join(' ').trim();
     if(!questionText || options.length < 2) return; // تجاهل أي كتلة غير صالحة كسؤال
@@ -6407,6 +6445,7 @@ function parseQuestionsFromText(rawText){
   });
   return results;
 }
+
 
 let importSession = { courseId:null, lectureId:null, nature:'past', parsed:[] };
 
