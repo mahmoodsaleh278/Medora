@@ -1298,7 +1298,7 @@ async function loadQuestions(){
       const rows = await fetchAllRows('questions', '*', 'created_at');
       state.questions = rows.map(mapQuestionRow);
     } else if(state.session.type === 'teacher'){
-      const myCourseIds = state.courses.filter(c=>c.teacherId===state.session.teacherId).map(c=>c.id);
+      const myCourseIds = state.courses.filter(c=>courseHasTeacher(c, state.session.teacherId)).map(c=>c.id);
       if(!myCourseIds.length) return;
       const { data, error } = await supabaseClient.from('questions').select('*').in('course_id', myCourseIds);
       if(error) throw error;
@@ -1777,7 +1777,22 @@ function isAdminSession(){ return !!(state.session && state.session.type === 'ad
 /* حساب "مدرّس": صلاحيات محدودة بكورسه هو بس — إدارة واجهة فقط (متل الأدمن تمامًا)،
    وليست حماية حقيقية على مستوى قاعدة البيانات. */
 function isTeacherSession(){ return !!(state.session && state.session.type === 'teacher'); }
-function isCourseOwnerTeacher(course){ return isTeacherSession() && !!course && course.teacherId === state.session.teacherId; }
+/* ---- أكثر من مدرّس للمادة الواحدة ----
+   المادة صار فيها teacherIds (مصفوفة). نقرأ كمان teacherId القديم (لو موجود) للتوافق مع البيانات المحفوظة. */
+function courseTeacherIds(c){
+  if(!c) return [];
+  const ids = Array.isArray(c.teacherIds) ? c.teacherIds.slice() : [];
+  if(c.teacherId && !ids.includes(c.teacherId)) ids.push(c.teacherId);
+  return ids;
+}
+function courseHasTeacher(c, teacherId){ return !!teacherId && courseTeacherIds(c).includes(teacherId); }
+function setCourseTeacher(c, teacherId, on){
+  const ids = courseTeacherIds(c).filter(id=>id!==teacherId);
+  if(on) ids.push(teacherId);
+  c.teacherIds = ids;
+  delete c.teacherId;
+}
+function isCourseOwnerTeacher(course){ return isTeacherSession() && !!course && courseHasTeacher(course, state.session.teacherId); }
 function editBtn(key){
   if(!isAdminSession()) return '';
   return `<button type="button" class="content-edit-btn" data-edit-content="${key}" title="تعديل هذا النص">${ICONS.edit}</button>`;
@@ -2337,7 +2352,7 @@ function pageMyTeachCourses(){
   if(!isTeacherSession()){
     return `<section class="section"><div class="container"><div class="empty-state"><h3>سجّل الدخول أولًا</h3><p>هذه الصفحة مخصصة لحسابات المدرّسين. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   }
-  const myCourses = state.courses.filter(c=>c.teacherId===state.session.teacherId);
+  const myCourses = state.courses.filter(c=>courseHasTeacher(c, state.session.teacherId));
   const rows = myCourses.map(c => {
     const lectureCount = courseLectureCount(c.id, true);
     const studentCount = enrollmentsFor(c.id).length;
@@ -2984,7 +2999,7 @@ function bankManageFilteredQuestions(){
 function pageBankManage(){
   /* المدرّس يدير بنك أسئلة كورسه هو فقط — حماية واجهة، لا فرق DB بين الكورسات فعليًا */
   const manageableCourses = isTeacherSession()
-    ? state.courses.filter(c=>c.teacherId===state.session.teacherId)
+    ? state.courses.filter(c=>courseHasTeacher(c, state.session.teacherId))
     : state.courses;
   if(!state.bankManageCourseId || !manageableCourses.some(c=>c.id===state.bankManageCourseId)){
     state.bankManageCourseId = manageableCourses[0] ? manageableCourses[0].id : null;
@@ -3521,7 +3536,7 @@ function pageAdminAnalytics(){
         <h3 style="margin-bottom:10px;">المدرّسون المسجّلون</h3>
         <div style="display:flex; flex-direction:column; gap:10px;">
           ${state.teachers.map(t=>{
-            const myCourses = state.courses.filter(c=>c.teacherId===t.id);
+            const myCourses = state.courses.filter(c=>courseHasTeacher(c, t.id));
             return `<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; font-size:13.5px; padding-bottom:10px; border-bottom:1px solid var(--border);">
               <div>
                 <div>👨‍🏫 <b>${escapeHtml(t.fullName||t.username)}</b> <span style="color:var(--muted);">(${escapeHtml(t.username)})</span></div>
@@ -3931,17 +3946,17 @@ function getTempAuthClient(){
    دون أي حماية فعلية على مستوى قاعدة البيانات (نفس أسلوب حساب الأدمن الحالي). */
 /* قائمة checkboxes لاختيار مادة واحدة أو أكثر يرتبط بها المدرّس. selectedIds تحدد
    أي المواد تكون محددة مسبقًا (تُستخدم في التعديل)، وexcludeTeacherId (إن وُجد) يوضّح
-   بجانب أي مادة مرتبطة أصلًا بمدرّس آخر تحذيرًا بأن ربطها هون رح ينقلها له. */
+   بجانب أي مادة فيها مدرّسون آخرون أسماءهم (المادة تقدر يكون لها أكثر من مدرّس). */
 function teacherCoursesCheckboxesHtml(selectedIds, excludeTeacherId){
   if(!state.courses.length) return `<p class="hint">لا توجد مواد بعد، أنشئ كورسًا أولًا.</p>`;
   return `<div style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow:auto; border:1px solid var(--border); border-radius:10px; padding:10px;">
     ${state.courses.map(c=>{
       const checked = selectedIds.includes(c.id) ? 'checked' : '';
-      const takenByOther = c.teacherId && c.teacherId !== excludeTeacherId && !selectedIds.includes(c.id);
-      const otherTeacherName = takenByOther ? (state.teachers.find(t=>t.id===c.teacherId)||{}).fullName : null;
+      const otherNames = courseTeacherIds(c).filter(id=>id!==excludeTeacherId).map(id=>(state.teachers.find(t=>t.id===id)||{}).fullName).filter(Boolean);
+      const otherTeacherName = otherNames.length ? otherNames.join('، ') : null;
       return `<label style="display:flex; align-items:center; gap:8px; font-size:13.5px; cursor:pointer;">
         <input type="checkbox" name="courseIds" value="${c.id}" ${checked}>
-        <span>${escapeHtml(c.title)} — ${escapeHtml(c.university)} ${otherTeacherName ? `<span style="color:var(--muted);">(مرتبطة حاليًا بـ ${escapeHtml(otherTeacherName)}، رح تنتقل لهذا المدرّس)</span>` : ''}</span>
+        <span>${escapeHtml(c.title)} — ${escapeHtml(c.university)} ${otherTeacherName ? `<span style="color:var(--muted);">(يدرّسها حاليًا: ${escapeHtml(otherTeacherName)} — رح يشتركون معه فيها)</span>` : ''}</span>
       </label>`;
     }).join('')}
   </div>`;
@@ -3991,7 +4006,7 @@ function modalCreateTeacher(){
     if(roleErr){ msgBox.innerHTML = `<div class="form-msg error">تم إنشاء الحساب لكن تعذّر منحه صلاحية المدرّس: ${escapeHtml(roleErr.message||'')}</div>`; return; }
     state.teachers.push({ id: data.user.id, username, fullName });
     await setData('teachers', state.teachers, true);
-    state.courses.forEach(c=>{ if(courseIds.includes(c.id)) c.teacherId = data.user.id; });
+    state.courses.forEach(c=>{ if(courseIds.includes(c.id)) setCourseTeacher(c, data.user.id, true); });
     await setData('courses', state.courses, true);
     closeModal(); navigate('admin-analytics'); render();
   });
@@ -4004,7 +4019,7 @@ function modalCreateTeacher(){
 function modalEditTeacher(teacherId){
   const teacher = state.teachers.find(t=>t.id===teacherId);
   if(!teacher) return;
-  const currentCourseIds = state.courses.filter(c=>c.teacherId===teacherId).map(c=>c.id);
+  const currentCourseIds = state.courses.filter(c=>courseHasTeacher(c, teacherId)).map(c=>c.id);
   openModal(`
     <h3>${ICONS.edit} تعديل بيانات المدرّس</h3>
     <form id="editTeacherForm">
@@ -4028,8 +4043,8 @@ function modalEditTeacher(teacherId){
     teacher.fullName = fullName;
     await setData('teachers', state.teachers, true);
     state.courses.forEach(c=>{
-      if(selectedCourseIds.includes(c.id)) c.teacherId = teacherId;
-      else if(c.teacherId === teacherId) c.teacherId = null;
+      if(selectedCourseIds.includes(c.id)) setCourseTeacher(c, teacherId, true);
+      else if(courseHasTeacher(c, teacherId)) setCourseTeacher(c, teacherId, false);
     });
     await setData('courses', state.courses, true);
     closeModal(); navigate('admin-analytics'); render();
@@ -4067,7 +4082,7 @@ async function deleteTeacher(teacherId){
   state.teachers = state.teachers.filter(t=>t.id!==teacherId);
   await setData('teachers', state.teachers, true);
   let coursesChanged = false;
-  state.courses.forEach(c=>{ if(c.teacherId===teacherId){ c.teacherId = null; coursesChanged = true; } });
+  state.courses.forEach(c=>{ if(courseHasTeacher(c, teacherId)){ setCourseTeacher(c, teacherId, false); coursesChanged = true; } });
   if(coursesChanged) await setData('courses', state.courses, true);
 }
 
@@ -4847,7 +4862,7 @@ function pageLogin(){
 function pageAdminLogin(){
   if(state.session && state.session.type === 'admin') return `<section class="section"><div class="container"><div class="empty-state"><h3>أنت مسجّل الدخول كمشرف</h3><p>يمكنك إدارة الدورات والمحاضرات وبنك الأسئلة من صفحاتها مباشرة.</p></div></div></section>`;
   if(state.session && state.session.type === 'teacher'){
-    const myCourses = state.courses.filter(c=>c.teacherId===state.session.teacherId);
+    const myCourses = state.courses.filter(c=>courseHasTeacher(c, state.session.teacherId));
     const coursesLinks = myCourses.map(c=>`<a href="/course/${c.id}" style="color:var(--teal); font-weight:800;">${escapeHtml(c.title)}</a>`).join('، ');
     return `<section class="section"><div class="container"><div class="empty-state"><h3>أهلًا ${escapeHtml(state.session.name)} 👨‍🏫</h3><p>${myCourses.length ? `يمكنك إدارة محاضرات وبنك أسئلة موادّك (${coursesLinks}) من صفحة كل مادة، أو من <a href="/bank" style="color:var(--teal); font-weight:800;">بنك الأسئلة</a>.` : 'لم تُربط بأي مادة بعد، تواصل مع إدارة المنصة.'}</p></div></div></section>`;
   }
