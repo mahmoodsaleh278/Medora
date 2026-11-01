@@ -10005,6 +10005,10 @@ const HUB_THEMES = {
 function hubTgIcon(size, color){
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="${color}" aria-hidden="true" style="flex:none;vertical-align:middle;"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>`;
 }
+function hubTgButton(u){
+  u = hubTgUrl(u);
+  return u ? `<a class="hx-tg" href="${hubAttr(u)}" target="_blank" rel="noopener noreferrer">${hubTgIcon(22, '#fff')} انضم لقروب التيليجرام</a>` : '';
+}
 function hubTgUrl(v){
   v = String(v || '').trim(); if(!v) return '';
   if(/^@?[A-Za-z0-9_]{4,}$/.test(v)) return 'https://t.me/' + v.replace(/^@/, '');
@@ -10515,7 +10519,7 @@ function pageHub(id){
   if(!state.session){
     const p = r.pub;
     if(!p && !r.pubLoaded) return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
-    if(p && HUB_THEMES[p.kind]) return wrap(`<div class="hx ${HUB_THEMES[p.kind].cls}">${hubThemedHero(p.kind, p.title, p.description)}
+    if(p && HUB_THEMES[p.kind]) return wrap(`<div class="hx ${HUB_THEMES[p.kind].cls}">${hubThemedHero(p.kind, p.title, p.description, hubTgButton(p.telegram))}
       <div class="hx-card" style="text-align:center;"><p class="hx-hint">محتوى هذا المجلد متاح للطلاب المسجّلين فقط. سجّل الدخول بحسابك على المنصة للمتابعة.</p>
       <a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div></div>`);
     return wrap(`${hubHeroHtml(p ? p.title : 'مجلد المادة', p ? p.description : '', '')}
@@ -10524,7 +10528,7 @@ function pageHub(id){
         <a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div>`);
   }
   if(!r.loaded || r.userKey !== examUserKey()){
-    return wrap(`${r.pub ? hubHeroHtml(r.pub.title, r.pub.description, '') : ''}<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
+    return wrap(`${r.pub ? ((HUB_THEMES[r.pub.kind]) ? `<div class="hx ${HUB_THEMES[r.pub.kind].cls}">${hubThemedHero(r.pub.kind, r.pub.title, r.pub.description, hubTgButton(r.pub.telegram))}</div><div style="height:14px"></div>` : hubHeroHtml(r.pub.title, r.pub.description, '')) : ''}<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
   }
   if(!r.data) return wrap(`<div class="empty-state"><h3>المجلد غير متاح</h3><p>${escapeHtml(r.error || 'تأكد من صحة الرابط أو تواصل مع المشرف.')}</p></div>`);
 
@@ -10532,8 +10536,8 @@ function pageHub(id){
   const kind = HUB_THEMES[r.data.kind] ? r.data.kind : 'standard';
   const themed = kind !== 'standard';
   const batches = Array.isArray(r.data.batches) ? r.data.batches : [];
-  const tgBtn = u => u ? `<a class="hx-tg" href="${hubAttr(u)}" target="_blank" rel="noopener noreferrer">${hubTgIcon(22, '#fff')} انضم لقروب التيليجرام</a>` : '';
-  const folderTg = hubTgUrl(r.data.telegram || (r.data.config && r.data.config.telegram));
+  const tgBtn = hubTgButton;
+  const folderTg = hubTgUrl(r.data.telegram || (r.data.config && r.data.config.telegram) || (r.pub && r.pub.telegram));
   const tags = (Array.isArray(r.data.tags) ? r.data.tags : (r.data.config && r.data.config.tags) || []);
   if(themed){
     if(r.batch === undefined){ let b = null; try{ b = localStorage.getItem(hubBatchKey(r.id)); }catch(e){} r.batch = batches.some(x => x.id === b) ? b : null; }
