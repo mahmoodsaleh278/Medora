@@ -10375,7 +10375,7 @@ function bindHubAdminEvents(){
 }
 
 /* ============================ جهة الطالب ============================ */
-function hubNewRun(id){ return { id, batch:undefined, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'all', pub:null, pubLoading:false, pubLoaded:false }; }
+function hubNewRun(id){ return { id, batch:undefined, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'hy', pub:null, pubLoading:false, pubLoaded:false }; }
 
 /* اسم ووصف المجلد متاحان حتى قبل تسجيل الدخول (دالة hub_public_info) عشان يظهر اسم المجلد على صفحة الدخول */
 async function hubEnsurePublic(id){
@@ -10475,7 +10475,7 @@ function pageHub(id){
     all = all.filter(i => !i.batch || i.batch === r.batch);
   }
   const nHy = all.filter(i => i.type === 'hy').length, nEx = all.filter(i => i.type === 'exam').length;
-  if(nHy === 0 || nEx === 0) r.filter = 'all';
+  if(nHy === 0) r.filter = 'exam'; else if(nEx === 0) r.filter = 'hy'; else if(r.filter !== 'hy' && r.filter !== 'exam') r.filter = 'hy';
   const shown = all.filter(i => r.filter === 'all' || i.type === r.filter);
   const groups = hubGroupItems(shown);
   const nLec = hubGroupItems(all).length;
@@ -10484,7 +10484,7 @@ function pageHub(id){
   const choice = (v, label, n) => `<button type="button" class="hub-choice ${r.filter === v ? 'on' : ''}" data-hub-filter="${v}">${label}<b>${n}</b></button>`;
   const chooser = (nHy && nEx) ? `
     <p class="hub-ask">شو بدك تعمل اليوم؟ 👇</p>
-    <div class="hub-choose">${choice('all', '📚 الكل', all.length)}${choice('hy', '📖 ملخصات', nHy)}${choice('exam', '📝 أسئلة', nEx)}</div>` : '';
+    <div class="hub-choose">${choice('hy', '📖 ملخصات', nHy)}${choice('exam', '📝 أسئلة', nEx)}</div>` : '';
   const search = nLec > 5 ? `<input type="search" class="hub-search" id="hubSearchInput" placeholder="🔎 ابحث عن محاضرة...">` : '';
 
   const tile = (i, multi) => {
@@ -10506,7 +10506,7 @@ function pageHub(id){
   if(themed){
     const bObj = batches.find(x => x.id === r.batch);
     const tab = (v, label, n) => `<button type="button" class="hx-tab ${r.filter === v ? 'on' : ''}" data-hub-filter="${v}">${label}<i>${n}</i></button>`;
-    const tabs = (nHy && nEx) ? `<div class="hx-tabs">${tab('all', 'الكل', all.length)}${tab('hy', 'ملخصات', nHy)}${tab('exam', 'أسئلة', nEx)}</div>` : '<span></span>';
+    const tabs = (nHy && nEx) ? `<div class="hx-tabs">${tab('hy', 'ملخصات', nHy)}${tab('exam', 'أسئلة', nEx)}</div>` : '<span></span>';
     const chips = tags.length ? `<div class="hx-chips">${tags.map(t => `<span class="hx-chip i18n-skip">${escapeHtml(t)}</span>`).join('')}</div>` : '';
     return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description)}
       <div class="hx-card">
@@ -10532,13 +10532,13 @@ function bindHubEvents(id){
   });
   document.querySelectorAll('[data-hub-batch-pick]').forEach(b => b.addEventListener('click', () => {
     if(!hubRun) return;
-    hubRun.batch = b.dataset.hubBatchPick; hubRun.filter = 'all';
+    hubRun.batch = b.dataset.hubBatchPick; hubRun.filter = 'hy';
     try{ localStorage.setItem(hubBatchKey(id), hubRun.batch); }catch(e){}
     render(); window.scrollTo({ top:0, behavior:'smooth' });
   }));
   document.querySelectorAll('[data-hub-batch-change]').forEach(b => b.addEventListener('click', () => {
     if(!hubRun) return;
-    hubRun.batch = null; hubRun.filter = 'all';
+    hubRun.batch = null; hubRun.filter = 'hy';
     try{ localStorage.removeItem(hubBatchKey(id)); }catch(e){}
     render(); window.scrollTo({ top:0, behavior:'smooth' });
   }));
