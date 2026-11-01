@@ -10026,10 +10026,11 @@ function hubMapRow(r){
     .map(i => ({ type:i.type, id:String(i.id), lecture:String(i.lecture || '') }));
   const cfg = (r.config && typeof r.config === 'object') ? r.config : {};
   const kind = HUB_THEMES[r.kind] ? r.kind : 'standard';
-  const batches = (Array.isArray(cfg.batches) ? cfg.batches : []).filter(b => b && b.id && b.name).map(b => ({ id:String(b.id), name:String(b.name), telegram:hubTgUrl(b.telegram) }));
+  const batches = (Array.isArray(cfg.batches) ? cfg.batches : []).filter(b => b && b.id && b.name).map(b => ({ id:String(b.id), name:String(b.name), telegram:hubTgUrl(b.telegram),
+    folders:(Array.isArray(b.folders) ? b.folders : []).filter(f => f && f.id && f.name).map(f => ({ id:String(f.id), name:String(f.name), icon:String(f.icon || '') })) }));
   const tags = (Array.isArray(cfg.tags) ? cfg.tags : []).map(t => String(t).trim()).filter(Boolean);
   const rawItems = Array.isArray(r.items) ? r.items : [];
-  items.forEach(it => { const src = rawItems.find(x => x && x.type === it.type && String(x.id) === it.id); it.batch = src && src.batch ? String(src.batch) : ''; });
+  items.forEach(it => { const src = rawItems.find(x => x && x.type === it.type && String(x.id) === it.id); it.batch = src && src.batch ? String(src.batch) : ''; it.folder = src && src.folder ? String(src.folder) : ''; });
   return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', items,
     kind, batches, tags, telegram:hubTgUrl(cfg.telegram), active:r.active !== false, createdAt:Number(r.created_at) || 0 };
 }
@@ -10120,6 +10121,21 @@ function injectHubStyles(){
     .hx-chip{ background:var(--hx-ac); color:#fff; font-weight:700; font-size:15px; padding:12px 22px; border-radius:99px; }
     .hx-tg{ display:inline-flex; align-items:center; gap:8px; margin-top:16px; padding:11px 20px; border-radius:99px; background:#229ed9; color:#fff !important; font-weight:700; font-size:14px; text-decoration:none; }
     .hx-tg:hover{ filter:brightness(1.07); }
+    .hx-folders{ display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; margin-bottom:6px; }
+    .hx-folder{ --fc:#1f7a8c; position:relative; overflow:hidden; font-family:inherit; text-align:start; cursor:pointer; display:flex; flex-direction:column; gap:10px; min-height:150px; padding:18px 16px 16px; border-radius:24px; border:1.5px solid var(--hx-line); background:linear-gradient(160deg, color-mix(in srgb, var(--fc) 14%, var(--hx-card)), var(--hx-card) 65%); color:var(--hx-txt); transition:.18s; }
+    .hx-folder::after{ content:''; position:absolute; width:110px; height:110px; border-radius:50%; background:var(--fc); opacity:.08; top:-38px; inset-inline-end:-30px; pointer-events:none; }
+    .hx-folder:hover{ transform:translateY(-4px); border-color:var(--fc); box-shadow:0 14px 30px color-mix(in srgb, var(--fc) 25%, transparent); }
+    .hx-folder-ic{ flex:none; width:54px; height:54px; border-radius:18px; background:var(--fc); display:flex; align-items:center; justify-content:center; font-size:27px; box-shadow:0 6px 14px color-mix(in srgb, var(--fc) 35%, transparent); }
+    .hx-folder b{ font-size:16.5px; font-weight:800; color:var(--hx-ink); line-height:1.45; }
+    .hx-folder-meta{ display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; padding-inline-end:26px; }
+    .hx-folder-meta i{ font-style:normal; font-size:12px; font-weight:700; padding:4px 10px; border-radius:99px; background:color-mix(in srgb, var(--fc) 14%, var(--hx-card)); color:var(--hx-ink); }
+    .hx-folder-go{ position:absolute; bottom:12px; inset-inline-end:16px; font-size:24px; line-height:1; color:var(--fc); }
+    .hx-f0{ --fc:#1f7a8c; } .hx-f1{ --fc:#7c5cf6; } .hx-f2{ --fc:#e08a1e; } .hx-f3{ --fc:#d6457a; } .hx-f4{ --fc:#2e9e6b; } .hx-f5{ --fc:#2f5fc4; }
+    .hx-back{ font-family:inherit; font-weight:700; font-size:14px; border:0; background:var(--hx-soft); color:var(--hx-ink); padding:9px 16px; border-radius:99px; cursor:pointer; }
+    .hx-fhead{ display:flex; align-items:center; gap:12px; margin:14px 0 16px; }
+    .hx-fhead .hx-folder-ic{ width:46px; height:46px; font-size:23px; border-radius:15px; background:var(--hx-ac); box-shadow:none; }
+    .hx-fhead .hx-q{ margin:0; }
+    .hx-sec{ margin:22px 0 10px; font-weight:800; color:var(--hx-ink); font-size:15px; }
     .hx .hub-search{ margin-bottom:14px; }
     .hx .hub-lec{ border-color:var(--hx-line); }
     .hx .hub-num{ background:var(--hx-soft); color:var(--hx-ac); }
@@ -10193,9 +10209,10 @@ function pageAdminHubs(){
 }
 
 function hubModal(d){
-  const sel = (d.items || []).map(x => ({ type:x.type, id:x.id, lecture:x.lecture || '', batch:x.batch || '' }));
-  const batches = (d.batches || []).map(b => ({ id:b.id, name:b.name, telegram:b.telegram || '' }));
-  let defaultBatch = '';
+  const sel = (d.items || []).map(x => ({ type:x.type, id:x.id, lecture:x.lecture || '', batch:x.batch || '', folder:x.folder || '' }));
+  const batches = (d.batches || []).map(b => ({ id:b.id, name:b.name, telegram:b.telegram || '', folders:(b.folders || []).map(f => ({ id:f.id, name:f.name, icon:f.icon || '' })) }));
+  let defaultBatch = '', defaultFolder = '';
+  const newFolderId = () => 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const newBatchId = () => 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const titleOf = (type, id) => {
     const x = (type === 'hy' ? hubAdmin.hys : hubAdmin.exams).find(y => y.id === id);
@@ -10235,7 +10252,8 @@ function hubModal(d){
         <div><b>🔥 ملخصات High Yield</b><div class="hub-pick" id="hubPickHy"></div></div>
         <div><b>📝 اختبارات</b><div class="hub-pick" id="hubPickEx"></div></div>
       </div>
-      <div class="field" id="hubDefaultBatchField" style="display:none;"><label>أي عنصر أختاره الآن يُضاف إلى الدفعة:</label><select id="hubDefaultBatch" class="bank-select"></select></div>
+      <div class="field" id="hubDefaultBatchField" style="display:none;"><label>أي عنصر أختاره الآن يُضاف إلى الدفعة:</label><select id="hubDefaultBatch" class="bank-select"></select>
+        <select id="hubDefaultFolder" class="bank-select" style="margin-top:6px; display:none;"></select></div>
       <div class="field"><label>المحتوى داخل المجلد — رتّبه وسمِّ المحاضرة</label>
         <div id="hubSelList"></div>
         <datalist id="hubLecList"></datalist>
@@ -10248,17 +10266,35 @@ function hubModal(d){
 
   const form = document.getElementById('hubForm');
   const isThemed = () => form.elements['kind'].value !== 'standard';
+  const itemFolderSelect = (s, i) => {
+    const b = batches.find(x => x.id === s.batch);
+    const fl = b ? (b.folders || []).filter(f => (f.name || '').trim()) : [];
+    if(!isThemed() || !fl.length) return '';
+    return `<select data-hub-folder="${i}" class="bank-select" style="grid-column:1 / -1;"><option value="">📂 بدون مجلد (يظهر مباشرة)</option>${fl.map(f => `<option value="${hubAttr(f.id)}" ${s.folder === f.id ? 'selected' : ''}>${hubAttr((f.icon || '📁') + ' ' + f.name)}</option>`).join('')}</select>`;
+  };
   const renderBatches = () => {
     document.getElementById('hubBatchBox').style.display = isThemed() ? '' : 'none';
     document.getElementById('hubBatchList').innerHTML = batches.length ? batches.map((b, i) => `
-      <div style="display:flex; gap:6px; margin-bottom:6px;">
+      <div style="border:1px dashed var(--border); border-radius:12px; padding:8px; margin-bottom:10px;"><div style="display:flex; gap:6px; margin-bottom:6px;">
         <input type="text" data-hub-bname="${i}" maxlength="60" value="${hubAttr(b.name)}" placeholder="مثال: دفعة 2023 / السنة الثانية" style="flex:1;">
         <input type="text" data-hub-btg="${i}" maxlength="200" dir="ltr" value="${hubAttr(b.telegram || '')}" placeholder="رابط تيليجرام للدفعة (اختياري)" style="flex:1;">
         <button type="button" class="btn small danger" data-hub-brm="${i}">✕</button>
-      </div>`).join('') : `<div class="hint">لا توجد دفعات بعد — أضف دفعة واحدة على الأقل.</div>`;
+      </div>
+      <div style="margin-top:6px; padding-inline-start:12px;">
+        <div class="hint" style="margin:0 0 4px;">📂 مجلدات هذه الدفعة (بتظهر للطالب كبطاقات)</div>
+        ${(b.folders || []).map((f, fi) => `<div style="display:flex; gap:6px; margin-bottom:4px;">
+          <input type="text" data-hub-ficon="${i}:${fi}" maxlength="4" value="${hubAttr(f.icon || '')}" placeholder="📁" style="width:58px; text-align:center;">
+          <input type="text" data-hub-fname="${i}:${fi}" maxlength="60" value="${hubAttr(f.name)}" placeholder="اسم المجلد (مثال: فارما)" style="flex:1;">
+          <button type="button" class="btn small danger" data-hub-frm="${i}:${fi}">✕</button></div>`).join('')}
+        <button type="button" class="btn small" data-hub-fadd="${i}">${ICONS.plus} إضافة مجلد</button>
+      </div></div>`).join('') : `<div class="hint">لا توجد دفعات بعد — أضف دفعة واحدة على الأقل.</div>`;
     const dd = document.getElementById('hubDefaultBatch');
     dd.innerHTML = `<option value="">🌐 للجميع</option>` + batches.map(b => `<option value="${hubAttr(b.id)}" ${defaultBatch === b.id ? 'selected' : ''}>🎓 ${hubAttr(b.name || 'دفعة بدون اسم')}</option>`).join('');
     document.getElementById('hubDefaultBatchField').style.display = (isThemed() && batches.length) ? '' : 'none';
+    const dfl = (batches.find(b => b.id === defaultBatch) || { folders:[] }).folders.filter(f => (f.name || '').trim());
+    const df = document.getElementById('hubDefaultFolder');
+    df.style.display = dfl.length ? '' : 'none';
+    df.innerHTML = `<option value="">📂 بدون مجلد</option>` + dfl.map(f => `<option value="${hubAttr(f.id)}" ${defaultFolder === f.id ? 'selected' : ''}>${hubAttr((f.icon || '📁') + ' ' + f.name)}</option>`).join('');
   };
   const renderPick = () => {
     const qv = (document.getElementById('hubSearch').value || '').trim().toLowerCase();
@@ -10280,6 +10316,7 @@ function hubModal(d){
         <span>${s.type === 'hy' ? '🔥' : '📝'}</span><span class="t i18n-skip">${t == null ? '(محذوف)' : escapeHtml(t)}</span>
         <input type="text" data-hub-lec="${i}" list="hubLecList" maxlength="120" value="${hubAttr(s.lecture)}" placeholder="اسم المحاضرة (مثال: Lecture 3 — Cardiovascular)">
         ${isThemed() && batches.length ? `<select data-hub-batch="${i}" class="bank-select" style="grid-column:1 / -1;"><option value="">🌐 للجميع (كل الدفعات)</option>${batches.map(b => `<option value="${hubAttr(b.id)}" ${s.batch === b.id ? 'selected' : ''}>🎓 ${hubAttr(b.name || 'دفعة بدون اسم')}</option>`).join('')}</select>` : ''}
+        ${itemFolderSelect(s, i)}
         <div class="ctl">
           <button type="button" class="btn small" data-hub-up="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
           <button type="button" class="btn small" data-hub-down="${i}" ${i === sel.length - 1 ? 'disabled' : ''}>↓</button>
@@ -10291,24 +10328,35 @@ function hubModal(d){
   };
   renderBatches(); renderPick(); renderSel();
   form.elements['kind'].addEventListener('change', () => {
-    if(isThemed() && !batches.length) batches.push({ id:newBatchId(), name:'' });
+    if(isThemed() && !batches.length) batches.push({ id:newBatchId(), name:'', telegram:'', folders:[] });
     renderBatches(); renderSel();
   });
-  document.getElementById('hubBatchAdd').addEventListener('click', () => { batches.push({ id:newBatchId(), name:'' }); renderBatches(); renderSel(); });
-  document.getElementById('hubDefaultBatch').addEventListener('change', (e) => { defaultBatch = e.target.value; });
+  document.getElementById('hubBatchAdd').addEventListener('click', () => { batches.push({ id:newBatchId(), name:'', telegram:'', folders:[] }); renderBatches(); renderSel(); });
+  document.getElementById('hubDefaultBatch').addEventListener('change', (e) => { defaultBatch = e.target.value; defaultFolder = ''; renderBatches(); });
+  document.getElementById('hubDefaultFolder').addEventListener('change', (e) => { defaultFolder = e.target.value; });
   form.addEventListener('input', (e) => {
+    const fn = e.target.closest('[data-hub-fname]'); if(fn){ const [bi, fi] = fn.dataset.hubFname.split(':').map(Number); batches[bi].folders[fi].name = fn.value; return; }
+    const fic = e.target.closest('[data-hub-ficon]'); if(fic){ const [bi, fi] = fic.dataset.hubFicon.split(':').map(Number); batches[bi].folders[fi].icon = fic.value; return; }
     const g = e.target.closest('[data-hub-btg]'); if(g){ batches[Number(g.dataset.hubBtg)].telegram = g.value; return; }
     const n = e.target.closest('[data-hub-bname]'); if(!n) return;
     batches[Number(n.dataset.hubBname)].name = n.value;
   });
   form.addEventListener('change', (e) => {
-    if(e.target.closest('[data-hub-bname]')){ renderBatches(); renderSel(); return; }
-    const sb = e.target.closest('[data-hub-batch]'); if(sb) sel[Number(sb.dataset.hubBatch)].batch = sb.value;
+    if(e.target.closest('[data-hub-bname],[data-hub-fname],[data-hub-ficon]')){ renderBatches(); renderSel(); return; }
+    const sb = e.target.closest('[data-hub-batch]'); if(sb){ const it = sel[Number(sb.dataset.hubBatch)]; it.batch = sb.value; it.folder = ''; renderSel(); return; }
+    const sf = e.target.closest('[data-hub-folder]'); if(sf) sel[Number(sf.dataset.hubFolder)].folder = sf.value;
   });
   form.addEventListener('click', (e) => {
+    const fa = e.target.closest('[data-hub-fadd]'); if(fa){ batches[Number(fa.dataset.hubFadd)].folders.push({ id:newFolderId(), name:'', icon:'' }); renderBatches(); renderSel(); return; }
+    const fr = e.target.closest('[data-hub-frm]'); if(fr){
+      const [bi, fi] = fr.dataset.hubFrm.split(':').map(Number);
+      const gf = batches[bi].folders.splice(fi, 1)[0];
+      if(gf){ sel.forEach(s => { if(s.folder === gf.id) s.folder = ''; }); if(defaultFolder === gf.id) defaultFolder = ''; }
+      renderBatches(); renderSel(); return;
+    }
     const b = e.target.closest('[data-hub-brm]'); if(!b) return;
     const gone = batches.splice(Number(b.dataset.hubBrm), 1)[0];
-    if(gone) sel.forEach(s => { if(s.batch === gone.id) s.batch = ''; });
+    if(gone) sel.forEach(s => { if(s.batch === gone.id){ s.batch = ''; s.folder = ''; } });
     if(defaultBatch === (gone && gone.id)) defaultBatch = '';
     renderBatches(); renderSel();
   });
@@ -10320,7 +10368,7 @@ function hubModal(d){
     const p = e.target.closest('[data-hub-pick]'); if(!p) return;
     const [type, ...rest] = p.dataset.hubPick.split(':'), id = rest.join(':');
     const at = sel.findIndex(s => s.type === type && s.id === id);
-    if(p.checked && at < 0) sel.push({ type, id, lecture:'', batch: isThemed() ? defaultBatch : '' });
+    if(p.checked && at < 0) sel.push({ type, id, lecture:'', batch: isThemed() ? defaultBatch : '', folder: (isThemed() && defaultBatch) ? defaultFolder : '' });
     if(!p.checked && at >= 0) sel.splice(at, 1);
     renderSel();
   });
@@ -10349,11 +10397,12 @@ function hubModal(d){
     if(kind !== 'standard' && tgRaw && !tgMain){ msg.innerHTML = `<div class="form-msg error">رابط تيليجرام غير صحيح — لازم يكون مثل https://t.me/اسم_القروب</div>`; return; }
     const badTg = kind !== 'standard' && batches.some(b => (b.telegram || '').trim() && !hubTgUrl(b.telegram));
     if(badTg){ msg.innerHTML = `<div class="form-msg error">أحد روابط تيليجرام الخاصة بالدفعات غير صحيح.</div>`; return; }
-    const cleanBatches = kind === 'standard' ? [] : batches.map(b => ({ id:b.id, name:(b.name || '').trim(), telegram:hubTgUrl(b.telegram) })).filter(b => b.name);
+    const cleanBatches = kind === 'standard' ? [] : batches.map(b => ({ id:b.id, name:(b.name || '').trim(), telegram:hubTgUrl(b.telegram),
+      folders:(b.folders || []).map(f => ({ id:f.id, name:(f.name || '').trim(), icon:(f.icon || '').trim() || '📁' })).filter(f => f.name) })).filter(b => b.name);
     if(kind !== 'standard' && !cleanBatches.length){ msg.innerHTML = `<div class="form-msg error">أضف دفعة واحدة على الأقل (واكتب اسمها).</div>`; return; }
     const okIds = new Set(cleanBatches.map(b => b.id));
     const row = { id: d.id || hyNewId(), title, description:(fd.get('description') || '').trim(), course_id: fd.get('course') || null,
-      items: sel.map(s => { const o = { type:s.type, id:s.id, lecture:s.lecture.trim() }; if(kind !== 'standard' && s.batch && okIds.has(s.batch)) o.batch = s.batch; return o; }),
+      items: sel.map(s => { const o = { type:s.type, id:s.id, lecture:s.lecture.trim() }; if(kind !== 'standard' && s.batch && okIds.has(s.batch)){ o.batch = s.batch; const cb = cleanBatches.find(x => x.id === s.batch); if(s.folder && cb && cb.folders.some(f => f.id === s.folder)) o.folder = s.folder; } return o; }),
       active: !!fd.get('active'), created_at: d.createdAt || Date.now() };
     /* الأعمدة الجديدة ما نرسلها للمجلد العادي (عشان يشتغل حتى قبل تشغيل ملف SQL الجديد) */
     if(kind !== 'standard' || (d.kind && d.kind !== 'standard')){
@@ -10398,7 +10447,7 @@ function bindHubAdminEvents(){
 }
 
 /* ============================ جهة الطالب ============================ */
-function hubNewRun(id){ return { id, batch:undefined, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'hy', pub:null, pubLoading:false, pubLoaded:false }; }
+function hubNewRun(id){ return { id, batch:undefined, folder:undefined, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'hy', pub:null, pubLoading:false, pubLoaded:false }; }
 
 /* اسم ووصف المجلد متاحان حتى قبل تسجيل الدخول (دالة hub_public_info) عشان يظهر اسم المجلد على صفحة الدخول */
 async function hubEnsurePublic(id){
@@ -10445,6 +10494,7 @@ function hubThemedHero(kind, title, desc, extraHtml){
     <p class="hx-sub">اضغط · احفظ · اختبر نفسك</p>
     ${desc ? `<p class="hx-desc i18n-skip">${escapeHtml(desc)}</p>` : ''}${extraHtml || ''}`;
 }
+function hubFolderKey(id){ return 'medora_hub_folder:' + id; }
 function hubBatchKey(id){ return 'medora_hub_batch:' + id; }
 function hubGroupItems(items){
   const groups = [], byKey = {};
@@ -10498,6 +10548,12 @@ function pageHub(id){
         ${picks ? `<div class="hx-batches">${picks}</div>` : `<div class="empty-state"><p>لا توجد دفعات في هذا المجلد حاليًا.</p></div>`}</div>${chips}</div>`);
     }
     all = all.filter(i => !i.batch || i.batch === r.batch);
+    const bFolders = ((batches.find(x => x.id === r.batch) || {}).folders) || [];
+    if(r.folder === undefined){ let f = null; try{ f = sessionStorage.getItem(hubFolderKey(r.id)); }catch(e){} r.folder = f; }
+    if(r.folder && !bFolders.some(f => f.id === r.folder)) r.folder = null;
+    r.batchAll = all;
+    const inFolders = new Set(bFolders.map(f => f.id));
+    all = r.folder ? all.filter(i => i.folder === r.folder) : all.filter(i => !i.folder || !inFolders.has(i.folder));
   }
   const nHy = all.filter(i => i.type === 'hy').length, nEx = all.filter(i => i.type === 'exam').length;
   if(nHy === 0) r.filter = 'exam'; else if(nEx === 0) r.filter = 'hy'; else if(r.filter !== 'hy' && r.filter !== 'exam') r.filter = 'hy';
@@ -10533,11 +10589,26 @@ function pageHub(id){
     const tab = (v, label, n) => `<button type="button" class="hx-tab ${r.filter === v ? 'on' : ''}" data-hub-filter="${v}">${label}<i>${n}</i></button>`;
     const tabs = (nHy && nEx) ? `<div class="hx-tabs">${tab('hy', 'ملخصات', nHy)}${tab('exam', 'أسئلة', nEx)}</div>` : '<span></span>';
     const chips = tags.length ? `<div class="hx-chips">${tags.map(t => `<span class="hx-chip i18n-skip">${escapeHtml(t)}</span>`).join('')}</div>` : '';
+    const bFolders = (bObj && bObj.folders) || [];
+    const curF = r.folder ? bFolders.find(f => f.id === r.folder) : null;
+    const pill = `<button type="button" class="hx-pill" data-hub-batch-change>🎓 <span class="i18n-skip">${escapeHtml(bObj ? bObj.name : '')}</span><small>تغيير</small></button>`;
+    const grid = cards ? `<div class="hub-grid" id="hubGrid">${cards}</div>` : '';
+    const showFolders = !curF && bFolders.length;
+    let body;
+    if(showFolders){
+      const fcards = bFolders.map((f, fi) => {
+        const its = (r.batchAll || []).filter(i => i.folder === f.id);
+        const nh = its.filter(i => i.type === 'hy').length, ne = its.length - nh;
+        return `<button type="button" class="hx-folder hx-f${fi % 6}" data-hub-folder-open="${hubAttr(f.id)}"><span class="hx-folder-ic">${escapeHtml(f.icon || '📁')}</span><b class="i18n-skip">${escapeHtml(f.name)}</b><span class="hx-folder-meta">${nh ? `<i>📖 ${nh}</i>` : ''}${ne ? `<i>📝 ${ne}</i>` : ''}${its.length ? '' : '<i>قريبًا</i>'}</span><span class="hx-folder-go">‹</span></button>`;
+      }).join('');
+      body = `<div class="hx-bar"><span class="hx-q" style="margin:0;font-size:17px;">📂 المجلدات</span>${pill}</div><div class="hx-folders">${fcards}</div>
+        ${cards ? `<p class="hx-sec">📄 ملفات عامة</p><div class="hx-bar">${tabs}<span></span></div>${search}${grid}` : ''}`;
+    } else {
+      const fhead = curF ? `<button type="button" class="hx-back" data-hub-folder-back>→ <span class="i18n-skip">${escapeHtml(bObj.name)}</span></button><div class="hx-fhead"><span class="hx-folder-ic">${escapeHtml(curF.icon || '📁')}</span><h2 class="hx-q i18n-skip">${escapeHtml(curF.name)}</h2></div>` : '';
+      body = `${fhead}<div class="hx-bar">${tabs}${pill}</div>${search}${grid || `<div class="empty-state"><p>${curF ? 'لا يوجد محتوى بهذا المجلد حاليًا، ترقّب التحديثات قريبًا.' : 'لا يوجد محتوى لدفعتك حاليًا، ترقّب التحديثات قريبًا.'}</p></div>`}`;
+    }
     return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description, tgBtn((bObj && bObj.telegram) || folderTg))}
-      <div class="hx-card">
-        <div class="hx-bar">${tabs}<button type="button" class="hx-pill" data-hub-batch-change>🎓 <span class="i18n-skip">${escapeHtml(bObj ? bObj.name : '')}</span><small>تغيير</small></button></div>
-        ${search}
-        ${cards ? `<div class="hub-grid" id="hubGrid">${cards}</div>` : `<div class="empty-state"><p>لا يوجد محتوى لدفعتك حاليًا، ترقّب التحديثات قريبًا.</p></div>`}
+      <div class="hx-card">${body}
       </div>${chips}</div>`);
   }
   return wrap(`
@@ -10555,14 +10626,28 @@ function bindHubEvents(id){
     const q = si.value.trim().toLowerCase();
     document.querySelectorAll('#hubGrid .hub-lec').forEach(c => { c.style.display = (!q || c.dataset.hubName.includes(q)) ? '' : 'none'; });
   });
+  document.querySelectorAll('[data-hub-folder-open]').forEach(b => b.addEventListener('click', () => {
+    if(!hubRun) return;
+    hubRun.folder = b.dataset.hubFolderOpen; hubRun.filter = 'hy';
+    try{ sessionStorage.setItem(hubFolderKey(id), hubRun.folder); }catch(e){}
+    render(); window.scrollTo({ top:0, behavior:'smooth' });
+  }));
+  document.querySelectorAll('[data-hub-folder-back]').forEach(b => b.addEventListener('click', () => {
+    if(!hubRun) return;
+    hubRun.folder = null; hubRun.filter = 'hy';
+    try{ sessionStorage.removeItem(hubFolderKey(id)); }catch(e){}
+    render(); window.scrollTo({ top:0, behavior:'smooth' });
+  }));
   document.querySelectorAll('[data-hub-batch-pick]').forEach(b => b.addEventListener('click', () => {
     if(!hubRun) return;
+    hubRun.folder = null; try{ sessionStorage.removeItem(hubFolderKey(id)); }catch(e){}
     hubRun.batch = b.dataset.hubBatchPick; hubRun.filter = 'hy';
     try{ localStorage.setItem(hubBatchKey(id), hubRun.batch); }catch(e){}
     render(); window.scrollTo({ top:0, behavior:'smooth' });
   }));
   document.querySelectorAll('[data-hub-batch-change]').forEach(b => b.addEventListener('click', () => {
     if(!hubRun) return;
+    hubRun.folder = null; try{ sessionStorage.removeItem(hubFolderKey(id)); }catch(e){}
     hubRun.batch = null; hubRun.filter = 'hy';
     try{ localStorage.removeItem(hubBatchKey(id)); }catch(e){}
     render(); window.scrollTo({ top:0, behavior:'smooth' });
