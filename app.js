@@ -10438,12 +10438,12 @@ function hubHeroHtml(title, desc, stats){
     ${stats ? `<div class="hub-stats">${stats}</div>` : ''}
   </div>`;
 }
-function hubThemedHero(kind, title, desc){
+function hubThemedHero(kind, title, desc, extraHtml){
   const t = HUB_THEMES[kind];
   return `<div class="hx-head"><span class="hx-badge">${t.badge}</span><span class="hx-logo">MEDORA</span></div>
     <h1 class="hx-title"><span class="i18n-skip">${escapeHtml(title || '')}</span><em>التفاعلية</em></h1>
     <p class="hx-sub">اضغط · احفظ · اختبر نفسك</p>
-    ${desc ? `<p class="hx-desc i18n-skip">${escapeHtml(desc)}</p>` : ''}`;
+    ${desc ? `<p class="hx-desc i18n-skip">${escapeHtml(desc)}</p>` : ''}${extraHtml || ''}`;
 }
 function hubBatchKey(id){ return 'medora_hub_batch:' + id; }
 function hubGroupItems(items){
@@ -10493,9 +10493,9 @@ function pageHub(id){
         const n = all.filter(x => x.batch === b.id).length;
         return `<button type="button" class="hx-batch" data-hub-batch-pick="${hubAttr(b.id)}"><span class="hx-batch-n">${i + 1}</span><span><b class="i18n-skip">${escapeHtml(b.name)}</b><small>${n ? n + ' عنصر' : 'قريبًا'}</small></span></button>`;
       }).join('');
-      return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description)}
+      return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description, tgBtn(folderTg))}
         <div class="hx-card"><p class="hx-q">🎓 اختر دفعتك</p><p class="hx-hint">رح تظهرلك الملخصات والأسئلة الخاصة بدفعتك بس.</p>
-        ${picks ? `<div class="hx-batches">${picks}</div>` : `<div class="empty-state"><p>لا توجد دفعات في هذا المجلد حاليًا.</p></div>`}${tgBtn(folderTg)}</div>${chips}</div>`);
+        ${picks ? `<div class="hx-batches">${picks}</div>` : `<div class="empty-state"><p>لا توجد دفعات في هذا المجلد حاليًا.</p></div>`}</div>${chips}</div>`);
     }
     all = all.filter(i => !i.batch || i.batch === r.batch);
   }
@@ -10533,12 +10533,11 @@ function pageHub(id){
     const tab = (v, label, n) => `<button type="button" class="hx-tab ${r.filter === v ? 'on' : ''}" data-hub-filter="${v}">${label}<i>${n}</i></button>`;
     const tabs = (nHy && nEx) ? `<div class="hx-tabs">${tab('hy', 'ملخصات', nHy)}${tab('exam', 'أسئلة', nEx)}</div>` : '<span></span>';
     const chips = tags.length ? `<div class="hx-chips">${tags.map(t => `<span class="hx-chip i18n-skip">${escapeHtml(t)}</span>`).join('')}</div>` : '';
-    return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description)}
+    return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description, tgBtn((bObj && bObj.telegram) || folderTg))}
       <div class="hx-card">
         <div class="hx-bar">${tabs}<button type="button" class="hx-pill" data-hub-batch-change>🎓 <span class="i18n-skip">${escapeHtml(bObj ? bObj.name : '')}</span><small>تغيير</small></button></div>
         ${search}
         ${cards ? `<div class="hub-grid" id="hubGrid">${cards}</div>` : `<div class="empty-state"><p>لا يوجد محتوى لدفعتك حاليًا، ترقّب التحديثات قريبًا.</p></div>`}
-        ${tgBtn((bObj && bObj.telegram) || folderTg)}
       </div>${chips}</div>`);
   }
   return wrap(`
