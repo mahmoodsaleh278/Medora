@@ -7827,271 +7827,473 @@ Rules:
 - Inside string values you may use only these tags: <b>, <i>, <u>, <br>, and <table>/<tr>/<th>/<td> for tables. Escape double quotes inside strings properly so the JSON stays valid.`;
 }
 
-/* ============================ جهة المشرف ============================ */
-async function hyLoadAdmin(force){
-  if(hyAdmin.loading || (hyAdmin.loaded && !force)) return;
-  hyAdmin.loading = true; hyAdmin.error = '';
+/* ============================ جهة المشرف ============================
+   صفحة /admin-hubs = مدير محتوى واحد: مجلدات رئيسية (لكل واحد رابط للطلاب)، وجواها مجلدات متداخلة
+   بلا حد، وبكل مجلد ملخصات واختبارات. من نفس الصفحة: إضافة/نقل/ترتيب/إعادة تسمية/حذف، نسخ رابط
+   أي ملخص أو اختبار أو مجلد، تفعيل/إيقاف النشر، وفتح محرر الملخص أو الاختبار. كل تعديل ينحفظ فورًا. */
+hubAdmin.openId = null; hubAdmin.path = []; hubAdmin.noFoldersCol = false; hubAdmin.chain = null;
+
+async function hubLoadAdmin(force){
+  if(hubAdmin.loading || (hubAdmin.loaded && !force)) return;
+  hubAdmin.loading = true; hubAdmin.error = '';
   try{
-    const { data, error } = await supabaseClient.from('high_yields').select('*').order('created_at', { ascending:false });
+    const { data, error } = await supabaseClient.from('study_hubs').select('*').order('created_at', { ascending:false });
     if(error) throw error;
-    hyAdmin.items = (data || []).map(hyMapRow);
-  }catch(e){ console.error('hyLoadAdmin failed', e); hyAdmin.error = hyErrMsg(e); }
-  hyAdmin.loading = false; hyAdmin.loaded = true;
-  if(currentRoute() === 'admin-highyield') render();
+    hubAdmin.items = (data || []).map(hubMapRow);
+    const [hy, ex] = await Promise.all([
+      supabaseClient.from('high_yields').select('id,title,course_id,active,created_at').order('created_at', { ascending:false }),
+      supabaseClient.from('exams').select('id,title,course_id,active,created_at').order('created_at', { ascending:false }),
+    ]);
+    hubAdmin.hys = hy.data || []; hubAdmin.exams = ex.data || [];
+  }catch(e){ console.error('hubLoadAdmin failed', e); hubAdmin.error = hubErrMsg(e); }
+  hubAdmin.loading = false; hubAdmin.loaded = true;
+  if(currentRoute() === 'admin-hubs') render();
+}
+async function hubFetchLists(){
+  const [hy, ex] = await Promise.all([
+    supabaseClient.from('high_yields').select('id,title,course_id,active,created_at').order('created_at', { ascending:false }),
+    supabaseClient.from('exams').select('id,title,course_id,active,created_at').order('created_at', { ascending:false }),
+  ]);
+  if(hy.data) hubAdmin.hys = hy.data;
+  if(ex.data) hubAdmin.exams = ex.data;
 }
 
-function hyAdminCardHtml(it){
-  const c = hyCounts(it.content);
-  const course = state.courses.find(x => x.id === it.courseId);
+/* حفظ المجلد (الشجرة كاملة) — الحفظات تتسلسل عشان آخر حالة هي اللي تبقى */
+function hubPersist(h){
+  const run = async () => {
+    const ser = hubSerialize(h.tree);
+    h.items = ser.items; h.folders = ser.folders;
+    const base = { id:h.id, title:h.title, description:h.description || '', course_id:h.courseId || null, items:ser.items, active:h.active, created_at:h.createdAt || Date.now() };
+    let res = null;
+    if(!hubAdmin.noFoldersCol){
+      res = await supabaseClient.from('study_hubs').upsert(Object.assign({}, base, { folders:ser.folders }));
+      if(res.error && /folders|PGRST204|42703/.test(String(res.error.code || '') + ' ' + String(res.error.message || ''))){ hubAdmin.noFoldersCol = true; res = null; }
+    }
+    if(!res) res = await supabaseClient.from('study_hubs').upsert(base);
+    return res.error || null;
+  };
+  hubAdmin.chain = (hubAdmin.chain || Promise.resolve()).then(run, run);
+  return hubAdmin.chain;
+}
+async function hubMutate(h, fn){
+  fn(); render();
+  const err = await hubPersist(h);
+  if(err){ console.error('hub save failed', err); alert(hubErrMsg(err)); await hubLoadAdmin(true); }
+  else if(hubAdmin.noFoldersCol && currentRoute() === 'admin-hubs') render();
+}
+function hubCopy(text, btn, doneLabel){
+  const done = () => { if(!btn) return; const o = btn.innerHTML; btn.innerHTML = doneLabel || '✅'; setTimeout(() => { btn.innerHTML = o; }, 1500); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => prompt('انسخ الرابط:', text));
+  else prompt('انسخ الرابط:', text);
+}
+function hubItemInfo(it){ return (it.type === 'hy' ? hubAdmin.hys : hubAdmin.exams).find(y => y.id === it.id) || null; }
+function hubFolderOptions(root, exclude){
+  const out = [{ path:[], node:root, label:'📁 المجلد الرئيسي' }];
+  const walk = (n, path, depth) => n.children.forEach(c => {
+    if(c === exclude) return;
+    const p = path.concat([c.name]);
+    out.push({ path:p, node:c, label:'\u00A0\u00A0\u00A0'.repeat(depth) + '📂 ' + c.name });
+    walk(c, p, depth + 1);
+  });
+  walk(root, [], 1);
+  return out;
+}
+function hubUsedMap(root){
+  const m = {};
+  const walk = (n, p) => { n.items.forEach(i => { m[i.type + ':' + i.id] = p; }); n.children.forEach(c => walk(c, p.concat([c.name]))); };
+  walk(root, []);
+  return m;
+}
+function hubAllLabels(root){
+  const s = new Set();
+  const walk = n => { n.items.forEach(i => { if(i.lecture) s.add(i.lecture); }); n.children.forEach(walk); };
+  walk(root);
+  return [...s];
+}
+
+/* ---------- واجهة القائمة الرئيسية ---------- */
+function hubAdminCardHtml(h){
+  const course = state.courses.find(x => x.id === h.courseId);
+  const d = hubDeep(h.tree);
+  const link = hubLink(h.id);
+  const waText = encodeURIComponent(`${h.title}\n${link}`);
   return `
-  <div class="wizard-card hy-admin-card" style="margin-bottom:14px;">
-    <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <div style="min-width:200px; flex:1;">
-        <h3 style="margin:0 0 4px; font-size:16px;">🔥 ${escapeHtml(it.title)}</h3>
-        <div class="hint" style="margin:0;">${course ? escapeHtml(course.title) + ' • ' : ''}${examFmtDate(it.createdAt)}</div>
-      </div>
-      <span class="hy-chip ${it.active ? 'ok' : 'off'}">${it.active ? 'منشور' : 'متوقف'}</span>
+  <div class="hx-hub ${h.active ? '' : 'off'}">
+    <div class="hx-hub-top" data-hx="open" data-id="${hubAttr(h.id)}">
+      <div class="hx-hub-ic">📁</div>
+      <div class="hx-hub-tx"><h3 class="i18n-skip">${escapeHtml(h.title)}</h3>
+        <div class="hx-meta i18n-skip">${course ? escapeHtml(course.title) + ' • ' : ''}${examFmtDate(h.createdAt)}</div></div>
+      <span class="lecture-tier-tag ${h.active ? '' : 'locked'}">${h.active ? '🟢 منشور' : '🔴 متوقف'}</span>
     </div>
-    <div class="hy-stats-row">
-      <span>${c.sections} قسم</span><span>${c.points} نقطة (${c.hy} 🔥)</span><span>${c.cards} بطاقة</span><span>${c.mcqs} سؤال${c.mcqs ? ' (' + c.linked + ' مربوط بنقاط)' : ''}</span>
-    </div>
+    <div class="hx-chips"><span class="hx-chip">📂 ${d.folders} مجلد</span><span class="hx-chip">🔥 ${d.hy} ملخص</span><span class="hx-chip">📝 ${d.exam} اختبار</span></div>
     <div class="exam-link-row">
-      <input type="text" readonly value="${escapeHtml(hyLink(it.id))}" onclick="this.select()">
-      <button class="btn small teal" data-hy-copy="${it.id}">📋 نسخ الرابط</button>
+      <input type="text" readonly value="${hubAttr(link)}" onclick="this.select()">
+      <button class="btn small teal" data-hx="hcopy" data-id="${hubAttr(h.id)}">📋 نسخ</button>
+      <a class="btn small" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">${ICONS.whatsapp}</a>
     </div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn small" data-hy-open="${it.id}">👁 فتح</button>
-      <button class="btn small" data-hy-stats="${it.id}">📊 إحصائيات</button>
-      <button class="btn small edit" data-hy-edit="${it.id}">${ICONS.edit} تعديل</button>
-      <button class="btn small" data-hy-toggle="${it.id}">${it.active ? '⏸ إيقاف' : '▶️ تفعيل'}</button>
-      <button class="btn small danger" data-hy-del="${it.id}">${ICONS.trash} حذف</button>
+    <div class="hx-actions">
+      <button class="btn small teal solid" data-hx="open" data-id="${hubAttr(h.id)}">📂 إدارة المحتوى</button>
+      <button class="btn small edit" data-hx="hinfo" data-id="${hubAttr(h.id)}">${ICONS.edit} البيانات</button>
+      <button class="btn small" data-hx="htoggle" data-id="${hubAttr(h.id)}">${h.active ? '⏸ إيقاف' : '▶️ تفعيل'}</button>
+      <button class="btn small" data-hx="hview" data-id="${hubAttr(h.id)}">👁</button>
+      <button class="btn small danger" data-hx="hdel" data-id="${hubAttr(h.id)}">${ICONS.trash}</button>
     </div>
   </div>`;
 }
 
-function pageAdminHighYield(){
+/* ---------- واجهة المستكشف (داخل مجلد رئيسي) ---------- */
+function hubExplorerHtml(h){
+  let path = hubAdmin.path || [];
+  let node = hubNodeAt(h.tree, path);
+  if(!node){ path = hubResolvePath(h.tree, path); hubAdmin.path = path; node = hubNodeAt(h.tree, path); }
+  const d = hubDeep(h.tree);
+  const course = state.courses.find(x => x.id === h.courseId);
+  const link = hubLink(h.id);
+  const waRoot = encodeURIComponent(`${h.title}\n${link}`);
+  const here = hubDeep(node);
+
+  const crumbs = `<div class="hx-crumbs">
+    <button type="button" class="hub-crumb ${path.length ? '' : 'cur'}" data-hx="nav" data-i="0">🏠 <span class="i18n-skip">${escapeHtml(h.title)}</span></button>
+    ${path.map((seg, k) => `<span class="hub-crumb-sep">‹</span><button type="button" class="hub-crumb i18n-skip ${k === path.length - 1 ? 'cur' : ''}" data-hx="nav" data-i="${k + 1}">${escapeHtml(seg)}</button>`).join('')}
+  </div>`;
+
+  const foldersHtml = node.children.map((c, i) => {
+    const cd = hubDeep(c);
+    return `<div class="hx-row folder" data-hx="enter" data-i="${i}">
+      <div class="hx-ic">📂</div>
+      <div class="hx-tx"><strong class="i18n-skip">${escapeHtml(c.name)}</strong>
+        <small><span>${cd.folders} مجلد فرعي</span><span>🔥 ${cd.hy} ملخص</span><span>📝 ${cd.exam} اختبار</span></small></div>
+      <div class="hx-ctl">
+        <button class="hx-btn" data-hx="flink" data-i="${i}" title="نسخ رابط هذا المجلد للطلاب">🔗</button>
+        <button class="hx-btn" data-hx="fren" data-i="${i}" title="إعادة تسمية">✏️</button>
+        <button class="hx-btn" data-hx="fmove" data-i="${i}" title="نقل إلى مجلد آخر">📦</button>
+        <button class="hx-btn" data-hx="fup" data-i="${i}" title="تحريك لأعلى" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="hx-btn" data-hx="fdown" data-i="${i}" title="تحريك لأسفل" ${i === node.children.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="hx-btn danger" data-hx="fdel" data-i="${i}" title="حذف المجلد">🗑</button>
+      </div></div>`;
+  }).join('');
+
+  const itemsHtml = node.items.map((it, i) => {
+    const info = hubItemInfo(it), isHy = it.type === 'hy';
+    const title = info ? info.title : null;
+    const live = !!info && info.active !== false;
+    const link2 = isHy ? hyLink(it.id) : examLink(it.id);
+    const wa = encodeURIComponent(`${title || ''}\n${link2}`);
+    return `<div class="hx-row ${it.type}">
+      <div class="hx-ic">${isHy ? '🔥' : '📝'}</div>
+      <div class="hx-tx"><strong class="i18n-skip">${title == null ? '(محذوف من النظام — أزِله من المجلد)' : escapeHtml(title)}</strong>
+        <small><span>${isHy ? 'ملخص High Yield' : 'اختبار'}</span>${it.lecture ? `<span class="i18n-skip">🎓 ${escapeHtml(it.lecture)}</span>` : ''}${info ? `<span>${live ? '🟢 منشور' : '🔴 متوقف'}</span>` : ''}</small></div>
+      <div class="hx-ctl">
+        <button class="hx-btn" data-hx="icopy" data-i="${i}" title="نسخ رابط ${isHy ? 'الملخص' : 'الاختبار'} للطلاب">📋</button>
+        <a class="hx-btn" href="https://wa.me/?text=${wa}" target="_blank" rel="noopener" title="إرسال عبر واتساب">${ICONS.whatsapp}</a>
+        <button class="hx-btn" data-hx="iview" data-i="${i}" title="معاينة" ${info ? '' : 'disabled'}>👁</button>
+        <button class="hx-btn" data-hx="iopen" data-i="${i}" title="${isHy ? 'فتح صفحة الملخصات للتعديل' : 'فتح صفحة الاختبارات للتعديل والنتائج'}">⚙️</button>
+        <button class="hx-btn" data-hx="iedit" data-i="${i}" title="اسم المحاضرة / نقل لمجلد آخر">✏️</button>
+        <button class="hx-btn" data-hx="itoggle" data-i="${i}" title="${live ? 'إيقاف النشر' : 'تفعيل النشر'}" ${info ? '' : 'disabled'}>${live ? '⏸' : '▶️'}</button>
+        <button class="hx-btn" data-hx="iup" data-i="${i}" title="تحريك لأعلى" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="hx-btn" data-hx="idown" data-i="${i}" title="تحريك لأسفل" ${i === node.items.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="hx-btn danger" data-hx="irm" data-i="${i}" title="إزالة من هذا المجلد (لا يُحذف الملف نفسه)">✕</button>
+      </div></div>`;
+  }).join('');
+
+  const empty = (!node.children.length && !node.items.length) ? `<div class="hx-empty">
+      <div style="font-size:34px;">🗂️</div>
+      <b>${path.length ? 'هذا المجلد فاضي' : 'لسا ما أضفت أي محتوى'}</b><br>
+      ابدأ بـ «مجلد فرعي» لتنظيم المحتوى، أو «إضافة ملخص / اختبار» لإدخال ملفات موجودة.</div>` : '';
+
+  return `
+  <div class="hx-top"><button class="btn small" data-hx="back">→ كل المجلدات</button>
+    <button class="btn small" data-hx="refresh" title="تحديث القوائم بعد إنشاء ملخص أو اختبار جديد">🔄 تحديث</button></div>
+  <div class="hx-head">
+    <h2 class="i18n-skip">📁 ${escapeHtml(h.title)}</h2>
+    ${h.description ? `<p class="i18n-skip">${escapeHtml(h.description)}</p>` : ''}
+    <div class="hub-stats">
+      <span class="hub-stat">${h.active ? '🟢 منشور' : '🔴 متوقف'}</span>
+      <span class="hub-stat">📂 ${d.folders} مجلد</span><span class="hub-stat">🔥 ${d.hy} ملخص</span><span class="hub-stat">📝 ${d.exam} اختبار</span>
+      ${course ? `<span class="hub-stat i18n-skip">${escapeHtml(course.title)}</span>` : ''}
+    </div>
+  </div>
+  <div class="hx-share"><b>🔗 رابط المجلد الرئيسي للطلاب</b>
+    <div class="exam-link-row" style="margin-bottom:0;">
+      <input type="text" readonly value="${hubAttr(link)}" onclick="this.select()">
+      <button class="btn small teal" data-hx="hcopy" data-id="${hubAttr(h.id)}">📋 نسخ</button>
+      <a class="btn small" href="https://wa.me/?text=${waRoot}" target="_blank" rel="noopener">${ICONS.whatsapp}</a>
+      ${path.length ? `<button class="btn small" data-hx="curlink">🔗 رابط هذا المجلد الفرعي</button>` : ''}
+    </div></div>
+  ${!h.active ? `<div class="hx-note">هذا المجلد متوقف حاليًا — لن يقدر الطلاب يفتحونه. <button class="btn small" data-hx="htoggle" data-id="${hubAttr(h.id)}">▶️ تفعيل</button></div>` : ''}
+  ${hubAdmin.noFoldersCol ? `<div class="hx-note">⚠️ المجلدات الفاضية ما رح تنحفظ بعد إعادة تحميل الصفحة (المجلدات اللي فيها محتوى تنحفظ عادي). لتفعيل حفظها شغّل هذا الأمر مرة وحدة في Supabase → SQL Editor:<code>alter table study_hubs add column if not exists folders jsonb default '[]'::jsonb;</code></div>` : ''}
+  ${crumbs}
+  <div class="hx-bar">
+    <button class="btn small teal solid" data-hx="addfolder">${ICONS.plus} مجلد فرعي</button>
+    <button class="btn small teal" data-hx="addcontent">📎 إضافة ملخص / اختبار موجود</button>
+    <button class="btn small" data-hx="newhy">🔥 ملخص جديد ↗</button>
+    <button class="btn small" data-hx="newexam">📝 اختبار جديد ↗</button>
+  </div>
+  ${empty}
+  ${node.children.length ? `<div class="hx-label">📂 المجلدات (${node.children.length})</div><div class="hx-list">${foldersHtml}</div>` : ''}
+  ${node.items.length ? `<div class="hx-label">📄 المحتوى (${node.items.length})</div><div class="hx-list">${itemsHtml}</div>` : ''}`;
+}
+
+function pageAdminHubs(){
   if(!isAdminSession()){
     return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
   }
-  if(hyAdmin.error) return `<section class="section"><div class="container"><div class="empty-state"><h3>تعذّر التحميل</h3><p>${escapeHtml(hyAdmin.error)}</p><button class="btn small" id="hyRefreshBtn">🔄 إعادة المحاولة</button></div></div></section>`;
-  if(!hyAdmin.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
+  if(hubAdmin.error) return `<section class="section"><div class="container"><div class="empty-state"><h3>تعذّر التحميل</h3><p>${escapeHtml(hubAdmin.error)}</p><button class="btn small" id="hubRefreshBtn">🔄 إعادة المحاولة</button></div></div></section>`;
+  if(!hubAdmin.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
+  const open = hubAdmin.openId ? hubAdmin.items.find(x => x.id === hubAdmin.openId) : null;
+  if(open) return `<section class="section"><div class="container hx" id="hxRoot">${hubExplorerHtml(open)}</div></section>`;
+  hubAdmin.openId = null; hubAdmin.path = [];
   return `
-  <section class="section"><div class="container">
+  <section class="section"><div class="container hx" id="hxRoot">
     <div class="toolbar">
-      <h2>🔥 High Yield التفاعلي</h2>
-      <div class="toolbar-actions"><button class="btn" id="hyManualTopBtn">{ } إضافة JSON يدوي</button><button class="btn teal solid" id="hyCreateBtn">${ICONS.plus} رفع ملف جديد</button></div>
+      <h2>📁 مجلدات المواد</h2>
+      <div class="toolbar-actions">
+        <button class="btn" data-hx="refresh">🔄 تحديث</button>
+        <button class="btn teal solid" data-hx="hcreate">${ICONS.plus} مجلد رئيسي جديد</button>
+      </div>
     </div>
-    <p class="hint" style="margin:-10px 0 20px;">ارفع ملف High Yield جاهز (PDF أو صورة) وسيتحوّل إلى صفحة تفاعلية: نقاط قابلة للتتبّع، بطاقات مراجعة، وأسئلة تدريبية. راجعه وعدّله ثم انسخ الرابط وأرسله للطلاب — لا يفتحه إلا من لديه حساب مسجّل على المنصة.</p>
-    ${hyAdmin.items.length ? hyAdmin.items.map(hyAdminCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>لا توجد ملفات بعد.</p></div>`}
+    <p class="hint" style="margin:-10px 0 20px;">كل مجلد رئيسي إله رابط واحد ترسله للطلاب. جواه تقدر تعمل مجلدات داخل مجلدات (بلا حد) وتحط فيها الملخصات والاختبارات، وكل شي تتحكم فيه من نفس الصفحة. لا يفتحه إلا من لديه حساب مسجّل.</p>
+    ${hubAdmin.items.length ? `<div class="hx-hubs">${hubAdmin.items.map(hubAdminCardHtml).join('')}</div>` : `<div class="hx-empty"><div style="font-size:34px;">📁</div>لا توجد مجلدات بعد — ابدأ بـ «مجلد رئيسي جديد».</div>`}
   </div></section>`;
 }
 
-function hyCourseOptions(selected){
-  return `<option value="">عام (بدون مادة)</option>` + state.courses.map(c =>
-    `<option class="i18n-skip" value="${c.id}" ${c.id === selected ? 'selected' : ''}>${escapeHtml(c.title)} — ${escapeHtml(c.university)}</option>`).join('');
-}
-
-function hyModalStep1(){
+/* ---------- نوافذ ---------- */
+function hubNameModal(opt){
   openModal(`
-    <h3>🔥 رفع ملف High Yield</h3>
-    <form id="hyGenForm">
-      <div class="field"><label>عنوان الملف</label><input type="text" name="title" required maxlength="120" placeholder="مثال: High Yield — Cardiovascular"></div>
-      <div class="field"><label>المادة (اختياري)</label><select name="course" class="bank-select">${hyCourseOptions('')}</select></div>
-      <div class="field"><label>ملف الـ High Yield (PDF أو صورة، حتى 20MB)</label><input type="file" id="hyFile" accept="application/pdf,image/*"></div>
-      <div class="field"><label>تعليمات إضافية للذكاء الاصطناعي (اختياري)</label><textarea name="notes" rows="2" placeholder="مثال: ركّز على الجرعات، أو اعمل الأسئلة بصيغة سريرية"></textarea></div>
-      <div id="hyGenMsg"></div>
-      <div class="modal-actions">
-        <button type="button" class="btn small" id="cancelModal">إلغاء</button>
-        <button type="button" class="btn small" id="hyManualBtn">إدخال يدوي (JSON)</button>
-        <button type="submit" class="btn teal solid small" id="hyGenBtn">✨ حوّله لتفاعلي</button>
-      </div>
-    </form>`, true);
+    <h3>${opt.title}</h3>
+    <form id="hxNameForm">
+      <div class="field"><label>${opt.label}</label><input type="text" name="name" required maxlength="80" value="${hubAttr(opt.value || '')}" placeholder="${hubAttr(opt.ph || '')}"></div>
+      <div id="hxNameMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">💾 حفظ</button></div>
+    </form>`);
+  const f = document.getElementById('hxNameForm');
   document.getElementById('cancelModal').addEventListener('click', closeModal);
-  const form = document.getElementById('hyGenForm');
-  const msg = document.getElementById('hyGenMsg');
-  document.getElementById('hyManualBtn').addEventListener('click', () => {
-    const fd = new FormData(form);
-    hyModalStep2({ id:null, title:(fd.get('title') || '').trim(), description:'', courseId:fd.get('course') || '', active:true, manual:true, raw:{} });
+  setTimeout(() => { try{ f.elements['name'].focus(); f.elements['name'].select(); }catch(e){} }, 30);
+  f.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = hubCleanName(f.elements['name'].value);
+    if(!name){ document.getElementById('hxNameMsg').innerHTML = `<div class="form-msg error">اكتب اسمًا.</div>`; return; }
+    closeModal(); opt.onSave(name);
   });
+}
+function hubMoveModal(opt){
+  openModal(`
+    <h3>${opt.title}</h3>
+    <form id="hxMoveForm">
+      <div class="field"><label>انقل إلى</label><select name="dest" class="bank-select">${opt.options.map((o, k) => `<option value="${k}" ${k === opt.current ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}</select></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">📦 نقل</button></div>
+    </form>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('hxMoveForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const k = Number(e.target.elements['dest'].value);
+    closeModal(); opt.onPick(opt.options[k].node);
+  });
+}
+function hubInfoModal(d){
+  openModal(`
+    <h3>${d.id ? '✏️ تعديل بيانات المجلد' : '📁 مجلد رئيسي جديد'}</h3>
+    <form id="hubForm">
+      <div class="field"><label>اسم المجلد</label><input type="text" name="title" required maxlength="120" value="${hubAttr(d.title)}" placeholder="مثال: Medical Surgical Nursing — الميد"></div>
+      <div class="field"><label>وصف / تعليمات للطلاب (اختياري)</label><textarea name="description" rows="2" maxlength="400">${escapeHtml(d.description || '')}</textarea></div>
+      <div class="field"><label>المادة</label><select name="course" class="bank-select">${hyCourseOptions(d.courseId)}</select></div>
+      <label style="display:flex; gap:8px; align-items:center; margin:8px 0;"><input type="checkbox" name="active" ${d.active ? 'checked' : ''}> منشور (يظهر للطلاب)</label>
+      <div id="hubFormMsg"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small" id="hubSaveBtn">💾 حفظ</button></div>
+    </form>`);
+  const form = document.getElementById('hubForm');
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fd = new FormData(form);
+    const fd = new FormData(form), msg = document.getElementById('hubFormMsg');
     const title = (fd.get('title') || '').trim();
-    const file = document.getElementById('hyFile').files[0];
-    if(!title){ msg.innerHTML = `<div class="form-msg error">اكتب عنوانًا للملف.</div>`; return; }
-    if(!file){ msg.innerHTML = `<div class="form-msg error">ارفع ملف الـ High Yield أولًا.</div>`; return; }
-    if(file.size > 20*1024*1024){ msg.innerHTML = `<div class="form-msg error">حجم الملف كبير (الحد 20MB).</div>`; return; }
-    const mimeType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : '');
-    if(mimeType !== 'application/pdf' && !mimeType.startsWith('image/')){ msg.innerHTML = `<div class="form-msg error">الصيغ المدعومة: PDF أو صورة فقط.</div>`; return; }
-    const btn = document.getElementById('hyGenBtn'); btn.disabled = true;
-    msg.innerHTML = `<div class="form-msg ok"><span class="loading-dot"></span> جارِ تحليل الملف وتحويله... قد يستغرق حتى دقيقة.</div>`;
-    try{
-      const course = state.courses.find(c => c.id === fd.get('course'));
-      const fileBase64 = await fileToBase64(file);
-      const prompt = hyBuildPrompt({ title, courseTitle: course ? course.title : '', notes: (fd.get('notes') || '').trim() });
-      const out = await generateAiSummary({ fileBase64, mimeType, prompt, json:true });
-      const raw = hyParseAiJson(out);
-      hyModalStep2({ id:null, title, description:(raw.summary ? examStripHtml(String(raw.summary)).slice(0, 300) : ''), courseId:fd.get('course') || '', active:true, raw });
-    }catch(err){
-      console.error('hy generate failed', err);
-      btn.disabled = false;
-      msg.innerHTML = `<div class="form-msg error">${escapeHtml(err.message || 'حدث خطأ غير متوقع')}</div>`;
-    }
+    if(!title){ msg.innerHTML = `<div class="form-msg error">اكتب اسمًا للمجلد.</div>`; return; }
+    const btn = document.getElementById('hubSaveBtn'); btn.disabled = true;
+    const isNew = !d.id;
+    const h = isNew ? { id:hyNewId(), items:[], folders:[], tree:hubNode(''), createdAt:Date.now() } : d;
+    h.title = title; h.description = (fd.get('description') || '').trim(); h.courseId = fd.get('course') || ''; h.active = !!fd.get('active');
+    const err = await hubPersist(h);
+    if(err){ console.error('hub save failed', err); btn.disabled = false; msg.innerHTML = `<div class="form-msg error">${escapeHtml(hubErrMsg(err))}</div>`; return; }
+    if(isNew){ hubAdmin.items.unshift(h); hubAdmin.openId = h.id; hubAdmin.path = []; }
+    closeModal(); render();
   });
 }
-
-function hyModalStep2(d){
+function hubItemModal(h, node, i){
+  const it = node.items[i], info = hubItemInfo(it);
+  const opts = hubFolderOptions(h.tree, null);
+  const cur = Math.max(0, opts.findIndex(o => o.node === node));
   openModal(`
-    <h3>✅ راجع المحتوى ثم انشره</h3>
-    <form id="hyForm">
-      <div class="field"><label>العنوان</label><input type="text" name="title" required maxlength="120" value="${escapeHtml(d.title)}"></div>
-      <div class="field"><label>وصف قصير (اختياري)</label><textarea name="description" rows="2" maxlength="400">${escapeHtml(d.description)}</textarea></div>
-      <div class="field"><label>المادة</label><select name="course" class="bank-select">${hyCourseOptions(d.courseId)}</select></div>
-      <div class="field"><label>المحتوى (JSON) — عدّل النصوص أو أضف/احذف نقاطًا وأسئلة مباشرة</label>
-        <textarea id="hyJson" rows="14" spellcheck="false" style="direction:ltr; text-align:left; font-family:monospace; font-size:12.5px;"></textarea>
-        <div id="hyJsonStats" class="hint" style="margin-top:6px;"></div></div>
-      <label class="section-picker-check" style="display:flex; gap:8px; align-items:center; margin:8px 0;"><input type="checkbox" name="active" ${d.active ? 'checked' : ''}> منشور (يظهر للطلاب)</label>
-      <div id="hyFormMsg"></div>
-      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small" id="hySaveBtn">💾 حفظ</button></div>
-    </form>`, true);
-  const ta = document.getElementById('hyJson');
-  /* الإدخال اليدوي: خانة فاضية للصق مباشرة. وبنقبل JSON ملفوف بـ ```json أو فيه فواصل زايدة */
-  const parseManual = v => { try{ return JSON.parse(v); }catch(e){ try{ return hyParseAiJson(v); }catch(_){ throw e; } } };
-  if(d.manual){
-    ta.value = '';
-    ta.placeholder = '{\n  "summary": "...",\n  "sections": [ { "title": "...", "points": [ { "text": "...", "hy": true, "mnemonic": "", "ar": "..." } ], "table": "" } ],\n  "flashcards": [ { "q": "...", "a": "..." } ],\n  "mcqs": [ { "q": "...", "options": ["...","...","...","..."], "correct": 0, "explanation": "..." } ]\n}';
-  } else ta.value = JSON.stringify(d.raw, null, 2);
-  const stats = document.getElementById('hyJsonStats');
-  const refresh = () => {
-    if(!ta.value.trim()){ stats.textContent = 'الصق الـ JSON هون ⬆'; stats.style.color = 'var(--muted)'; return; }
-    try{
-      const c = hyCounts(hyNormalize(parseManual(ta.value)));
-      stats.innerHTML = `✔ JSON صالح — ${c.sections} قسم، ${c.points} نقطة (${c.hy} 🔥)، ${c.cards} بطاقة، ${c.mcqs} سؤال`;
-      stats.style.color = 'var(--teal)';
-    }catch(e){ stats.textContent = '⚠ JSON غير صالح: ' + e.message; stats.style.color = 'var(--danger)'; }
-  };
-  ta.addEventListener('input', refresh); refresh();
+    <h3>✏️ <span class="i18n-skip">${escapeHtml(info ? info.title : 'عنصر')}</span></h3>
+    <form id="hxItemForm">
+      <div class="field"><label>اسم المحاضرة (اختياري)</label>
+        <input type="text" name="lec" list="hxLecList" maxlength="120" value="${hubAttr(it.lecture)}" placeholder="مثال: Lecture 3 — Cardiovascular">
+        <datalist id="hxLecList">${hubAllLabels(h.tree).map(n => `<option value="${hubAttr(n)}"></option>`).join('')}</datalist>
+        <div class="hint">اكتب نفس اسم المحاضرة لملخص واختبار ليظهروا للطالب تحت بطاقة محاضرة واحدة.</div></div>
+      <div class="field"><label>المجلد</label><select name="dest" class="bank-select">${opts.map((o, k) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}</select></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">💾 حفظ</button></div>
+    </form>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
-  document.getElementById('hyForm').addEventListener('submit', async (e) => {
+  document.getElementById('hxItemForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const fd = new FormData(e.target), msg = document.getElementById('hyFormMsg');
-    let content;
-    try{ content = hyNormalize(parseManual(ta.value)); }catch(err){ msg.innerHTML = `<div class="form-msg error">JSON غير صالح: ${escapeHtml(err.message)}</div>`; return; }
-    const c = hyCounts(content);
-    if(!c.points && !c.cards && !c.mcqs){ msg.innerHTML = `<div class="form-msg error">المحتوى فارغ — أضف نقطة أو بطاقة أو سؤالًا واحدًا على الأقل.</div>`; return; }
-    const btn = document.getElementById('hySaveBtn'); btn.disabled = true;
-    const id = d.id || hyNewId();
-    const row = { id, title:(fd.get('title') || '').trim(), description:(fd.get('description') || '').trim(), course_id: fd.get('course') || null,
-      content, active: !!fd.get('active'), created_at: d.createdAt || Date.now() };
-    const { error } = await supabaseClient.from('high_yields').upsert(row);
-    if(error){ console.error('hy save failed', error); btn.disabled = false; msg.innerHTML = `<div class="form-msg error">${escapeHtml(hyErrMsg(error))}</div>`; return; }
-    closeModal(); await hyLoadAdmin(true);
+    const fd = new FormData(e.target);
+    const lec = hubCleanName(fd.get('lec'), 120), dest = opts[Number(fd.get('dest'))].node;
+    closeModal();
+    hubMutate(h, () => { it.lecture = lec; if(dest !== node){ node.items.splice(i, 1); dest.items.push(it); } });
+  });
+}
+function hubAddModal(h, node){
+  const used = hubUsedMap(h.tree);
+  const sel = [];
+  const where = hubAdmin.path.length ? hubAdmin.path.join(' ‹ ') : h.title;
+  openModal(`
+    <h3>📎 إضافة محتوى إلى: <span class="i18n-skip">${escapeHtml(where)}</span></h3>
+    <form id="hxAddForm">
+      <div class="field"><label>اسم المحاضرة (اختياري)</label>
+        <input type="text" name="lec" list="hxLecList2" maxlength="120" placeholder="مثال: Lecture 3 — Cardiovascular">
+        <datalist id="hxLecList2">${hubAllLabels(h.tree).map(n => `<option value="${hubAttr(n)}"></option>`).join('')}</datalist>
+        <div class="hint">اختر ملخصًا واختبارًا واكتب اسم محاضرة واحد ليظهروا للطالب مع بعض. إذا تركته فاضي يظهر كل عنصر باسمه.</div></div>
+      <div class="field">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <input type="text" id="hxAddSearch" placeholder="ابحث بالعنوان..." style="flex:1; min-width:150px;">
+          <select name="course" class="bank-select" style="flex:1; min-width:150px;">${hyCourseOptions(h.courseId)}</select>
+          <label style="display:flex; gap:6px; align-items:center; font-size:13px;"><input type="checkbox" id="hxAddAll"> كل المواد</label>
+        </div>
+      </div>
+      <div class="hub-pick-grid">
+        <div><b>🔥 ملخصات High Yield</b><div class="hub-pick" id="hxPickHy"></div></div>
+        <div><b>📝 اختبارات</b><div class="hub-pick" id="hxPickEx"></div></div>
+      </div>
+      <div id="hxAddMsg"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn small" id="cancelModal">إلغاء</button>
+        <button type="button" class="btn small" id="hxAddRefresh" title="يحدّث القوائم بعد إنشاء ملخص أو اختبار جديد">🔄 تحديث القوائم</button>
+        <button type="submit" class="btn teal solid small" id="hxAddBtn">➕ إضافة</button>
+      </div>
+    </form>`, true);
+  const form = document.getElementById('hxAddForm');
+  const renderPick = () => {
+    const qv = (document.getElementById('hxAddSearch').value || '').trim().toLowerCase();
+    const course = form.elements['course'].value, all = document.getElementById('hxAddAll').checked;
+    const mk = (arr, type) => {
+      const rows = arr.filter(x => (all || !course || !x.course_id || x.course_id === course) && (!qv || String(x.title).toLowerCase().includes(qv)));
+      return rows.length ? rows.map(x => {
+        const key = type + ':' + x.id, u = used[key];
+        return `<label class="hub-pick-row"><input type="checkbox" data-hx-pick="${hubAttr(key)}" ${sel.includes(key) ? 'checked' : ''} ${u ? 'disabled' : ''}><span class="i18n-skip">${escapeHtml(x.title)}${x.active === false ? ' <em>(متوقف)</em>' : ''}${u ? ` <em>— مضاف في: ${escapeHtml(u.length ? u.join(' ‹ ') : 'المجلد الرئيسي')}</em>` : ''}</span></label>`;
+      }).join('') : `<div class="hint" style="padding:8px; margin:0;">لا يوجد.</div>`;
+    };
+    document.getElementById('hxPickHy').innerHTML = mk(hubAdmin.hys, 'hy');
+    document.getElementById('hxPickEx').innerHTML = mk(hubAdmin.exams, 'exam');
+    document.getElementById('hxAddBtn').textContent = sel.length ? `➕ إضافة (${sel.length})` : '➕ إضافة';
+  };
+  renderPick();
+  document.getElementById('hxAddSearch').addEventListener('input', renderPick);
+  document.getElementById('hxAddAll').addEventListener('change', renderPick);
+  form.elements['course'].addEventListener('change', renderPick);
+  form.addEventListener('change', (e) => {
+    const p = e.target.closest('[data-hx-pick]'); if(!p) return;
+    const key = p.dataset.hxPick, at = sel.indexOf(key);
+    if(p.checked && at < 0) sel.push(key);
+    if(!p.checked && at >= 0) sel.splice(at, 1);
+    renderPick();
+  });
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('hxAddRefresh').addEventListener('click', async (e) => {
+    const b = e.currentTarget; b.disabled = true; await hubFetchLists(); b.disabled = false; renderPick();
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if(!sel.length){ document.getElementById('hxAddMsg').innerHTML = `<div class="form-msg error">اختر ملخصًا أو اختبارًا واحدًا على الأقل.</div>`; return; }
+    const lec = hubCleanName(new FormData(form).get('lec'), 120);
+    closeModal();
+    hubMutate(h, () => { sel.forEach(k => { const [type, ...rest] = k.split(':'); node.items.push({ type, id:rest.join(':'), lecture:lec }); }); });
   });
 }
 
-function bindHyAdminEvents(){
-  hyLoadAdmin();
-  const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
-  on('hyCreateBtn', hyModalStep1);
-  on('hyManualTopBtn', () => hyModalStep2({ id:null, title:'', description:'', courseId:'', active:true, manual:true, raw:{} }));
-  on('hyRefreshBtn', () => { hyAdmin.error = ''; hyAdmin.loaded = false; hyLoadAdmin(true); });
-  const find = id => hyAdmin.items.find(x => x.id === id);
-  document.querySelectorAll('[data-hy-copy]').forEach(b => b.addEventListener('click', () => {
-    const link = hyLink(b.dataset.hyCopy);
-    const done = () => { const o = b.innerHTML; b.innerHTML = '✅ تم النسخ'; setTimeout(() => { b.innerHTML = o; }, 1600); };
-    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done).catch(() => prompt('انسخ الرابط:', link));
-    else prompt('انسخ الرابط:', link);
-  }));
-  document.querySelectorAll('[data-hy-open]').forEach(b => b.addEventListener('click', () => navigate('hy/' + b.dataset.hyOpen)));
-  document.querySelectorAll('[data-hy-stats]').forEach(b => b.addEventListener('click', () => { const it = find(b.dataset.hyStats); if(it) hyShowStats(it); }));
-  document.querySelectorAll('[data-hy-edit]').forEach(b => b.addEventListener('click', () => {
-    const it = find(b.dataset.hyEdit); if(!it) return;
-    hyModalStep2({ id:it.id, title:it.title, description:it.description, courseId:it.courseId, active:it.active, createdAt:it.createdAt, raw:it.content });
-  }));
-  document.querySelectorAll('[data-hy-toggle]').forEach(b => b.addEventListener('click', async () => {
-    const it = find(b.dataset.hyToggle); if(!it) return;
-    b.disabled = true;
-    const { error } = await supabaseClient.from('high_yields').update({ active: !it.active }).eq('id', it.id);
-    if(error){ alert(hyErrMsg(error)); b.disabled = false; return; }
-    it.active = !it.active; render();
-  }));
-  document.querySelectorAll('[data-hy-del]').forEach(b => b.addEventListener('click', () => {
-    const it = find(b.dataset.hyDel); if(!it) return;
-    confirmDelete('سيتم حذف هذا الملف وتقدّم الطلاب فيه نهائيًا. هل أنت متأكد؟', async () => {
-      const { error } = await supabaseClient.from('high_yields').delete().eq('id', it.id);
-      if(error){ alert(hyErrMsg(error)); return; }
-      hyAdmin.items = hyAdmin.items.filter(x => x.id !== it.id); render();
-    });
-  }));
+async function hubToggleItem(it, btn){
+  const row = hubItemInfo(it); if(!row) return;
+  const nowActive = row.active !== false, next = !nowActive;
+  btn.disabled = true;
+  const { error } = await supabaseClient.from(it.type === 'hy' ? 'high_yields' : 'exams').update({ active: next }).eq('id', it.id);
+  if(error){ alert(hubErrMsg(error)); btn.disabled = false; return; }
+  row.active = next;
+  try{ const c = it.type === 'hy' ? (hyAdmin.items || []).find(x => x.id === it.id) : (examAdmin.exams || []).find(x => x.id === it.id); if(c) c.active = next; }catch(e){}
+  render();
 }
 
+function hubAdminClick(e){
+  const b = e.target.closest('[data-hx]');
+  if(!b || b.tagName === 'A' || !e.currentTarget.contains(b)) return;
+  const act = b.dataset.hx, i = Number(b.dataset.i);
+  const hid = b.dataset.id || hubAdmin.openId;
+  const h = hubAdmin.items.find(x => x.id === hid) || null;
+  const node = (h && hubAdmin.openId === h.id) ? hubNodeAt(h.tree, hubAdmin.path || []) : null;
+  const swap = (arr, a, c) => { if(c < 0 || c >= arr.length) return; const t = arr[a]; arr[a] = arr[c]; arr[c] = t; };
 
-/* ---------- إحصائيات الأدمن (تعتمد على دالة hy_admin_stats — راجع highyield_stats.sql) ---------- */
-function hyStatsErr(e){
-  const m = String((e && (e.message || e.details)) || '');
-  if((e && (e.code === 'PGRST202' || e.code === '42883')) || /hy_admin_stats/.test(m)) return 'دالة الإحصائيات غير موجودة بعد — شغّل ملف highyield_stats.sql من Supabase أولًا.';
-  if(/NOT_ADMIN/.test(m)) return 'غير مصرّح.';
-  return hyErrMsg(e);
+  switch(act){
+    case 'hcreate': return hubInfoModal({ id:null, title:'', description:'', courseId:'', active:true });
+    case 'refresh': b.disabled = true; hubAdmin.error = ''; return void hubLoadAdmin(true);
+    case 'open': if(!h) return; hubAdmin.openId = h.id; hubAdmin.path = []; render(); return window.scrollTo({ top:0, behavior:'smooth' });
+    case 'back': hubAdmin.openId = null; hubAdmin.path = []; return render();
+    case 'hcopy': return h && hubCopy(hubLink(h.id), b, '✅ تم النسخ');
+    case 'hview': return h && navigate('folder/' + h.id);
+    case 'hinfo': return h && hubInfoModal(h);
+    case 'htoggle': return h && hubMutate(h, () => { h.active = !h.active; });
+    case 'hdel':
+      if(!h) return;
+      return confirmDelete('سيتم حذف المجلد الرئيسي مع كل مجلداته الفرعية (الملخصات والاختبارات نفسها تبقى كما هي). هل أنت متأكد؟', async () => {
+        const { error } = await supabaseClient.from('study_hubs').delete().eq('id', h.id);
+        if(error){ alert(hubErrMsg(error)); return; }
+        hubAdmin.items = hubAdmin.items.filter(x => x.id !== h.id);
+        if(hubAdmin.openId === h.id){ hubAdmin.openId = null; hubAdmin.path = []; }
+      });
+  }
+  if(!h || !node) return;
+
+  switch(act){
+    case 'nav': hubAdmin.path = hubAdmin.path.slice(0, i); return render();
+    case 'enter': { const c = node.children[i]; if(!c) return; hubAdmin.path = hubAdmin.path.concat([c.name]); render(); return window.scrollTo({ top:0, behavior:'smooth' }); }
+    case 'curlink': return hubCopy(hubFolderLink(h.id, hubAdmin.path), b, '✅ تم النسخ');
+    case 'newhy': return navigate('admin-highyield');
+    case 'newexam': return navigate('admin-exams');
+    case 'addcontent': return hubAddModal(h, node);
+    case 'addfolder':
+      return hubNameModal({ title:'📂 مجلد جديد', label:'اسم المجلد', ph:'مثال: الفصل الأول', onSave: name => hubMutate(h, () => { node.children.push(hubNode(hubUniqueName(node, name))); }) });
+
+    /* مجلدات فرعية */
+    case 'flink': { const c = node.children[i]; return c && hubCopy(hubFolderLink(h.id, hubAdmin.path.concat([c.name])), b); }
+    case 'fren': { const c = node.children[i]; if(!c) return;
+      return hubNameModal({ title:'✏️ إعادة تسمية المجلد', label:'الاسم الجديد', value:c.name, onSave: name => hubMutate(h, () => { c.name = hubUniqueName(node, name, c); }) }); }
+    case 'fmove': { const c = node.children[i]; if(!c) return;
+      const options = hubFolderOptions(h.tree, c);
+      return hubMoveModal({ title:`📦 نقل المجلد "${escapeHtml(c.name)}"`, options, current:Math.max(0, options.findIndex(o => o.node === node)),
+        onPick: dest => { if(dest === node) return; hubMutate(h, () => { node.children.splice(i, 1); c.name = hubUniqueName(dest, c.name); dest.children.push(c); }); } }); }
+    case 'fup': return hubMutate(h, () => swap(node.children, i, i - 1));
+    case 'fdown': return hubMutate(h, () => swap(node.children, i, i + 1));
+    case 'fdel': { const c = node.children[i]; if(!c) return;
+      return confirmDelete(`سيتم حذف المجلد "${c.name}" وكل ما بداخله من مجلدات من هذا المجلد الرئيسي فقط — الملخصات والاختبارات نفسها تبقى ولا تُحذف. هل أنت متأكد؟`, async () => {
+        node.children.splice(i, 1);
+        const err = await hubPersist(h);
+        if(err){ alert(hubErrMsg(err)); await hubLoadAdmin(true); }
+      }); }
+
+    /* ملخصات واختبارات */
+    case 'icopy': { const it = node.items[i]; return it && hubCopy(it.type === 'hy' ? hyLink(it.id) : examLink(it.id), b); }
+    case 'iview': { const it = node.items[i]; return it && navigate((it.type === 'hy' ? 'hy/' : 'exam/') + it.id); }
+    case 'iopen': { const it = node.items[i]; return it && navigate(it.type === 'hy' ? 'admin-highyield' : 'admin-exams'); }
+    case 'iedit': return node.items[i] && hubItemModal(h, node, i);
+    case 'itoggle': return node.items[i] && hubToggleItem(node.items[i], b);
+    case 'iup': return hubMutate(h, () => swap(node.items, i, i - 1));
+    case 'idown': return hubMutate(h, () => swap(node.items, i, i + 1));
+    case 'irm': return hubMutate(h, () => { node.items.splice(i, 1); });
+  }
 }
-async function hyShowStats(it){
-  openModal(`<h3>📊 إحصائيات: ${escapeHtml(it.title)}</h3>
-    <div id="hyStBody" style="text-align:center; padding:24px;"><span class="loading-dot"></span> جارِ التحميل...</div>
-    <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إغلاق</button></div>`, true);
-  const cb = document.getElementById('cancelModal'); if(cb) cb.addEventListener('click', closeModal);
-  let html;
-  try{
-    const { data, error } = await supabaseClient.rpc('hy_admin_stats', { p_id: it.id });
-    if(error) throw error;
-    html = hyStatsHtml(it, data || {});
-  }catch(e){ console.error('hy stats failed', e); html = `<div class="form-msg error">${escapeHtml(hyStatsErr(e))}</div>`; }
-  const box = document.getElementById('hyStBody'); if(!box) return;   /* المشرف سكّر النافذة */
-  box.removeAttribute('style'); box.innerHTML = html;
-}
-function hyStatsHtml(it, d){
-  const c = it.content, secs = c.sections, total = hyCounts(c).points;
-  const st = Array.isArray(d.students) ? d.students : [], n = st.length;
-  if(!n) return `<div class="empty-state" style="padding:22px;"><p>لا يوجد طلاب فتحوا هذا الملف بعد.</p></div>`;
-  const doneMap = d.done || {}, wrongMap = d.wrong || {}, now = Date.now();
-  const active7 = st.filter(x => now - Number(x.updated || 0) <= 7 * 864e5).length;
-  const avgPct = total ? Math.round(st.reduce((a, x) => a + Math.min(Number(x.done) || 0, total), 0) / (n * total) * 100) : 0;
-  const finished = total ? st.filter(x => (Number(x.done) || 0) >= total).length : 0;
-  const quizzers = st.filter(x => Number(x.attempts) > 0);
-  const avgBest = quizzers.length ? Math.round(quizzers.reduce((a, x) => a + (Number(x.best) || 0), 0) / quizzers.length) : null;
-  const card = (v, l) => `<div class="hy-st-card"><b>${v}</b><span>${l}</span></div>`;
-  const pct = x => Math.max(0, Math.min(100, x));
 
-  const secRows = secs.map((sec, si) => {
-    let sum = 0; sec.points.forEach((p, pi) => { sum += Number(doneMap['s' + si + 'p' + pi]) || 0; });
-    const p = sec.points.length ? Math.round(sum / (sec.points.length * n) * 100) : 0;
-    return `<div class="hy-st-row"><span>${escapeHtml(sec.title)}</span><b>${p}%</b><div class="hy-st-bar" style="grid-column:1/-1;"><i style="width:${pct(p)}%"></i></div></div>`;
-  }).join('');
-
-  const missed = Object.keys(wrongMap).filter(k => /^m\d+$/.test(k) && c.mcqs[Number(k.slice(1))])
-    .map(k => ({ i: Number(k.slice(1)), n: Number(wrongMap[k]) || 0 })).filter(x => x.n > 0)
-    .sort((a, b) => b.n - a.n).slice(0, 8);
-  const missedRows = missed.map(x => {
-    const q = c.mcqs[x.i], txt = examStripHtml(q.q);
-    let where = '';
-    const m = /^s(\d+)p(\d+)$/.exec(q.ref || '');
-    if(m && secs[Number(m[1])]) where = `<div class="hint" style="margin:2px 0 0;">📖 ${escapeHtml(secs[Number(m[1])].title)}</div>`;
-    return `<div class="hy-st-row"><span>${escapeHtml(txt.length > 120 ? txt.slice(0, 120) + '…' : txt)}${where}</span><b>${x.n} (${Math.round(x.n / n * 100)}%)</b></div>`;
-  }).join('');
-
-  const rows = st.slice(0, 100).map(x => {
-    const p = total ? Math.round(Math.min(Number(x.done) || 0, total) / total * 100) : 0;
-    return `<tr><td>${escapeHtml(x.name || '—')}</td><td dir="ltr">${escapeHtml(x.phone || '—')}</td><td>${p}%</td><td>${Number(x.attempts) ? (Number(x.best) || 0) + '%' : '—'}</td><td>${Number(x.attempts) || 0}</td><td>${examFmtDate(Number(x.updated) || 0)}</td></tr>`;
-  }).join('');
-
-  return `
-    <div class="hy-st-grid">
-      ${card(n, 'طالب فتح الملف')}${card(active7, 'نشط آخر 7 أيام')}${card(avgPct + '%', 'متوسط الإنجاز')}
-      ${card(finished, 'أنهى كل النقاط')}${card(quizzers.length, 'أنهى الكويز')}${card(avgBest == null ? '—' : avgBest + '%', 'متوسط أفضل علامة')}
-    </div>
-    <div class="hy-st-h">الإنجاز حسب القسم</div>${secRows || '<p class="hint">لا توجد أقسام.</p>'}
-    <div class="hy-st-h">أكثر الأسئلة غلطًا <small class="hint">(عدد الطلاب اللي سؤالهم لسا مغلوط حاليًا)</small></div>
-    ${missedRows || '<p class="hint">لا توجد أخطاء مسجّلة بعد.</p>'}
-    <div class="hy-st-h">الطلاب${n > 100 ? ' (آخر 100 نشاطًا)' : ''}</div>
-    <div class="hy-st-table"><table><thead><tr><th>الاسم</th><th>الهاتف</th><th>الإنجاز</th><th>أفضل علامة</th><th>محاولات</th><th>آخر نشاط</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+function bindHubAdminEvents(){
+  hubLoadAdmin();
+  const retry = document.getElementById('hubRefreshBtn');
+  if(retry) retry.addEventListener('click', () => { hubAdmin.error = ''; hubAdmin.loaded = false; hubLoadAdmin(true); });
+  const root = document.getElementById('hxRoot');
+  if(root) root.addEventListener('click', hubAdminClick);
 }
 
 /* ============================ جهة الطالب ============================ */
@@ -10004,12 +10206,85 @@ function hubErrMsg(e){
   if(/NOT_AUTHENTICATED/.test(m)) return 'سجّل الدخول أولًا للمتابعة.';
   return (typeof isNetworkOrServerError === 'function' && isNetworkOrServerError(e)) ? SERVER_BUSY_MSG : 'حدث خطأ غير متوقع، حاول مرة أخرى.';
 }
+/* ---------- شجرة المجلدات المتداخلة ----------
+   التخزين الفعلي ما تغيّر: كل عنصر بالمجلد ما زال {type,id,lecture} (فلا حاجة لتعديل hub_get).
+   مسار المجلدات الفرعية بينكتب جوا حقل lecture بفاصل HUB_SEP:  "الفصل الأول›الوحدة 2›Lecture 3".
+   آخر جزء = اسم المحاضرة (ممكن يكون فاضي)، وكل اللي قبله = مجلدات متداخلة.
+   المجلدات الفارغة (بدون محتوى) بتنحفظ بعمود اختياري folders (jsonb) في جدول study_hubs. */
+const HUB_SEP = '›';
+function hubCleanName(s, max){ return String(s == null ? '' : s).split(HUB_SEP).join('‹').replace(/\s+/g, ' ').trim().slice(0, max || 80); }
+function hubNode(name){ return { name, children:[], items:[] }; }
+function hubEnsure(root, path){
+  let n = root;
+  path.forEach(seg => {
+    let c = n.children.find(x => x.name === seg);
+    if(!c){ c = hubNode(seg); n.children.push(c); }
+    n = c;
+  });
+  return n;
+}
+function hubBuildTree(items, folders){
+  const root = hubNode('');
+  (folders || []).forEach(f => {
+    const p = String(f).split(HUB_SEP).map(s => s.trim()).filter(Boolean);
+    if(p.length) hubEnsure(root, p);
+  });
+  (items || []).forEach(it => {
+    const parts = String(it.lecture || '').split(HUB_SEP);
+    const label = (parts.pop() || '').trim();
+    const path = parts.map(s => s.trim()).filter(Boolean);
+    hubEnsure(root, path).items.push(Object.assign({}, it, { lecture: label }));
+  });
+  return root;
+}
+function hubSerialize(root){
+  const items = [], folders = [];
+  const walk = (n, path) => {
+    n.items.forEach(it => {
+      const lec = path.length ? path.concat([it.lecture || '']).join(HUB_SEP) : (it.lecture || '');
+      items.push({ type: it.type, id: it.id, lecture: lec });
+    });
+    n.children.forEach(c => { const p = path.concat([c.name]); folders.push(p.join(HUB_SEP)); walk(c, p); });
+  };
+  walk(root, []);
+  return { items, folders };
+}
+function hubNodeAt(root, path){
+  let n = root;
+  for(const seg of (path || [])){ n = n.children.find(x => x.name === seg); if(!n) return null; }
+  return n;
+}
+function hubResolvePath(root, path){
+  const out = []; let n = root;
+  for(const seg of (path || [])){ const c = n.children.find(x => x.name === seg); if(!c) break; out.push(seg); n = c; }
+  return out;
+}
+function hubDeep(n){
+  const c = { folders:0, hy:0, exam:0 };
+  n.items.forEach(i => { if(i.type === 'hy') c.hy++; else if(i.type === 'exam') c.exam++; });
+  n.children.forEach(ch => { c.folders++; const d = hubDeep(ch); c.folders += d.folders; c.hy += d.hy; c.exam += d.exam; });
+  return c;
+}
+function hubUniqueName(parent, name, except){
+  let out = name, k = 2;
+  while(parent.children.some(c => c !== except && c.name === out)) out = name + ' (' + (k++) + ')';
+  return out;
+}
+function hubFindParent(root, node){
+  if(root.children.includes(node)) return root;
+  for(const c of root.children){ const p = hubFindParent(c, node); if(p) return p; }
+  return null;
+}
+function hubPathUrl(id, path){ return '/folder/' + encodeURIComponent(id) + (path && path.length ? '?p=' + encodeURIComponent(path.join(HUB_SEP)) : ''); }
+function hubFolderLink(id, path){ return location.origin + hubPathUrl(id, path); }
+
 function hubMapRow(r){
   const items = (Array.isArray(r.items) ? r.items : [])
     .filter(i => i && (i.type === 'hy' || i.type === 'exam') && i.id)
     .map(i => ({ type:i.type, id:String(i.id), lecture:String(i.lecture || '') }));
-  return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', items,
-    active:r.active !== false, createdAt:Number(r.created_at) || 0 };
+  const folders = Array.isArray(r.folders) ? r.folders.filter(f => typeof f === 'string') : [];
+  return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', items, folders,
+    tree: hubBuildTree(items, folders), active:r.active !== false, createdAt:Number(r.created_at) || 0 };
 }
 
 function injectHubStyles(){
@@ -10064,6 +10339,72 @@ function injectHubStyles(){
     .hub-sel-row .t{ font-size:13px; font-weight:700; }
     .hub-sel-row input[type=text]{ grid-column:1 / -1; }
     .hub-sel-row .ctl{ grid-column:1 / -1; display:flex; gap:6px; }
+    /* ====== حركة سلسة ====== */
+    @keyframes hubIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+    .hub-body{ animation:hubIn .22s ease; }
+    /* ====== عرض الطالب: مسار + مجلدات ====== */
+    .hub-crumbs{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:0 0 14px; }
+    .hub-crumb{ font-family:inherit; font-size:13px; font-weight:800; background:var(--card); border:1px solid var(--border); color:var(--teal); padding:6px 12px; border-radius:99px; cursor:pointer; transition:.15s; }
+    .hub-crumb:hover{ background:var(--teal-light); }
+    .hub-crumb.cur{ background:var(--teal); color:#fff; border-color:var(--teal); cursor:default; }
+    .hub-crumb-sep{ color:var(--muted); font-weight:800; }
+    .hub-label{ font-weight:800; font-size:13px; color:var(--muted); margin:18px 2px 10px; }
+    .hub-folders{ display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:12px; margin-bottom:6px; }
+    .hub-folder{ display:flex; align-items:center; gap:14px; width:100%; box-sizing:border-box; text-align:start; font-family:inherit; cursor:pointer; padding:16px; border-radius:20px; color:var(--ink); transition:.18s;
+      border:1.5px solid color-mix(in srgb, #7c5cf6 28%, var(--border)); background:linear-gradient(160deg, color-mix(in srgb, #7c5cf6 9%, var(--card)), var(--card)); }
+    .hub-folder:hover{ transform:translateY(-3px); box-shadow:0 12px 28px rgba(124,92,246,.16); border-color:color-mix(in srgb, #7c5cf6 55%, var(--border)); }
+    .hub-folder-ic{ flex:none; width:48px; height:48px; border-radius:15px; display:flex; align-items:center; justify-content:center; font-size:24px; background:color-mix(in srgb, #7c5cf6 18%, var(--card)); }
+    .hub-folder-tx{ flex:1; min-width:0; }
+    .hub-folder-tx strong{ display:block; font-size:15px; font-weight:800; line-height:1.5; }
+    .hub-folder-tx small{ display:block; font-size:12px; color:var(--muted); margin-top:3px; font-weight:600; }
+    .hub-lec-path{ font-size:11.5px; color:var(--muted); font-weight:700; margin:-6px 0 10px; }
+    /* ====== لوحة المشرف: مدير المحتوى ====== */
+    .hx{ max-width:1020px; margin:0 auto; }
+    .hx-hubs{ display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:16px; }
+    .hx-hub{ background:var(--card); border:1px solid var(--border); border-radius:22px; padding:18px; transition:.18s; animation:hubIn .22s ease; }
+    .hx-hub:hover{ box-shadow:0 10px 28px rgba(0,0,0,.08); transform:translateY(-2px); }
+    .hx-hub.off{ opacity:.8; }
+    .hx-hub-top{ display:flex; gap:12px; align-items:center; cursor:pointer; margin-bottom:12px; }
+    .hx-hub-ic{ flex:none; width:50px; height:50px; border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:26px; background:var(--teal-light); }
+    .hx-hub-tx{ flex:1; min-width:0; }
+    .hx-hub-tx h3{ margin:0 0 3px; font-size:16.5px; line-height:1.5; }
+    .hx-meta{ font-size:12.5px; color:var(--muted); font-weight:600; }
+    .hx-chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+    .hx-chip{ font-size:12px; font-weight:800; padding:4px 11px; border-radius:99px; background:var(--bg); border:1px solid var(--border); color:var(--muted); }
+    .hx-actions{ display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+    .hx-head{ position:relative; overflow:hidden; border-radius:24px; padding:22px 24px; margin-bottom:16px; color:#fff; background:linear-gradient(135deg, var(--teal) 0%, #0b4f5e 100%); box-shadow:0 10px 30px rgba(11,79,94,.2); }
+    .hx-head::before{ content:''; position:absolute; width:220px; height:220px; border-radius:50%; background:rgba(255,255,255,.08); top:-80px; inset-inline-end:-50px; }
+    .hx-head > *{ position:relative; z-index:1; }
+    .hx-head h2{ margin:0 0 6px; font-size:22px; color:#fff; line-height:1.5; }
+    .hx-head p{ margin:0 0 12px; font-size:13.5px; opacity:.92; line-height:1.8; white-space:pre-line; }
+    .hx-top{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+    .hx-share{ background:var(--card); border:1px solid var(--border); border-radius:18px; padding:14px 16px; margin-bottom:14px; }
+    .hx-share b{ font-size:13px; display:block; margin-bottom:6px; }
+    .hx-crumbs{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:0 0 12px; }
+    .hx-bar{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:18px; }
+    .hx-label{ font-weight:800; font-size:13px; color:var(--muted); margin:18px 2px 8px; }
+    .hx-list{ display:flex; flex-direction:column; gap:8px; }
+    .hx-row{ display:flex; align-items:center; gap:12px; padding:11px 12px; background:var(--card); border:1px solid var(--border); border-radius:16px; transition:.15s; animation:hubIn .2s ease; }
+    .hx-row:hover{ box-shadow:0 6px 18px rgba(0,0,0,.06); }
+    .hx-row.folder{ cursor:pointer; border-color:color-mix(in srgb, #7c5cf6 30%, var(--border)); background:linear-gradient(90deg, color-mix(in srgb, #7c5cf6 7%, var(--card)), var(--card)); }
+    .hx-row.folder:hover{ border-color:color-mix(in srgb, #7c5cf6 55%, var(--border)); }
+    .hx-ic{ flex:none; width:42px; height:42px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:21px; background:var(--bg); }
+    .hx-row.folder .hx-ic{ background:color-mix(in srgb, #7c5cf6 18%, var(--card)); }
+    .hx-row.hy .hx-ic{ background:color-mix(in srgb, #f59e0b 22%, var(--card)); }
+    .hx-row.exam .hx-ic{ background:color-mix(in srgb, var(--teal) 20%, var(--card)); }
+    .hx-tx{ flex:1; min-width:0; }
+    .hx-tx strong{ display:block; font-size:14.5px; font-weight:800; line-height:1.5; overflow-wrap:anywhere; }
+    .hx-tx small{ display:flex; flex-wrap:wrap; gap:2px 10px; align-items:center; font-size:12px; color:var(--muted); margin-top:2px; font-weight:600; }
+    .hx-ctl{ flex:none; display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; max-width:340px; }
+    .hx-btn{ font-family:inherit; font-size:14px; line-height:1; min-width:34px; height:34px; padding:0 8px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--ink); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; transition:.15s; }
+    .hx-btn svg{ width:16px; height:16px; }
+    .hx-btn:hover:not(:disabled){ background:var(--teal-light); border-color:var(--teal); }
+    .hx-btn:disabled{ opacity:.35; cursor:not-allowed; }
+    .hx-btn.danger:hover:not(:disabled){ background:#fee2e2; border-color:#ef4444; }
+    .hx-empty{ text-align:center; padding:34px 18px; border:2px dashed var(--border); border-radius:20px; color:var(--muted); line-height:1.9; }
+    .hx-note{ padding:10px 14px; border-radius:12px; font-size:13px; line-height:1.8; margin-bottom:12px; background:color-mix(in srgb, #f59e0b 14%, var(--card)); border:1px solid color-mix(in srgb, #f59e0b 40%, var(--border)); }
+    .hx-note code{ direction:ltr; display:block; margin-top:6px; padding:8px 10px; border-radius:8px; background:var(--bg); font-size:12px; overflow:auto; user-select:all; text-align:left; }
+    @media (max-width: 640px){ .hx-row{ flex-wrap:wrap; } .hx-ctl{ max-width:none; width:100%; justify-content:flex-start; } .hx-hubs{ grid-template-columns:1fr; } .hx-head{ padding:18px; } }
     @media (max-width: 640px){ .hub-pick-grid{ grid-template-columns:1fr; } .hub-hero{ padding:22px 18px; } .hub-hero h1{ font-size:21px; } .hub-grid{ grid-template-columns:1fr; } }
   `;
   document.head.appendChild(style);
@@ -10266,7 +10607,7 @@ function bindHubAdminEvents(){
 }
 
 /* ============================ جهة الطالب ============================ */
-function hubNewRun(id){ return { id, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'all', pub:null, pubLoading:false, pubLoaded:false }; }
+function hubNewRun(id){ return { id, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'all', pub:null, pubLoading:false, pubLoaded:false, q:'', tree:null, treeSrc:null }; }
 
 /* اسم ووصف المجلد متاحان حتى قبل تسجيل الدخول (دالة hub_public_info) عشان يظهر اسم المجلد على صفحة الدخول */
 async function hubEnsurePublic(id){
@@ -10314,6 +10655,70 @@ function hubGroupItems(items){
   return groups;
 }
 
+function hubPathFromUrl(){
+  try{ const p = new URLSearchParams(location.search).get('p'); return p ? p.split(HUB_SEP).map(s => s.trim()).filter(Boolean) : []; }
+  catch(e){ return []; }
+}
+function hubGoPath(id, path){
+  if(hubRun) hubRun.q = '';
+  navigate('folder/' + encodeURIComponent(id) + (path.length ? '?p=' + encodeURIComponent(path.join(HUB_SEP)) : ''));
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+/* محتوى الجسم (مجلدات + محاضرات) — يُعاد رسمه لوحده عند البحث بدون ما يضيع التركيز على خانة البحث */
+function hubStudentBodyHtml(r){
+  const root = r.tree, path = hubResolvePath(root, hubPathFromUrl()), node = hubNodeAt(root, path);
+  const f = r.filter || 'all', q = (r.q || '').trim().toLowerCase();
+  const typeOk = i => f === 'all' || i.type === f;
+  const cnt = n => { const d = hubDeep(n); return f === 'hy' ? d.hy : f === 'exam' ? d.exam : d.hy + d.exam; };
+
+  const folderCard = (n, p) => {
+    const d = hubDeep(n);
+    const meta = [d.folders ? d.folders + ' مجلد' : '', (f !== 'exam' && d.hy) ? d.hy + ' ملخص' : '', (f !== 'hy' && d.exam) ? d.exam + ' اختبار' : ''].filter(Boolean).join(' • ');
+    return `<button type="button" class="hub-folder" data-hub-enter="${hubAttr(p.join(HUB_SEP))}">
+      <span class="hub-folder-ic">📂</span>
+      <span class="hub-folder-tx"><strong class="i18n-skip">${escapeHtml(n.name)}</strong>${meta ? `<small>${meta}</small>` : ''}</span>
+      <span class="hub-tile-go">‹</span></button>`;
+  };
+  const tile = (i, multi, fp) => {
+    const isHy = i.type === 'hy';
+    const n = Number(i.count) || 0;
+    const sub = multi ? `<span class="i18n-skip">${escapeHtml(i.title)}</span>` : (n ? (isHy ? n + ' نقطة مهمة' : n + ' سؤال') : '');
+    return `<button type="button" class="hub-tile ${i.type}" data-hub-go="${hubAttr(i.type + ':' + i.id)}" data-hub-fp="${hubAttr(fp.join(HUB_SEP))}">
+      <span class="hub-tile-ic">${isHy ? '📖' : '📝'}</span>
+      <span class="hub-tile-tx"><strong>${isHy ? 'ملخص High Yield' : 'حل الأسئلة'}</strong>${sub ? `<small>${sub}</small>` : ''}</span>
+      <span class="hub-tile-go">‹</span></button>`;
+  };
+  const lecCard = (g, gi, fp, showPath) => {
+    const nh = g.items.filter(i => i.type === 'hy').length, ne = g.items.length - nh;
+    return `<div class="hub-lec">
+      <div class="hub-lec-head"><span class="hub-num">${gi + 1}</span><div class="hub-lec-title i18n-skip">${escapeHtml(g.label)}</div></div>
+      ${showPath && fp.length ? `<div class="hub-lec-path i18n-skip">📂 ${escapeHtml(fp.join(' ‹ '))}</div>` : ''}
+      <div class="hub-tiles">${g.items.map(i => tile(i, (i.type === 'hy' ? nh : ne) > 1, fp)).join('')}</div></div>`;
+  };
+
+  if(q){
+    const folders = [], lecs = [];
+    const walk = (n, p) => {
+      n.children.forEach(c => { const cp = p.concat([c.name]); if(cnt(c) > 0 && c.name.toLowerCase().includes(q)) folders.push([c, cp]); walk(c, cp); });
+      hubGroupItems(n.items.filter(typeOk)).forEach(g => {
+        if(g.label.toLowerCase().includes(q) || g.items.some(i => String(i.title || '').toLowerCase().includes(q))) lecs.push([g, p]);
+      });
+    };
+    walk(root, []);
+    if(!folders.length && !lecs.length) return `<div class="empty-state"><p>لا توجد نتائج مطابقة لـ «${escapeHtml(r.q.trim())}».</p></div>`;
+    return `${folders.length ? `<div class="hub-label">📂 مجلدات</div><div class="hub-folders">${folders.map(x => folderCard(x[0], x[1])).join('')}</div>` : ''}
+      ${lecs.length ? `<div class="hub-label">📚 محاضرات</div><div class="hub-grid">${lecs.map((x, k) => lecCard(x[0], k, x[1], true)).join('')}</div>` : ''}`;
+  }
+
+  const folders = node.children.filter(c => cnt(c) > 0);
+  const groups = hubGroupItems(node.items.filter(typeOk));
+  if(!folders.length && !groups.length) return `<div class="empty-state"><p>لا يوجد محتوى هنا حاليًا.</p></div>`;
+  const labels = folders.length && groups.length;
+  return `${folders.length ? `${labels ? `<div class="hub-label">📂 المجلدات</div>` : ''}<div class="hub-folders">${folders.map(c => folderCard(c, path.concat([c.name]))).join('')}</div>` : ''}
+    ${groups.length ? `${labels ? `<div class="hub-label">📚 المحاضرات</div>` : ''}<div class="hub-grid">${groups.map((g, k) => lecCard(g, k, path, false)).join('')}</div>` : ''}`;
+}
+
 function pageHub(id){
   const wrap = inner => `<section class="section"><div class="hub-wrap">${inner}</div></section>`;
   if(!supabaseClient) return wrap(`<div class="empty-state"><h3>إعدادات الاتصال غير مكتملة</h3></div>`);
@@ -10333,58 +10738,60 @@ function pageHub(id){
   if(!r.data) return wrap(`<div class="empty-state"><h3>المجلد غير متاح</h3><p>${escapeHtml(r.error || 'تأكد من صحة الرابط أو تواصل مع المشرف.')}</p></div>`);
 
   const all = Array.isArray(r.data.items) ? r.data.items : [];
-  const nHy = all.filter(i => i.type === 'hy').length, nEx = all.filter(i => i.type === 'exam').length;
-  if(nHy === 0 || nEx === 0) r.filter = 'all';
-  const shown = all.filter(i => r.filter === 'all' || i.type === r.filter);
-  const groups = hubGroupItems(shown);
-  const nLec = hubGroupItems(all).length;
+  if(!r.tree || r.treeSrc !== r.data){ r.tree = hubBuildTree(all, []); r.treeSrc = r.data; }
+  const root = r.tree;
+  const path = hubResolvePath(root, hubPathFromUrl());
+  const node = hubNodeAt(root, path);
+  const d = hubDeep(node), dRoot = hubDeep(root);
+  if(d.hy === 0 || d.exam === 0) r.filter = 'all';
 
-  const stats = `${nHy ? `<span class="hub-stat">📖 ${nHy} ملخص</span>` : ''}${nEx ? `<span class="hub-stat">📝 ${nEx} اختبار</span>` : ''}`;
+  const stats = `${d.folders ? `<span class="hub-stat">📂 ${d.folders} مجلد</span>` : ''}${d.hy ? `<span class="hub-stat">📖 ${d.hy} ملخص</span>` : ''}${d.exam ? `<span class="hub-stat">📝 ${d.exam} اختبار</span>` : ''}`;
+  const hero = path.length ? hubHeroHtml(path[path.length - 1], '', stats) : hubHeroHtml(r.data.title, r.data.description, stats);
+
+  const crumbs = path.length ? `<div class="hub-crumbs">
+      <button type="button" class="hub-crumb" data-hub-nav="${hubAttr(path.slice(0, -1).join(HUB_SEP))}">→ رجوع</button>
+      <button type="button" class="hub-crumb" data-hub-nav="">🏠 <span class="i18n-skip">${escapeHtml(r.data.title)}</span></button>
+      ${path.map((seg, k) => `<span class="hub-crumb-sep">‹</span>` + (k === path.length - 1
+        ? `<span class="hub-crumb cur i18n-skip">${escapeHtml(seg)}</span>`
+        : `<button type="button" class="hub-crumb i18n-skip" data-hub-nav="${hubAttr(path.slice(0, k + 1).join(HUB_SEP))}">${escapeHtml(seg)}</button>`)).join('')}
+    </div>` : '';
+
   const choice = (v, label, n) => `<button type="button" class="hub-choice ${r.filter === v ? 'on' : ''}" data-hub-filter="${v}">${label}<b>${n}</b></button>`;
-  const chooser = (nHy && nEx) ? `
+  const chooser = (d.hy && d.exam) ? `
     <p class="hub-ask">شو بدك تعمل اليوم؟ 👇</p>
-    <div class="hub-choose">${choice('all', '📚 الكل', all.length)}${choice('hy', '📖 ملخصات', nHy)}${choice('exam', '📝 أسئلة', nEx)}</div>` : '';
-  const search = nLec > 5 ? `<input type="search" class="hub-search" id="hubSearchInput" placeholder="🔎 ابحث عن محاضرة...">` : '';
+    <div class="hub-choose">${choice('all', '📚 الكل', d.hy + d.exam)}${choice('hy', '📖 ملخصات', d.hy)}${choice('exam', '📝 أسئلة', d.exam)}</div>` : '';
+  const search = (dRoot.folders > 0 || dRoot.hy + dRoot.exam > 5)
+    ? `<input type="search" class="hub-search" id="hubSearchInput" value="${hubAttr(r.q || '')}" placeholder="🔎 ابحث عن مجلد أو محاضرة...">` : '';
 
-  const tile = (i, multi) => {
-    const isHy = i.type === 'hy';
-    const n = Number(i.count) || 0;
-    const sub = multi ? `<span class="i18n-skip">${escapeHtml(i.title)}</span>` : (n ? (isHy ? n + ' نقطة مهمة' : n + ' سؤال') : '');
-    return `<button type="button" class="hub-tile ${i.type}" data-hub-go="${hubAttr(i.type + ':' + i.id)}">
-      <span class="hub-tile-ic">${isHy ? '📖' : '📝'}</span>
-      <span class="hub-tile-tx"><strong>${isHy ? 'ملخص High Yield' : 'حل الأسئلة'}</strong>${sub ? `<small>${sub}</small>` : ''}</span>
-      <span class="hub-tile-go">‹</span></button>`;
-  };
-  const cards = groups.map((g, gi) => {
-    const nh = g.items.filter(i => i.type === 'hy').length, ne = g.items.length - nh;
-    return `<div class="hub-lec" data-hub-name="${hubAttr(g.label.toLowerCase())}">
-      <div class="hub-lec-head"><span class="hub-num">${gi + 1}</span><div class="hub-lec-title i18n-skip">${escapeHtml(g.label)}</div></div>
-      <div class="hub-tiles">${g.items.map(i => tile(i, (i.type === 'hy' ? nh : ne) > 1)).join('')}</div></div>`;
-  }).join('');
-
-  return wrap(`
-    ${hubHeroHtml(r.data.title, r.data.description, stats)}
-    ${chooser}${search}
-    ${cards ? `<div class="hub-grid" id="hubGrid">${cards}</div>` : `<div class="empty-state"><p>لا يوجد محتوى في هذا المجلد حاليًا.</p></div>`}`);
+  return wrap(`${hero}${crumbs}${chooser}${search}<div class="hub-body" id="hubBody">${hubStudentBodyHtml(r)}</div>`);
 }
 
 function bindHubEvents(id){
   hubEnsurePublic(id);
-  if(!state.session){ setAfterLoginRoute('folder/' + id); return; }
+  if(!state.session){ setAfterLoginRoute('folder/' + id + location.search); return; }
   hubEnsureLoaded(id);
-  const si = document.getElementById('hubSearchInput');
-  if(si) si.addEventListener('input', () => {
-    const q = si.value.trim().toLowerCase();
-    document.querySelectorAll('#hubGrid .hub-lec').forEach(c => { c.style.display = (!q || c.dataset.hubName.includes(q)) ? '' : 'none'; });
+  const w = document.querySelector('.hub-wrap'); if(!w) return;
+  w.addEventListener('input', (e) => {
+    if(e.target.id !== 'hubSearchInput' || !hubRun || !hubRun.tree) return;
+    hubRun.q = e.target.value;
+    const body = document.getElementById('hubBody');
+    if(body) body.innerHTML = hubStudentBodyHtml(hubRun);
   });
-  document.querySelectorAll('[data-hub-filter]').forEach(b => b.addEventListener('click', () => {
-    if(hubRun){ hubRun.filter = b.dataset.hubFilter; render(); }
-  }));
-  document.querySelectorAll('[data-hub-go]').forEach(b => b.addEventListener('click', () => {
-    const [type, ...rest] = b.dataset.hubGo.split(':'), tid = rest.join(':');
-    try{ sessionStorage.setItem(HUB_BACK_KEY, id); }catch(e){}
-    navigate((type === 'hy' ? 'hy/' : 'exam/') + tid);
-  }));
+  w.addEventListener('click', (e) => {
+    const r = hubRun; if(!r) return;
+    const nav = e.target.closest('[data-hub-nav]');
+    if(nav){ hubGoPath(id, nav.dataset.hubNav ? nav.dataset.hubNav.split(HUB_SEP) : []); return; }
+    const ent = e.target.closest('[data-hub-enter]');
+    if(ent){ hubGoPath(id, ent.dataset.hubEnter.split(HUB_SEP)); return; }
+    const fl = e.target.closest('[data-hub-filter]');
+    if(fl){ r.filter = fl.dataset.hubFilter; render(); return; }
+    const go = e.target.closest('[data-hub-go]');
+    if(go){
+      const [type, ...rest] = go.dataset.hubGo.split(':'), tid = rest.join(':');
+      try{ sessionStorage.setItem(HUB_BACK_KEY, id); sessionStorage.setItem(HUB_BACK_KEY + '_p', go.dataset.hubFp || ''); }catch(err){}
+      navigate((type === 'hy' ? 'hy/' : 'exam/') + tid);
+    }
+  });
 }
 
 function bindPageEvents(route){
@@ -10397,13 +10804,13 @@ function bindPageEvents(route){
   if(hubRun && !route.startsWith('folder/')) hubRun = null;
   /* زر الرجوع للمجلد: يظهر فوق صفحة الملخص/الاختبار إذا الطالب وصلها من مجلد */
   if(route.startsWith('hy/') || route.startsWith('exam/')){
-    let back = null; try{ back = sessionStorage.getItem(HUB_BACK_KEY); }catch(e){}
+    let back = null, backP = ''; try{ back = sessionStorage.getItem(HUB_BACK_KEY); backP = sessionStorage.getItem(HUB_BACK_KEY + '_p') || ''; }catch(e){}
     const app = document.getElementById('app');
     if(back && app && !app.querySelector('.hub-back')){
-      const a = document.createElement('a'); a.className = 'hub-back'; a.href = '/folder/' + encodeURIComponent(back);
+      const a = document.createElement('a'); a.className = 'hub-back'; a.href = '/folder/' + encodeURIComponent(back) + (backP ? '?p=' + encodeURIComponent(backP) : '');
       a.textContent = '→ رجوع إلى المجلد'; app.insertBefore(a, app.firstChild);
     }
-  } else if(!route.startsWith('folder/')){ try{ sessionStorage.removeItem(HUB_BACK_KEY); }catch(e){} }
+  } else if(!route.startsWith('folder/')){ try{ sessionStorage.removeItem(HUB_BACK_KEY); sessionStorage.removeItem(HUB_BACK_KEY + '_p'); }catch(e){} }
   if(route !== 'login' && !route.startsWith('exam/') && !route.startsWith('hy/') && !route.startsWith('folder/')){ try{ sessionStorage.removeItem(EXAM_RETURN_KEY); }catch(e){} }
   if(route.startsWith('hy/')) bindHyEvents(hyIdFromRoute(route));
   if(route === 'admin-highyield') bindHyAdminEvents();
