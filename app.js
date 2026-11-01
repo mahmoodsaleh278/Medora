@@ -9995,6 +9995,11 @@ const HUB_BACK_KEY = 'medora_hub_back';
 let hubAdmin = { loaded:false, loading:false, error:'', items:[], hys:[], exams:[] };
 let hubRun = null;
 
+/* أنواع المجلدات الخاصة (واجهة مكثفات + اختيار الدفعة). 'standard' = المجلد العادي القديم */
+const HUB_THEMES = {
+  nursing:   { label:'🩺 التمريض',     badge:'جديد · لطلاب التمريض',     cls:'hx-nursing' },
+  dentistry: { label:'🦷 طب الأسنان', badge:'جديد · لطلاب طب الأسنان', cls:'hx-dentistry' },
+};
 function hubLink(id){ return location.origin + '/folder/' + id; }
 function hubIdFromRoute(route){ return route && route.startsWith('folder/') ? decodeURIComponent(route.slice(7).split('/')[0]) : null; }
 function hubAttr(s){ return escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
@@ -10008,8 +10013,14 @@ function hubMapRow(r){
   const items = (Array.isArray(r.items) ? r.items : [])
     .filter(i => i && (i.type === 'hy' || i.type === 'exam') && i.id)
     .map(i => ({ type:i.type, id:String(i.id), lecture:String(i.lecture || '') }));
+  const cfg = (r.config && typeof r.config === 'object') ? r.config : {};
+  const kind = HUB_THEMES[r.kind] ? r.kind : 'standard';
+  const batches = (Array.isArray(cfg.batches) ? cfg.batches : []).filter(b => b && b.id && b.name).map(b => ({ id:String(b.id), name:String(b.name) }));
+  const tags = (Array.isArray(cfg.tags) ? cfg.tags : []).map(t => String(t).trim()).filter(Boolean);
+  const rawItems = Array.isArray(r.items) ? r.items : [];
+  items.forEach(it => { const src = rawItems.find(x => x && x.type === it.type && String(x.id) === it.id); it.batch = src && src.batch ? String(src.batch) : ''; });
   return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', items,
-    active:r.active !== false, createdAt:Number(r.created_at) || 0 };
+    kind, batches, tags, active:r.active !== false, createdAt:Number(r.created_at) || 0 };
 }
 
 function injectHubStyles(){
@@ -10064,7 +10075,42 @@ function injectHubStyles(){
     .hub-sel-row .t{ font-size:13px; font-weight:700; }
     .hub-sel-row input[type=text]{ grid-column:1 / -1; }
     .hub-sel-row .ctl{ grid-column:1 / -1; display:flex; gap:6px; }
-    @media (max-width: 640px){ .hub-pick-grid{ grid-template-columns:1fr; } .hub-hero{ padding:22px 18px; } .hub-hero h1{ font-size:21px; } .hub-grid{ grid-template-columns:1fr; } }
+    /* ===== واجهة مجلدات التمريض / طب الأسنان ===== */
+    .hx{ --hx-bg:#eaf5f8; --hx-ink:#0f4c5c; --hx-ac:#1f7a8c; --hx-card:#fff; --hx-line:#d3e6eb; --hx-soft:#e6f3f7; --hx-txt:#17394a;
+      background:var(--hx-bg); border-radius:28px; padding:26px 22px 28px; color:var(--hx-txt); font-family:'Alexandria','Readex Pro',inherit,sans-serif; }
+    .hx-dentistry{ --hx-bg:#eaf0fb; --hx-ink:#17306b; --hx-ac:#2f5fc4; --hx-line:#d2dcf2; --hx-soft:#e4ecfb; --hx-txt:#1b2a4e; }
+    body.dark .hx{ --hx-bg:#0f1f26; --hx-ink:#d9f1f6; --hx-ac:#35a9c0; --hx-card:#15262e; --hx-line:#24414c; --hx-soft:#183039; --hx-txt:#d5e6ec; }
+    body.dark .hx-dentistry{ --hx-bg:#10172b; --hx-ink:#dbe5ff; --hx-ac:#6f98f0; --hx-card:#161f38; --hx-line:#27345c; --hx-soft:#1a2542; --hx-txt:#d3dcf5; }
+    .hx-head{ display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:22px; }
+    .hx-badge{ background:var(--hx-ac); color:#fff; font-weight:700; font-size:13px; padding:9px 18px; border-radius:99px; }
+    .hx-logo{ font-family:Georgia,'Times New Roman',serif; font-weight:800; letter-spacing:.3em; color:var(--hx-ink); font-size:15px; direction:ltr; }
+    .hx-title{ margin:0; font-size:clamp(34px,8vw,58px); line-height:1.12; font-weight:800; color:var(--hx-ink); }
+    .hx-title span{ display:block; }
+    .hx-title em{ display:block; font-style:normal; color:var(--hx-ac); font-size:.74em; }
+    .hx-sub{ margin:14px 0 0; font-size:clamp(16px,3.6vw,22px); font-weight:300; }
+    .hx-desc{ margin:8px 0 0; font-size:13.5px; line-height:1.9; opacity:.85; white-space:pre-line; }
+    .hx-card{ background:var(--hx-card); border:1.5px solid var(--hx-line); border-radius:28px; padding:20px; margin-top:24px; }
+    .hx-q{ margin:2px 0 4px; font-size:20px; font-weight:800; color:var(--hx-ink); }
+    .hx-hint{ margin:0 0 16px; font-size:13px; opacity:.75; }
+    .hx-batches{ display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; }
+    .hx-batch{ font-family:inherit; cursor:pointer; text-align:start; display:flex; align-items:center; gap:12px; padding:14px; border-radius:20px; border:1.5px solid var(--hx-line); background:var(--hx-soft); color:var(--hx-txt); transition:.15s; }
+    .hx-batch:hover{ border-color:var(--hx-ac); transform:translateY(-2px); box-shadow:0 8px 22px rgba(0,0,0,.08); }
+    .hx-batch-n{ flex:none; width:40px; height:40px; border-radius:14px; background:var(--hx-ac); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; }
+    .hx-batch b{ display:block; font-size:15px; font-weight:800; color:var(--hx-ink); }
+    .hx-batch small{ display:block; font-size:12px; opacity:.7; margin-top:2px; }
+    .hx-bar{ display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+    .hx-tabs{ display:flex; gap:8px; flex-wrap:wrap; }
+    .hx-tab{ font-family:inherit; font-weight:700; font-size:14px; padding:10px 18px; border-radius:16px; border:1.5px solid var(--hx-line); background:var(--hx-card); color:var(--hx-ink); cursor:pointer; }
+    .hx-tab.on{ background:var(--hx-ac); border-color:var(--hx-ac); color:#fff; }
+    .hx-tab i{ font-style:normal; opacity:.7; margin-inline-start:6px; font-size:12px; }
+    .hx-pill{ font-family:inherit; font-weight:700; font-size:13.5px; padding:10px 16px; border-radius:99px; border:0; background:var(--hx-soft); color:var(--hx-ink); cursor:pointer; }
+    .hx-pill small{ opacity:.65; margin-inline-start:6px; }
+    .hx-chips{ display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; }
+    .hx-chip{ background:var(--hx-ac); color:#fff; font-weight:700; font-size:15px; padding:12px 22px; border-radius:99px; }
+    .hx .hub-search{ margin-bottom:14px; }
+    .hx .hub-lec{ border-color:var(--hx-line); }
+    .hx .hub-num{ background:var(--hx-soft); color:var(--hx-ac); }
+    @media (max-width: 640px){ .hx{ padding:20px 14px 22px; border-radius:22px; } .hx-card{ padding:14px; } .hub-pick-grid{ grid-template-columns:1fr; } .hub-hero{ padding:22px 18px; } .hub-hero h1{ font-size:21px; } .hub-grid{ grid-template-columns:1fr; } }
   `;
   document.head.appendChild(style);
 }
@@ -10097,8 +10143,8 @@ function hubAdminCardHtml(h){
   <div class="card-panel" style="margin-bottom:16px; padding:20px 22px;">
     <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:flex-start;">
       <div>
-        <h3 style="margin:0 0 6px; font-size:18px;" class="i18n-skip">📁 ${escapeHtml(h.title)}</h3>
-        <div style="font-size:13px; color:var(--muted);" class="i18n-skip">${course ? escapeHtml(course.title) + ' • ' : ''}${nHy} ملخص • ${nEx} اختبار • ${examFmtDate(h.createdAt)}</div>
+        <h3 style="margin:0 0 6px; font-size:18px;" class="i18n-skip">📁 ${escapeHtml(h.title)}${h.kind !== 'standard' ? ` <span class="lecture-tier-tag">${HUB_THEMES[h.kind].label}</span>` : ''}</h3>
+        <div style="font-size:13px; color:var(--muted);" class="i18n-skip">${course ? escapeHtml(course.title) + ' • ' : ''}${nHy} ملخص • ${nEx} اختبار${h.batches.length ? ' • ' + h.batches.length + ' دفعة' : ''} • ${examFmtDate(h.createdAt)}</div>
       </div>
       <span class="lecture-tier-tag ${h.active ? '' : 'locked'}">${h.active ? '🟢 منشور' : '🔴 متوقف'}</span>
     </div>
@@ -10134,7 +10180,10 @@ function pageAdminHubs(){
 }
 
 function hubModal(d){
-  const sel = (d.items || []).map(x => ({ type:x.type, id:x.id, lecture:x.lecture || '' }));
+  const sel = (d.items || []).map(x => ({ type:x.type, id:x.id, lecture:x.lecture || '', batch:x.batch || '' }));
+  const batches = (d.batches || []).map(b => ({ id:b.id, name:b.name }));
+  let defaultBatch = '';
+  const newBatchId = () => 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const titleOf = (type, id) => {
     const x = (type === 'hy' ? hubAdmin.hys : hubAdmin.exams).find(y => y.id === id);
     return x ? x.title : null;
@@ -10145,6 +10194,21 @@ function hubModal(d){
       <div class="field"><label>اسم المجلد</label><input type="text" name="title" required maxlength="120" value="${hubAttr(d.title)}" placeholder="مثال: Medical Surgical Nursing — الميد"></div>
       <div class="field"><label>وصف / تعليمات للطلاب (اختياري)</label><textarea name="description" rows="2" maxlength="400">${escapeHtml(d.description || '')}</textarea></div>
       <div class="field"><label>المادة</label><select name="course" class="bank-select">${hyCourseOptions(d.courseId)}</select></div>
+      <div class="field"><label>نوع المجلد</label>
+        <select name="kind" class="bank-select">
+          <option value="standard" ${d.kind === 'standard' || !d.kind ? 'selected' : ''}>📁 مجلد عادي (مادة واحدة)</option>
+          <option value="nursing" ${d.kind === 'nursing' ? 'selected' : ''}>🩺 مجلد التمريض — واجهة مكثفات + اختيار الدفعة</option>
+          <option value="dentistry" ${d.kind === 'dentistry' ? 'selected' : ''}>🦷 مجلد طب الأسنان — واجهة مكثفات + اختيار الدفعة</option>
+        </select>
+      </div>
+      <div id="hubBatchBox" style="display:none; border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:14px;">
+        <b>🎓 الدفعات / السنوات</b>
+        <div class="hint" style="margin:4px 0 8px;">الطالب يختار دفعته أول ما يفتح المجلد، وبعدها يشوف بس المحتوى المربوط بدفعته (والعناصر المحددة «للجميع»).</div>
+        <div id="hubBatchList"></div>
+        <button type="button" class="btn small" id="hubBatchAdd">${ICONS.plus} إضافة دفعة</button>
+        <div class="field" style="margin-top:12px;"><label>وسوم تظهر أسفل الصفحة (اختياري، افصل بينها بفاصلة)</label>
+          <input type="text" name="tags" maxlength="300" value="${hubAttr((d.tags || []).join('، '))}" placeholder="أدلت، فارما، باثوفسيو، تشريح"></div>
+      </div>
       <div class="field"><label>اختر المحتوى</label>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
           <input type="text" id="hubSearch" placeholder="ابحث بالعنوان..." style="flex:1; min-width:160px;">
@@ -10155,6 +10219,7 @@ function hubModal(d){
         <div><b>🔥 ملخصات High Yield</b><div class="hub-pick" id="hubPickHy"></div></div>
         <div><b>📝 اختبارات</b><div class="hub-pick" id="hubPickEx"></div></div>
       </div>
+      <div class="field" id="hubDefaultBatchField" style="display:none;"><label>أي عنصر أختاره الآن يُضاف إلى الدفعة:</label><select id="hubDefaultBatch" class="bank-select"></select></div>
       <div class="field"><label>المحتوى داخل المجلد — رتّبه وسمِّ المحاضرة</label>
         <div id="hubSelList"></div>
         <datalist id="hubLecList"></datalist>
@@ -10166,6 +10231,18 @@ function hubModal(d){
     </form>`, true);
 
   const form = document.getElementById('hubForm');
+  const isThemed = () => form.elements['kind'].value !== 'standard';
+  const renderBatches = () => {
+    document.getElementById('hubBatchBox').style.display = isThemed() ? '' : 'none';
+    document.getElementById('hubBatchList').innerHTML = batches.length ? batches.map((b, i) => `
+      <div style="display:flex; gap:6px; margin-bottom:6px;">
+        <input type="text" data-hub-bname="${i}" maxlength="60" value="${hubAttr(b.name)}" placeholder="مثال: دفعة 2023 / السنة الثانية" style="flex:1;">
+        <button type="button" class="btn small danger" data-hub-brm="${i}">✕</button>
+      </div>`).join('') : `<div class="hint">لا توجد دفعات بعد — أضف دفعة واحدة على الأقل.</div>`;
+    const dd = document.getElementById('hubDefaultBatch');
+    dd.innerHTML = `<option value="">🌐 للجميع</option>` + batches.map(b => `<option value="${hubAttr(b.id)}" ${defaultBatch === b.id ? 'selected' : ''}>🎓 ${hubAttr(b.name || 'دفعة بدون اسم')}</option>`).join('');
+    document.getElementById('hubDefaultBatchField').style.display = (isThemed() && batches.length) ? '' : 'none';
+  };
   const renderPick = () => {
     const qv = (document.getElementById('hubSearch').value || '').trim().toLowerCase();
     const course = form.elements['course'].value;
@@ -10185,6 +10262,7 @@ function hubModal(d){
       return `<div class="hub-sel-row">
         <span>${s.type === 'hy' ? '🔥' : '📝'}</span><span class="t i18n-skip">${t == null ? '(محذوف)' : escapeHtml(t)}</span>
         <input type="text" data-hub-lec="${i}" list="hubLecList" maxlength="120" value="${hubAttr(s.lecture)}" placeholder="اسم المحاضرة (مثال: Lecture 3 — Cardiovascular)">
+        ${isThemed() && batches.length ? `<select data-hub-batch="${i}" class="bank-select" style="grid-column:1 / -1;"><option value="">🌐 للجميع (كل الدفعات)</option>${batches.map(b => `<option value="${hubAttr(b.id)}" ${s.batch === b.id ? 'selected' : ''}>🎓 ${hubAttr(b.name || 'دفعة بدون اسم')}</option>`).join('')}</select>` : ''}
         <div class="ctl">
           <button type="button" class="btn small" data-hub-up="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
           <button type="button" class="btn small" data-hub-down="${i}" ${i === sel.length - 1 ? 'disabled' : ''}>↓</button>
@@ -10194,7 +10272,28 @@ function hubModal(d){
     const names = [...new Set(sel.map(s => s.lecture.trim()).filter(Boolean))];
     document.getElementById('hubLecList').innerHTML = names.map(n => `<option value="${hubAttr(n)}"></option>`).join('');
   };
-  renderPick(); renderSel();
+  renderBatches(); renderPick(); renderSel();
+  form.elements['kind'].addEventListener('change', () => {
+    if(isThemed() && !batches.length) batches.push({ id:newBatchId(), name:'' });
+    renderBatches(); renderSel();
+  });
+  document.getElementById('hubBatchAdd').addEventListener('click', () => { batches.push({ id:newBatchId(), name:'' }); renderBatches(); renderSel(); });
+  document.getElementById('hubDefaultBatch').addEventListener('change', (e) => { defaultBatch = e.target.value; });
+  form.addEventListener('input', (e) => {
+    const n = e.target.closest('[data-hub-bname]'); if(!n) return;
+    batches[Number(n.dataset.hubBname)].name = n.value;
+  });
+  form.addEventListener('change', (e) => {
+    if(e.target.closest('[data-hub-bname]')){ renderBatches(); renderSel(); return; }
+    const sb = e.target.closest('[data-hub-batch]'); if(sb) sel[Number(sb.dataset.hubBatch)].batch = sb.value;
+  });
+  form.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-hub-brm]'); if(!b) return;
+    const gone = batches.splice(Number(b.dataset.hubBrm), 1)[0];
+    if(gone) sel.forEach(s => { if(s.batch === gone.id) s.batch = ''; });
+    if(defaultBatch === (gone && gone.id)) defaultBatch = '';
+    renderBatches(); renderSel();
+  });
 
   document.getElementById('hubSearch').addEventListener('input', renderPick);
   document.getElementById('hubAllCourses').addEventListener('change', renderPick);
@@ -10203,7 +10302,7 @@ function hubModal(d){
     const p = e.target.closest('[data-hub-pick]'); if(!p) return;
     const [type, ...rest] = p.dataset.hubPick.split(':'), id = rest.join(':');
     const at = sel.findIndex(s => s.type === type && s.id === id);
-    if(p.checked && at < 0) sel.push({ type, id, lecture:'' });
+    if(p.checked && at < 0) sel.push({ type, id, lecture:'', batch: isThemed() ? defaultBatch : '' });
     if(!p.checked && at >= 0) sel.splice(at, 1);
     renderSel();
   });
@@ -10226,8 +10325,18 @@ function hubModal(d){
     if(!title){ msg.innerHTML = `<div class="form-msg error">اكتب اسمًا للمجلد.</div>`; return; }
     if(!sel.length){ msg.innerHTML = `<div class="form-msg error">اختر ملخصًا أو اختبارًا واحدًا على الأقل.</div>`; return; }
     const btn = document.getElementById('hubSaveBtn'); btn.disabled = true;
+    const kind = fd.get('kind') || 'standard';
+    const cleanBatches = kind === 'standard' ? [] : batches.map(b => ({ id:b.id, name:(b.name || '').trim() })).filter(b => b.name);
+    if(kind !== 'standard' && !cleanBatches.length){ msg.innerHTML = `<div class="form-msg error">أضف دفعة واحدة على الأقل (واكتب اسمها).</div>`; return; }
+    const okIds = new Set(cleanBatches.map(b => b.id));
     const row = { id: d.id || hyNewId(), title, description:(fd.get('description') || '').trim(), course_id: fd.get('course') || null,
-      items: sel.map(s => ({ type:s.type, id:s.id, lecture:s.lecture.trim() })), active: !!fd.get('active'), created_at: d.createdAt || Date.now() };
+      items: sel.map(s => { const o = { type:s.type, id:s.id, lecture:s.lecture.trim() }; if(kind !== 'standard' && s.batch && okIds.has(s.batch)) o.batch = s.batch; return o; }),
+      active: !!fd.get('active'), created_at: d.createdAt || Date.now() };
+    /* الأعمدة الجديدة ما نرسلها للمجلد العادي (عشان يشتغل حتى قبل تشغيل ملف SQL الجديد) */
+    if(kind !== 'standard' || (d.kind && d.kind !== 'standard')){
+      row.kind = kind;
+      row.config = { batches: cleanBatches, tags: String(fd.get('tags') || '').split(/[,،]/).map(t => t.trim()).filter(Boolean) };
+    }
     const { error } = await supabaseClient.from('study_hubs').upsert(row);
     if(error){ console.error('hub save failed', error); btn.disabled = false; msg.innerHTML = `<div class="form-msg error">${escapeHtml(hubErrMsg(error))}</div>`; return; }
     closeModal(); await hubLoadAdmin(true);
@@ -10237,7 +10346,7 @@ function hubModal(d){
 function bindHubAdminEvents(){
   hubLoadAdmin();
   const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
-  on('hubCreateBtn', () => hubModal({ id:null, title:'', description:'', courseId:'', active:true, items:[] }));
+  on('hubCreateBtn', () => hubModal({ id:null, title:'', description:'', courseId:'', active:true, items:[], kind:'standard', batches:[], tags:[] }));
   on('hubRefreshBtn', () => { hubAdmin.error = ''; hubAdmin.loaded = false; hubLoadAdmin(true); });
   const find = id => hubAdmin.items.find(x => x.id === id);
   document.querySelectorAll('[data-hub-copy]').forEach(b => b.addEventListener('click', () => {
@@ -10266,15 +10375,16 @@ function bindHubAdminEvents(){
 }
 
 /* ============================ جهة الطالب ============================ */
-function hubNewRun(id){ return { id, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'all', pub:null, pubLoading:false, pubLoaded:false }; }
+function hubNewRun(id){ return { id, batch:undefined, loading:false, loaded:false, userKey:null, data:null, error:'', filter:'all', pub:null, pubLoading:false, pubLoaded:false }; }
 
 /* اسم ووصف المجلد متاحان حتى قبل تسجيل الدخول (دالة hub_public_info) عشان يظهر اسم المجلد على صفحة الدخول */
 async function hubEnsurePublic(id){
   const r = hubRun; if(!r || r.pubLoading || r.pubLoaded) return;
   r.pubLoading = true;
   try{
-    const { data, error } = await supabaseClient.rpc('hub_public_info', { p_id: id });
-    if(!error && data) r.pub = data;
+    let res = await supabaseClient.rpc('hub_public_info2', { p_id: id });
+    if(res.error) res = await supabaseClient.rpc('hub_public_info', { p_id: id });   /* احتياط: قبل تشغيل ملف SQL الجديد */
+    if(!res.error && res.data) r.pub = res.data;
   }catch(e){ console.warn('hub public info failed', e); }
   r.pubLoading = false; r.pubLoaded = true;
   if(hubRun === r && hubIdFromRoute(currentRoute()) === id) render();
@@ -10286,7 +10396,9 @@ async function hubEnsureLoaded(id){
   if(r.loading || (r.loaded && r.userKey === key)) return;
   r.loading = true; r.userKey = key;
   try{
-    const { data, error } = await supabaseClient.rpc('hub_get', { p_id: id });
+    let res = await supabaseClient.rpc('hub_get2', { p_id: id });
+    if(res.error && ['PGRST202','42883','PGRST205'].includes(res.error.code)) res = await supabaseClient.rpc('hub_get', { p_id: id });   /* احتياط: قبل تشغيل ملف SQL الجديد */
+    const { data, error } = res;
     if(error) throw error;
     if(data){ r.data = data; r.error = ''; }
     else { r.data = null; r.error = 'هذا المجلد غير موجود أو غير متاح حاليًا.'; }
@@ -10303,6 +10415,14 @@ function hubHeroHtml(title, desc, stats){
     ${stats ? `<div class="hub-stats">${stats}</div>` : ''}
   </div>`;
 }
+function hubThemedHero(kind, title, desc){
+  const t = HUB_THEMES[kind];
+  return `<div class="hx-head"><span class="hx-badge">${t.badge}</span><span class="hx-logo">MEDORA</span></div>
+    <h1 class="hx-title"><span class="i18n-skip">${escapeHtml(title || '')}</span><em>التفاعلية</em></h1>
+    <p class="hx-sub">اضغط · احفظ · اختبر نفسك</p>
+    ${desc ? `<p class="hx-desc i18n-skip">${escapeHtml(desc)}</p>` : ''}`;
+}
+function hubBatchKey(id){ return 'medora_hub_batch:' + id; }
 function hubGroupItems(items){
   const groups = [], byKey = {};
   items.forEach(i => {
@@ -10322,6 +10442,9 @@ function pageHub(id){
   if(!state.session){
     const p = r.pub;
     if(!p && !r.pubLoaded) return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
+    if(p && HUB_THEMES[p.kind]) return wrap(`<div class="hx ${HUB_THEMES[p.kind].cls}">${hubThemedHero(p.kind, p.title, p.description)}
+      <div class="hx-card" style="text-align:center;"><p class="hx-hint">محتوى هذا المجلد متاح للطلاب المسجّلين فقط. سجّل الدخول بحسابك على المنصة للمتابعة.</p>
+      <a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div></div>`);
     return wrap(`${hubHeroHtml(p ? p.title : 'مجلد المادة', p ? p.description : '', '')}
       <div class="wizard-card" style="text-align:center;">
         <p class="hint" style="margin-top:0;">محتوى هذا المجلد متاح للطلاب المسجّلين فقط. سجّل الدخول بحسابك على المنصة للمتابعة.</p>
@@ -10332,7 +10455,25 @@ function pageHub(id){
   }
   if(!r.data) return wrap(`<div class="empty-state"><h3>المجلد غير متاح</h3><p>${escapeHtml(r.error || 'تأكد من صحة الرابط أو تواصل مع المشرف.')}</p></div>`);
 
-  const all = Array.isArray(r.data.items) ? r.data.items : [];
+  let all = Array.isArray(r.data.items) ? r.data.items : [];
+  const kind = HUB_THEMES[r.data.kind] ? r.data.kind : 'standard';
+  const themed = kind !== 'standard';
+  const batches = Array.isArray(r.data.batches) ? r.data.batches : [];
+  const tags = (Array.isArray(r.data.tags) ? r.data.tags : (r.data.config && r.data.config.tags) || []);
+  if(themed){
+    if(r.batch === undefined){ let b = null; try{ b = localStorage.getItem(hubBatchKey(r.id)); }catch(e){} r.batch = batches.some(x => x.id === b) ? b : null; }
+    const chips = tags.length ? `<div class="hx-chips">${tags.map(t => `<span class="hx-chip i18n-skip">${escapeHtml(t)}</span>`).join('')}</div>` : '';
+    if(!r.batch){
+      const picks = batches.map((b, i) => {
+        const n = all.filter(x => x.batch === b.id).length;
+        return `<button type="button" class="hx-batch" data-hub-batch-pick="${hubAttr(b.id)}"><span class="hx-batch-n">${i + 1}</span><span><b class="i18n-skip">${escapeHtml(b.name)}</b><small>${n ? n + ' عنصر' : 'قريبًا'}</small></span></button>`;
+      }).join('');
+      return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description)}
+        <div class="hx-card"><p class="hx-q">🎓 اختر دفعتك</p><p class="hx-hint">رح تظهرلك الملخصات والأسئلة الخاصة بدفعتك بس.</p>
+        ${picks ? `<div class="hx-batches">${picks}</div>` : `<div class="empty-state"><p>لا توجد دفعات في هذا المجلد حاليًا.</p></div>`}</div>${chips}</div>`);
+    }
+    all = all.filter(i => !i.batch || i.batch === r.batch);
+  }
   const nHy = all.filter(i => i.type === 'hy').length, nEx = all.filter(i => i.type === 'exam').length;
   if(nHy === 0 || nEx === 0) r.filter = 'all';
   const shown = all.filter(i => r.filter === 'all' || i.type === r.filter);
@@ -10362,6 +10503,18 @@ function pageHub(id){
       <div class="hub-tiles">${g.items.map(i => tile(i, (i.type === 'hy' ? nh : ne) > 1)).join('')}</div></div>`;
   }).join('');
 
+  if(themed){
+    const bObj = batches.find(x => x.id === r.batch);
+    const tab = (v, label, n) => `<button type="button" class="hx-tab ${r.filter === v ? 'on' : ''}" data-hub-filter="${v}">${label}<i>${n}</i></button>`;
+    const tabs = (nHy && nEx) ? `<div class="hx-tabs">${tab('all', 'الكل', all.length)}${tab('hy', 'ملخصات', nHy)}${tab('exam', 'أسئلة', nEx)}</div>` : '<span></span>';
+    const chips = tags.length ? `<div class="hx-chips">${tags.map(t => `<span class="hx-chip i18n-skip">${escapeHtml(t)}</span>`).join('')}</div>` : '';
+    return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description)}
+      <div class="hx-card">
+        <div class="hx-bar">${tabs}<button type="button" class="hx-pill" data-hub-batch-change>🎓 <span class="i18n-skip">${escapeHtml(bObj ? bObj.name : '')}</span><small>تغيير</small></button></div>
+        ${search}
+        ${cards ? `<div class="hub-grid" id="hubGrid">${cards}</div>` : `<div class="empty-state"><p>لا يوجد محتوى لدفعتك حاليًا، ترقّب التحديثات قريبًا.</p></div>`}
+      </div>${chips}</div>`);
+  }
   return wrap(`
     ${hubHeroHtml(r.data.title, r.data.description, stats)}
     ${chooser}${search}
@@ -10377,6 +10530,18 @@ function bindHubEvents(id){
     const q = si.value.trim().toLowerCase();
     document.querySelectorAll('#hubGrid .hub-lec').forEach(c => { c.style.display = (!q || c.dataset.hubName.includes(q)) ? '' : 'none'; });
   });
+  document.querySelectorAll('[data-hub-batch-pick]').forEach(b => b.addEventListener('click', () => {
+    if(!hubRun) return;
+    hubRun.batch = b.dataset.hubBatchPick; hubRun.filter = 'all';
+    try{ localStorage.setItem(hubBatchKey(id), hubRun.batch); }catch(e){}
+    render(); window.scrollTo({ top:0, behavior:'smooth' });
+  }));
+  document.querySelectorAll('[data-hub-batch-change]').forEach(b => b.addEventListener('click', () => {
+    if(!hubRun) return;
+    hubRun.batch = null; hubRun.filter = 'all';
+    try{ localStorage.removeItem(hubBatchKey(id)); }catch(e){}
+    render(); window.scrollTo({ top:0, behavior:'smooth' });
+  }));
   document.querySelectorAll('[data-hub-filter]').forEach(b => b.addEventListener('click', () => {
     if(hubRun){ hubRun.filter = b.dataset.hubFilter; render(); }
   }));
