@@ -10000,6 +10000,17 @@ const HUB_THEMES = {
   nursing:   { label:'🩺 التمريض',     badge:'جديد · لطلاب التمريض',     cls:'hx-nursing' },
   dentistry: { label:'🦷 طب الأسنان', badge:'جديد · لطلاب طب الأسنان', cls:'hx-dentistry' },
 };
+/* يقبل t.me/xxx أو @xxx أو رابط كامل من تيليجرام فقط، وغير هيك بيرجّع فاضي */
+/* شعار تيليجرام الرسمي (SVG) بدل الإيموجي */
+function hubTgIcon(size, color){
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="${color}" aria-hidden="true" style="flex:none;vertical-align:middle;"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>`;
+}
+function hubTgUrl(v){
+  v = String(v || '').trim(); if(!v) return '';
+  if(/^@?[A-Za-z0-9_]{4,}$/.test(v)) return 'https://t.me/' + v.replace(/^@/, '');
+  if(/^(t\.me|telegram\.me|telegram\.dog)\//i.test(v)) v = 'https://' + v;
+  return /^https:\/\/(t\.me|telegram\.me|telegram\.dog)\/[^\s]+$/i.test(v) ? v : '';
+}
 function hubLink(id){ return location.origin + '/folder/' + id; }
 function hubIdFromRoute(route){ return route && route.startsWith('folder/') ? decodeURIComponent(route.slice(7).split('/')[0]) : null; }
 function hubAttr(s){ return escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
@@ -10015,12 +10026,12 @@ function hubMapRow(r){
     .map(i => ({ type:i.type, id:String(i.id), lecture:String(i.lecture || '') }));
   const cfg = (r.config && typeof r.config === 'object') ? r.config : {};
   const kind = HUB_THEMES[r.kind] ? r.kind : 'standard';
-  const batches = (Array.isArray(cfg.batches) ? cfg.batches : []).filter(b => b && b.id && b.name).map(b => ({ id:String(b.id), name:String(b.name) }));
+  const batches = (Array.isArray(cfg.batches) ? cfg.batches : []).filter(b => b && b.id && b.name).map(b => ({ id:String(b.id), name:String(b.name), telegram:hubTgUrl(b.telegram) }));
   const tags = (Array.isArray(cfg.tags) ? cfg.tags : []).map(t => String(t).trim()).filter(Boolean);
   const rawItems = Array.isArray(r.items) ? r.items : [];
   items.forEach(it => { const src = rawItems.find(x => x && x.type === it.type && String(x.id) === it.id); it.batch = src && src.batch ? String(src.batch) : ''; });
   return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', items,
-    kind, batches, tags, active:r.active !== false, createdAt:Number(r.created_at) || 0 };
+    kind, batches, tags, telegram:hubTgUrl(cfg.telegram), active:r.active !== false, createdAt:Number(r.created_at) || 0 };
 }
 
 function injectHubStyles(){
@@ -10107,6 +10118,8 @@ function injectHubStyles(){
     .hx-pill small{ opacity:.65; margin-inline-start:6px; }
     .hx-chips{ display:flex; flex-wrap:wrap; gap:10px; margin-top:22px; }
     .hx-chip{ background:var(--hx-ac); color:#fff; font-weight:700; font-size:15px; padding:12px 22px; border-radius:99px; }
+    .hx-tg{ display:inline-flex; align-items:center; gap:8px; margin-top:16px; padding:11px 20px; border-radius:99px; background:#229ed9; color:#fff !important; font-weight:700; font-size:14px; text-decoration:none; }
+    .hx-tg:hover{ filter:brightness(1.07); }
     .hx .hub-search{ margin-bottom:14px; }
     .hx .hub-lec{ border-color:var(--hx-line); }
     .hx .hub-num{ background:var(--hx-soft); color:var(--hx-ac); }
@@ -10181,7 +10194,7 @@ function pageAdminHubs(){
 
 function hubModal(d){
   const sel = (d.items || []).map(x => ({ type:x.type, id:x.id, lecture:x.lecture || '', batch:x.batch || '' }));
-  const batches = (d.batches || []).map(b => ({ id:b.id, name:b.name }));
+  const batches = (d.batches || []).map(b => ({ id:b.id, name:b.name, telegram:b.telegram || '' }));
   let defaultBatch = '';
   const newBatchId = () => 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const titleOf = (type, id) => {
@@ -10206,6 +10219,9 @@ function hubModal(d){
         <div class="hint" style="margin:4px 0 8px;">الطالب يختار دفعته أول ما يفتح المجلد، وبعدها يشوف بس المحتوى المربوط بدفعته (والعناصر المحددة «للجميع»).</div>
         <div id="hubBatchList"></div>
         <button type="button" class="btn small" id="hubBatchAdd">${ICONS.plus} إضافة دفعة</button>
+        <div class="field" style="margin-top:12px;"><label>${hubTgIcon(16, '#229ed9')} رابط تيليجرام للمجلد (اختياري)</label>
+          <input type="text" name="telegram" maxlength="200" dir="ltr" value="${hubAttr(d.telegram || '')}" placeholder="https://t.me/your_group">
+          <div class="hint">بيظهر للطالب كزر «انضم لقروب التيليجرام». ممكن تحدد رابط مختلف لكل دفعة من الحقل الثاني جنب اسم الدفعة، وإذا تركته فاضي بينعرض رابط المجلد.</div></div>
         <div class="field" style="margin-top:12px;"><label>وسوم تظهر أسفل الصفحة (اختياري، افصل بينها بفاصلة)</label>
           <input type="text" name="tags" maxlength="300" value="${hubAttr((d.tags || []).join('، '))}" placeholder="أدلت، فارما، باثوفسيو، تشريح"></div>
       </div>
@@ -10237,6 +10253,7 @@ function hubModal(d){
     document.getElementById('hubBatchList').innerHTML = batches.length ? batches.map((b, i) => `
       <div style="display:flex; gap:6px; margin-bottom:6px;">
         <input type="text" data-hub-bname="${i}" maxlength="60" value="${hubAttr(b.name)}" placeholder="مثال: دفعة 2023 / السنة الثانية" style="flex:1;">
+        <input type="text" data-hub-btg="${i}" maxlength="200" dir="ltr" value="${hubAttr(b.telegram || '')}" placeholder="رابط تيليجرام للدفعة (اختياري)" style="flex:1;">
         <button type="button" class="btn small danger" data-hub-brm="${i}">✕</button>
       </div>`).join('') : `<div class="hint">لا توجد دفعات بعد — أضف دفعة واحدة على الأقل.</div>`;
     const dd = document.getElementById('hubDefaultBatch');
@@ -10280,6 +10297,7 @@ function hubModal(d){
   document.getElementById('hubBatchAdd').addEventListener('click', () => { batches.push({ id:newBatchId(), name:'' }); renderBatches(); renderSel(); });
   document.getElementById('hubDefaultBatch').addEventListener('change', (e) => { defaultBatch = e.target.value; });
   form.addEventListener('input', (e) => {
+    const g = e.target.closest('[data-hub-btg]'); if(g){ batches[Number(g.dataset.hubBtg)].telegram = g.value; return; }
     const n = e.target.closest('[data-hub-bname]'); if(!n) return;
     batches[Number(n.dataset.hubBname)].name = n.value;
   });
@@ -10326,7 +10344,12 @@ function hubModal(d){
     if(!sel.length){ msg.innerHTML = `<div class="form-msg error">اختر ملخصًا أو اختبارًا واحدًا على الأقل.</div>`; return; }
     const btn = document.getElementById('hubSaveBtn'); btn.disabled = true;
     const kind = fd.get('kind') || 'standard';
-    const cleanBatches = kind === 'standard' ? [] : batches.map(b => ({ id:b.id, name:(b.name || '').trim() })).filter(b => b.name);
+    const tgRaw = String(fd.get('telegram') || '').trim();
+    const tgMain = hubTgUrl(tgRaw);
+    if(kind !== 'standard' && tgRaw && !tgMain){ msg.innerHTML = `<div class="form-msg error">رابط تيليجرام غير صحيح — لازم يكون مثل https://t.me/اسم_القروب</div>`; return; }
+    const badTg = kind !== 'standard' && batches.some(b => (b.telegram || '').trim() && !hubTgUrl(b.telegram));
+    if(badTg){ msg.innerHTML = `<div class="form-msg error">أحد روابط تيليجرام الخاصة بالدفعات غير صحيح.</div>`; return; }
+    const cleanBatches = kind === 'standard' ? [] : batches.map(b => ({ id:b.id, name:(b.name || '').trim(), telegram:hubTgUrl(b.telegram) })).filter(b => b.name);
     if(kind !== 'standard' && !cleanBatches.length){ msg.innerHTML = `<div class="form-msg error">أضف دفعة واحدة على الأقل (واكتب اسمها).</div>`; return; }
     const okIds = new Set(cleanBatches.map(b => b.id));
     const row = { id: d.id || hyNewId(), title, description:(fd.get('description') || '').trim(), course_id: fd.get('course') || null,
@@ -10335,7 +10358,7 @@ function hubModal(d){
     /* الأعمدة الجديدة ما نرسلها للمجلد العادي (عشان يشتغل حتى قبل تشغيل ملف SQL الجديد) */
     if(kind !== 'standard' || (d.kind && d.kind !== 'standard')){
       row.kind = kind;
-      row.config = { batches: cleanBatches, tags: String(fd.get('tags') || '').split(/[,،]/).map(t => t.trim()).filter(Boolean) };
+      row.config = { telegram: kind === 'standard' ? '' : tgMain, batches: cleanBatches, tags: String(fd.get('tags') || '').split(/[,،]/).map(t => t.trim()).filter(Boolean) };
     }
     const { error } = await supabaseClient.from('study_hubs').upsert(row);
     if(error){ console.error('hub save failed', error); btn.disabled = false; msg.innerHTML = `<div class="form-msg error">${escapeHtml(hubErrMsg(error))}</div>`; return; }
@@ -10459,6 +10482,8 @@ function pageHub(id){
   const kind = HUB_THEMES[r.data.kind] ? r.data.kind : 'standard';
   const themed = kind !== 'standard';
   const batches = Array.isArray(r.data.batches) ? r.data.batches : [];
+  const tgBtn = u => u ? `<a class="hx-tg" href="${hubAttr(u)}" target="_blank" rel="noopener noreferrer">${hubTgIcon(22, '#fff')} انضم لقروب التيليجرام</a>` : '';
+  const folderTg = hubTgUrl(r.data.telegram || (r.data.config && r.data.config.telegram));
   const tags = (Array.isArray(r.data.tags) ? r.data.tags : (r.data.config && r.data.config.tags) || []);
   if(themed){
     if(r.batch === undefined){ let b = null; try{ b = localStorage.getItem(hubBatchKey(r.id)); }catch(e){} r.batch = batches.some(x => x.id === b) ? b : null; }
@@ -10470,7 +10495,7 @@ function pageHub(id){
       }).join('');
       return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description)}
         <div class="hx-card"><p class="hx-q">🎓 اختر دفعتك</p><p class="hx-hint">رح تظهرلك الملخصات والأسئلة الخاصة بدفعتك بس.</p>
-        ${picks ? `<div class="hx-batches">${picks}</div>` : `<div class="empty-state"><p>لا توجد دفعات في هذا المجلد حاليًا.</p></div>`}</div>${chips}</div>`);
+        ${picks ? `<div class="hx-batches">${picks}</div>` : `<div class="empty-state"><p>لا توجد دفعات في هذا المجلد حاليًا.</p></div>`}${tgBtn(folderTg)}</div>${chips}</div>`);
     }
     all = all.filter(i => !i.batch || i.batch === r.batch);
   }
@@ -10513,6 +10538,7 @@ function pageHub(id){
         <div class="hx-bar">${tabs}<button type="button" class="hx-pill" data-hub-batch-change>🎓 <span class="i18n-skip">${escapeHtml(bObj ? bObj.name : '')}</span><small>تغيير</small></button></div>
         ${search}
         ${cards ? `<div class="hub-grid" id="hubGrid">${cards}</div>` : `<div class="empty-state"><p>لا يوجد محتوى لدفعتك حاليًا، ترقّب التحديثات قريبًا.</p></div>`}
+        ${tgBtn((bObj && bObj.telegram) || folderTg)}
       </div>${chips}</div>`);
   }
   return wrap(`
