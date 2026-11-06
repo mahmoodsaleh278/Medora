@@ -10036,7 +10036,7 @@ function hubMapRow(r){
   const rawItems = Array.isArray(r.items) ? r.items : [];
   items.forEach(it => { const src = rawItems.find(x => x && x.type === it.type && String(x.id) === it.id); it.batch = src && src.batch ? String(src.batch) : ''; it.folder = src && src.folder ? String(src.folder) : ''; });
   return { id:r.id, title:r.title, description:r.description || '', courseId:r.course_id || '', items,
-    kind, batches, tags, telegram:hubTgUrl(cfg.telegram), active:r.active !== false, createdAt:Number(r.created_at) || 0 };
+    kind, batches, tags, telegram:hubTgUrl(cfg.telegram), brand:String(cfg.brand || '').trim().slice(0, 30), word:String(cfg.word || '').trim().slice(0, 30), active:r.active !== false, createdAt:Number(r.created_at) || 0 };
 }
 
 function injectHubStyles(){
@@ -10243,6 +10243,11 @@ function hubModal(d){
         <div class="field" style="margin-top:12px;"><label>${hubTgIcon(16, '#229ed9')} رابط تيليجرام للمجلد (اختياري)</label>
           <input type="text" name="telegram" maxlength="200" dir="ltr" value="${hubAttr(d.telegram || '')}" placeholder="https://t.me/your_group">
           <div class="hint">بيظهر للطالب كزر «انضم لقروب التيليجرام». ممكن تحدد رابط مختلف لكل دفعة من الحقل الثاني جنب اسم الدفعة، وإذا تركته فاضي بينعرض رابط المجلد.</div></div>
+        <div class="field" style="margin-top:12px;"><label>النص أعلى الصفحة (يمين/شمال الشعار) — الافتراضي: MEDORA</label>
+          <input type="text" name="brand" maxlength="30" value="${hubAttr(d.brand || '')}" placeholder="MEDORA"></div>
+        <div class="field" style="margin-top:12px;"><label>الكلمة بجانب اسم المجلد — الافتراضي: التفاعلية</label>
+          <input type="text" name="word" maxlength="30" value="${hubAttr(d.word || '')}" placeholder="التفاعلية">
+          <div class="hint">اتركهم فاضيين لإظهار النص الافتراضي.</div></div>
         <div class="field" style="margin-top:12px;"><label>وسوم تظهر أسفل الصفحة (اختياري، افصل بينها بفاصلة)</label>
           <input type="text" name="tags" maxlength="300" value="${hubAttr((d.tags || []).join('، '))}" placeholder="أدلت، فارما، باثوفسيو، تشريح"></div>
       </div>
@@ -10411,7 +10416,8 @@ function hubModal(d){
     /* الأعمدة الجديدة ما نرسلها للمجلد العادي (عشان يشتغل حتى قبل تشغيل ملف SQL الجديد) */
     if(kind !== 'standard' || (d.kind && d.kind !== 'standard')){
       row.kind = kind;
-      row.config = { telegram: kind === 'standard' ? '' : tgMain, batches: cleanBatches, tags: String(fd.get('tags') || '').split(/[,،]/).map(t => t.trim()).filter(Boolean) };
+      row.config = { telegram: kind === 'standard' ? '' : tgMain, batches: cleanBatches, tags: String(fd.get('tags') || '').split(/[,،]/).map(t => t.trim()).filter(Boolean),
+        brand: String(fd.get('brand') || '').trim().slice(0, 30), word: String(fd.get('word') || '').trim().slice(0, 30) };
     }
     const { error } = await supabaseClient.from('study_hubs').upsert(row);
     if(error){ console.error('hub save failed', error); btn.disabled = false; msg.innerHTML = `<div class="form-msg error">${escapeHtml(hubErrMsg(error))}</div>`; return; }
@@ -10422,7 +10428,7 @@ function hubModal(d){
 function bindHubAdminEvents(){
   hubLoadAdmin();
   const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
-  on('hubCreateBtn', () => hubModal({ id:null, title:'', description:'', courseId:'', active:true, items:[], kind:'standard', batches:[], tags:[] }));
+  on('hubCreateBtn', () => hubModal({ id:null, title:'', description:'', courseId:'', active:true, items:[], kind:'standard', batches:[], tags:[], brand:'', word:'' }));
   on('hubRefreshBtn', () => { hubAdmin.error = ''; hubAdmin.loaded = false; hubLoadAdmin(true); });
   const find = id => hubAdmin.items.find(x => x.id === id);
   document.querySelectorAll('[data-hub-copy]').forEach(b => b.addEventListener('click', () => {
@@ -10491,10 +10497,18 @@ function hubHeroHtml(title, desc, stats){
     ${stats ? `<div class="hub-stats">${stats}</div>` : ''}
   </div>`;
 }
-function hubThemedHero(kind, title, desc, extraHtml){
+/* النص المخصّص للشعار والكلمة التفاعلية: يُقرأ من الحقل المباشر أو من config، وبدون قيمة بيرجع للافتراضي */
+function hubBW(src, fallback){
+  const g = (o, k) => o ? String(o[k] || (o.config && o.config[k]) || '').trim() : '';
+  return { brand: g(src, 'brand') || g(fallback, 'brand'), word: g(src, 'word') || g(fallback, 'word') };
+}
+function hubThemedHero(kind, title, desc, extraHtml, bw){
   const t = HUB_THEMES[kind];
-  return `<div class="hx-head"><span class="hx-badge">${t.badge}</span><span class="hx-logo">MEDORA</span></div>
-    <h1 class="hx-title"><span class="i18n-skip">${escapeHtml(title || '')}</span><em>التفاعلية</em></h1>
+  bw = bw || {};
+  const brand = bw.brand || 'MEDORA';
+  const word = bw.word ? `<em class="i18n-skip">${escapeHtml(bw.word)}</em>` : `<em>التفاعلية</em>`;
+  return `<div class="hx-head"><span class="hx-badge">${t.badge}</span><span class="hx-logo i18n-skip">${escapeHtml(brand)}</span></div>
+    <h1 class="hx-title"><span class="i18n-skip">${escapeHtml(title || '')}</span>${word}</h1>
     <p class="hx-sub">اضغط · احفظ · اختبر نفسك</p>
     ${desc ? `<p class="hx-desc i18n-skip">${escapeHtml(desc)}</p>` : ''}${extraHtml || ''}`;
 }
@@ -10519,7 +10533,7 @@ function pageHub(id){
   if(!state.session){
     const p = r.pub;
     if(!p && !r.pubLoaded) return wrap(`<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
-    if(p && HUB_THEMES[p.kind]) return wrap(`<div class="hx ${HUB_THEMES[p.kind].cls}">${hubThemedHero(p.kind, p.title, p.description, hubTgButton(p.telegram))}
+    if(p && HUB_THEMES[p.kind]) return wrap(`<div class="hx ${HUB_THEMES[p.kind].cls}">${hubThemedHero(p.kind, p.title, p.description, hubTgButton(p.telegram), hubBW(p))}
       <div class="hx-card" style="text-align:center;"><p class="hx-hint">محتوى هذا المجلد متاح للطلاب المسجّلين فقط. سجّل الدخول بحسابك على المنصة للمتابعة.</p>
       <a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div></div>`);
     return wrap(`${hubHeroHtml(p ? p.title : 'مجلد المادة', p ? p.description : '', '')}
@@ -10528,7 +10542,7 @@ function pageHub(id){
         <a href="/login" class="btn teal solid">تسجيل الدخول / إنشاء حساب</a></div>`);
   }
   if(!r.loaded || r.userKey !== examUserKey()){
-    return wrap(`${r.pub ? ((HUB_THEMES[r.pub.kind]) ? `<div class="hx ${HUB_THEMES[r.pub.kind].cls}">${hubThemedHero(r.pub.kind, r.pub.title, r.pub.description, hubTgButton(r.pub.telegram))}</div><div style="height:14px"></div>` : hubHeroHtml(r.pub.title, r.pub.description, '')) : ''}<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
+    return wrap(`${r.pub ? ((HUB_THEMES[r.pub.kind]) ? `<div class="hx ${HUB_THEMES[r.pub.kind].cls}">${hubThemedHero(r.pub.kind, r.pub.title, r.pub.description, hubTgButton(r.pub.telegram), hubBW(r.pub))}</div><div style="height:14px"></div>` : hubHeroHtml(r.pub.title, r.pub.description, '')) : ''}<div class="wizard-card" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div>`);
   }
   if(!r.data) return wrap(`<div class="empty-state"><h3>المجلد غير متاح</h3><p>${escapeHtml(r.error || 'تأكد من صحة الرابط أو تواصل مع المشرف.')}</p></div>`);
 
@@ -10547,7 +10561,7 @@ function pageHub(id){
         const n = all.filter(x => x.batch === b.id).length;
         return `<button type="button" class="hx-batch" data-hub-batch-pick="${hubAttr(b.id)}"><span class="hx-batch-n">${i + 1}</span><span><b class="i18n-skip">${escapeHtml(b.name)}</b><small>${n ? n + ' عنصر' : 'قريبًا'}</small></span></button>`;
       }).join('');
-      return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description, tgBtn(folderTg))}
+      return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description, tgBtn(folderTg), hubBW(r.data, r.pub))}
         <div class="hx-card"><p class="hx-q">🎓 اختر دفعتك</p><p class="hx-hint">رح تظهرلك الملخصات والأسئلة الخاصة بدفعتك بس.</p>
         ${picks ? `<div class="hx-batches">${picks}</div>` : `<div class="empty-state"><p>لا توجد دفعات في هذا المجلد حاليًا.</p></div>`}</div>${chips}</div>`);
     }
@@ -10611,7 +10625,7 @@ function pageHub(id){
       const fhead = curF ? `<button type="button" class="hx-back" data-hub-folder-back>→ <span class="i18n-skip">${escapeHtml(bObj.name)}</span></button><div class="hx-fhead"><span class="hx-folder-ic">${escapeHtml(curF.icon || '📁')}</span><h2 class="hx-q i18n-skip">${escapeHtml(curF.name)}</h2></div>` : '';
       body = `${fhead}<div class="hx-bar">${tabs}${pill}</div>${search}${grid || `<div class="empty-state"><p>${curF ? 'لا يوجد محتوى بهذا المجلد حاليًا، ترقّب التحديثات قريبًا.' : 'لا يوجد محتوى لدفعتك حاليًا، ترقّب التحديثات قريبًا.'}</p></div>`}`;
     }
-    return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description, tgBtn((bObj && bObj.telegram) || folderTg))}
+    return wrap(`<div class="hx ${HUB_THEMES[kind].cls}">${hubThemedHero(kind, r.data.title, r.data.description, tgBtn((bObj && bObj.telegram) || folderTg), hubBW(r.data, r.pub))}
       <div class="hx-card">${body}
       </div>${chips}</div>`);
   }
