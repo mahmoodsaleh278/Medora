@@ -6474,13 +6474,23 @@ function modalImportQuestions(){
 }
 
 function renderImportStep1(statusHtml){
-  const courseOptions = state.courses.map(c=>`<option value="${c.id}">${escapeHtml(c.title)}</option>`).join('');
+  /* المدرّس يستورد فقط على كورساته، والكورس الافتراضي = الكورس المفتوح حاليًا في إدارة البنك (مش أول كورس بالقائمة) */
+  const importCourses = isTeacherSession()
+    ? state.courses.filter(c=>courseHasTeacher(c, state.session.teacherId))
+    : state.courses;
+  const defaultCourseId = (importCourses.some(c=>c.id===state.bankManageCourseId) ? state.bankManageCourseId : null)
+    || (importCourses[0] && importCourses[0].id) || null;
+  const defaultLectureId = (state.bankManageCourseId === defaultCourseId
+    && state.bankManageLectureId && state.bankManageLectureId !== '__none__'
+    && state.lectures.some(l=>l.id===state.bankManageLectureId && l.courseId===defaultCourseId))
+    ? state.bankManageLectureId : null;
+  const courseOptions = importCourses.map(c=>`<option value="${c.id}" ${c.id===defaultCourseId?'selected':''}>${escapeHtml(c.title)}</option>`).join('');
   openModal(`
     <h3>📄 استيراد أسئلة من ملف PDF أو Word</h3>
     <p style="color:var(--muted); font-size:13.5px; margin-bottom:16px;">اختر الكورس، ثم ارفع ملف PDF أو Word (.docx) يحتوي على الأسئلة، وسيقوم النظام تلقائيًا بترتيب كل عنصر في مكانه: نص السؤال، الخيارات، الإجابة الصحيحة، والتفسير. تقدر تراجع وتعدّل كل سؤال قبل الحفظ النهائي.</p>
     <form id="importSetupForm">
       <div class="field"><label>الكورس</label><select name="courseId" id="importCourseSelect">${courseOptions}</select></div>
-      <div class="field"><label>المحاضرة (اختياري)</label><select name="lectureId" id="importLectureSelect">${lectureOptionsFor(state.courses[0]?.id, null)}</select></div>
+      <div class="field"><label>المحاضرة (اختياري)</label><select name="lectureId" id="importLectureSelect">${lectureOptionsFor(defaultCourseId, defaultLectureId)}</select></div>
       <div class="field"><label>طبيعة الأسئلة (تُطبّق على كل الأسئلة المستوردة)</label><select name="nature"><option value="past">أسئلة سنوات سابقة</option><option value="ref">أسئلة مراجع</option></select></div>
       <div class="field"><label>ملف الأسئلة (PDF أو Word .docx)</label><input type="file" name="file" id="importFileInput" accept=".pdf,.docx"></div>
       <p style="color:var(--muted); font-size:12.5px; margin:-8px 0 14px;">ملاحظة: يجب أن يكون كل خيار في سطر مستقل (مثال: A) ... أو أ) ...)، والإجابة بصيغة "Answer:" أو "الإجابة:"، والتفسير بصيغة "Explanation:" أو "تفسير:". صيغة .doc القديمة غير مدعومة، فقط .docx.</p>
