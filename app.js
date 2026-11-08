@@ -1674,6 +1674,16 @@ async function logout(){
   navigate('home'); render();
 }
 
+/* توحيد النص العربي للبحث/المقارنة: يشيل التشكيل والتطويل، ويوحّد أ/إ/آ -> ا، ى -> ي، ة -> ه، ؤ -> و، ئ -> ي،
+   ويحوّل الأرقام العربية لإنجليزية، ويشيل "ال" التعريف من بداية كل كلمة. فـ "أولي" = "الأولى" = "اولى". */
+function arNorm(str){
+  return String(str == null ? '' : str).toLowerCase()
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/(^|\s)ال(?=\S{2,})/g, '$1')
+    .replace(/\s+/g, ' ').trim();
+}
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str ?? ''; return d.innerHTML; }
 /* يعرض محتوى نص السؤال/التفسير: إن كان يحوي وسوم HTML فعليًا (من المحرر الغني، ومُطهَّر
    مسبقًا وقت الحفظ عبر sanitizeSummaryHtml) يُعرض كما هو، وإلا (نص قديم من قبل دعم
@@ -2102,8 +2112,8 @@ function pageCourses(){
   let courses = state.courses;
   if(state.courseFilter !== 'الكل') courses = courses.filter(c => c.university === state.courseFilter);
   if(state.majorFilter !== 'الكل') courses = courses.filter(c => (c.major || 'التمريض') === state.majorFilter);
-  const search = (state.courseSearch || '').trim().toLowerCase();
-  if(search) courses = courses.filter(c => (c.title||'').toLowerCase().includes(search) || (c.university||'').toLowerCase().includes(search));
+  const search = arNorm(state.courseSearch);
+  if(search) courses = courses.filter(c => arNorm(c.title).includes(search) || arNorm(c.university).includes(search));
 
   const PAGE_SIZE = 10;
   const totalPages = Math.max(1, Math.ceil(courses.length / PAGE_SIZE));
@@ -4373,13 +4383,13 @@ function pageLibrary(){
       `).join('')}
     </div>`;
 
-  const searchTerm = (state.librarySearch || '').trim().toLowerCase();
+  const searchTerm = arNorm(state.librarySearch);
 
   let folders, files;
   if(!currentId){
     // المستوى الجذري: مواد (مجلدات) فقط، قابلة للفلترة بالبحث
     const allSubjects = libraryChildren(null).filter(n=>n.type==='folder');
-    folders = searchTerm ? allSubjects.filter(s => (s.title||'').toLowerCase().includes(searchTerm)) : allSubjects;
+    folders = searchTerm ? allSubjects.filter(s => arNorm(s.title).includes(searchTerm)) : allSubjects;
     files = [];
   } else {
     const children = libraryChildren(currentId);
