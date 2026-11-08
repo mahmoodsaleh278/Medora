@@ -497,6 +497,7 @@ const I18N_PAIRS = [
   ['توليد الملخص','Generate Summary'], ['اضغط لرفع ملف المحاضرة','Click to upload the lecture file'],
   ['المادة','Subject'], ['المحاضرة (اختياري — اتركها فارغة لملخص عام على مستوى المادة)','Lecture (optional — leave empty for a subject-level summary)'],
   ['حفظ في ملخصاتي','Save to My Summaries'],
+  ['رجوع إلى','Back to'], ['اختر مجلدًا للمتابعة','Choose a folder to continue'], ['اضغط على الملف لفتحه','Tap a file to open it'], ['أنت الآن في','You are in'],
 ];
 const AR2EN_SORTED = I18N_PAIRS.slice().sort((a,b)=>b[0].length-a[0].length);
 /* ملاحظة: ما في ترجمة عكسية (إنجليزي ← عربي) بالقاموس إطلاقًا — كانت تحوّل أي كلمة إنجليزية
@@ -1540,13 +1541,22 @@ document.addEventListener('click', function(e){
   e.preventDefault();
   navigate(url.pathname.replace(/^\/+/, '') + url.search);
 });
-window.addEventListener('popstate', render);
+/* زر الرجوع بالمتصفح/الجوال داخل مكتبة التمريض: يرجّع الطالب مستوى واحد (مجلد) بدل ما يطلّعه من المكتبة كلها */
+function libraryPushHistory(){
+  try{ history.pushState({ libPath: (Array.isArray(state.libraryOpenPath) ? state.libraryOpenPath : []).slice() }, '', location.href); }catch(e){}
+}
+window.addEventListener('popstate', (e)=>{
+  if(currentRoute() === 'library'){
+    state.libraryOpenPath = (e.state && Array.isArray(e.state.libPath)) ? e.state.libPath.slice() : [];
+  }
+  Promise.resolve(render()).then(()=>{ if(currentRoute() === 'library') scrollToLibraryTop(); });
+});
 function scrollToCourseCanvas(){
   const el = document.getElementById('courseCanvas') || document.querySelector('.courses-hero');
   if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
 }
 function scrollToLibraryTop(){
-  const el = document.querySelector('.lib-breadcrumb') || document.querySelector('.courses-hero');
+  const el = document.querySelector('.lib-back-btn') || document.querySelector('.lib-breadcrumb') || document.querySelector('.courses-hero');
   if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
   else window.scrollTo({top:0, behavior:'smooth'});
 }
@@ -4292,6 +4302,21 @@ function libraryEnsureAccordionStyles(){
     .lib-crumb.active{ background:var(--teal,#0f9d8f); border-color:var(--teal,#0f9d8f); color:#fff; cursor:default; }
     .lib-crumb-sep{ color:var(--muted,#7c93a3); opacity:.5; font-size:14px; }
 
+    /* ====== زر الرجوع + عنوان المكان الحالي ====== */
+    .lib-back-btn{ display:inline-flex; align-items:center; gap:10px; padding:11px 20px; border-radius:14px; border:1.5px solid var(--teal,#0f9d8f); background:rgba(20,184,201,.1); color:var(--teal,#0f9d8f); font:inherit; font-weight:800; font-size:15px; cursor:pointer; margin-bottom:14px; max-width:100%; transition:background .15s ease, transform .15s ease; }
+    .lib-back-btn:hover{ background:rgba(20,184,201,.2); transform:translateX(3px); }
+    [dir="ltr"] .lib-back-btn:hover{ transform:translateX(-3px); }
+    .lib-back-btn .lib-back-arrow{ display:inline-block; font-size:18px; line-height:1; }
+    [dir="ltr"] .lib-back-btn .lib-back-arrow{ transform:scaleX(-1); }
+    .lib-back-btn .lib-back-label{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .lib-back-bottom{ margin:6px 0 0; }
+    .lib-current{ display:flex; align-items:center; gap:12px; margin:2px 0 18px; padding:14px 16px; border-radius:16px; background:linear-gradient(160deg, rgba(124,92,246,.1), rgba(124,92,246,.03)); border:1px solid rgba(124,92,246,.2); }
+    .lib-current-ic{ font-size:26px; }
+    .lib-current-title{ font-weight:800; font-size:18px; line-height:1.3; }
+    .lib-current-hint{ font-size:13px; font-weight:700; color:var(--muted,#7c93a3); margin-top:3px; }
+    body.dark .lib-back-btn{ background:rgba(20,184,201,.14); }
+    body.dark .lib-current{ background:rgba(124,92,246,.12); }
+
     /* ====== شبكة المجلدات (بطاقات) ====== */
     .lib-section-label{ font-size:13px; font-weight:800; color:var(--muted,#7c93a3); margin:4px 2px 12px; letter-spacing:.2px; }
     .lib-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(168px, 1fr)); gap:16px; margin-bottom:28px; }
@@ -4383,6 +4408,14 @@ function pageLibrary(){
       `).join('')}
     </div>`;
 
+  /* زر رجوع واضح: يوضّح للطالب وين راح يرجع (المجلد الأب أو الصفحة الرئيسية للمكتبة) */
+  const parentNode = trail.length >= 2 ? trail[trail.length - 2] : null;
+  const backBtnHtml = (extraCls) => `
+    <button type="button" class="lib-back-btn${extraCls ? ' ' + extraCls : ''}" data-lib-back>
+      <span class="lib-back-arrow">→</span>
+      <span class="lib-back-label">رجوع إلى ${parentNode ? `<span class="i18n-skip">${escapeHtml(parentNode.title)}</span>` : 'مكتبة التمريض'}</span>
+    </button>`;
+
   const searchTerm = arNorm(state.librarySearch);
 
   let folders, files;
@@ -4398,6 +4431,15 @@ function pageLibrary(){
   }
 
   const isRoot = !currentId;
+  const currentNode = currentId ? libraryNode(currentId) : null;
+  const currentHeaderHtml = currentNode ? `
+    <div class="lib-current">
+      <span class="lib-current-ic">📂</span>
+      <div>
+        <div class="lib-current-title"><span class="i18n-skip">${escapeHtml(currentNode.title)}</span></div>
+        ${folders.length ? '<div class="lib-current-hint">اختر مجلدًا للمتابعة 👇</div>' : (files.length ? '<div class="lib-current-hint">اضغط على الملف لفتحه</div>' : '')}
+      </div>
+    </div>` : '';
 
   const foldersGridHtml = folders.length ? `
     ${!isRoot ? `<div class="lib-section-label">📁 المجلدات</div>` : ''}
@@ -4457,9 +4499,12 @@ function pageLibrary(){
         </div>
       </div>
       ${addSubjectHtml}
+      ${!isRoot ? backBtnHtml() : ''}
       ${!isRoot ? breadcrumbHtml : ''}
+      ${!isRoot ? currentHeaderHtml : ''}
       ${!isRoot ? addToolbarHtml : ''}
       ${isEmpty ? emptyHtml : (foldersGridHtml + filesListHtml)}
+      ${(!isRoot && (folders.length + files.length) > 8) ? backBtnHtml('lib-back-bottom') : ''}
     </div>
   </section>
   `;
@@ -10950,6 +10995,7 @@ function bindPageEvents(route){
         const depth = parseInt(el.dataset.libCrumbDepth, 10) || 0;
         const path = Array.isArray(state.libraryOpenPath) ? state.libraryOpenPath : [];
         state.libraryOpenPath = path.slice(0, depth);
+        libraryPushHistory();
         render().then(()=> scrollToLibraryTop());
       });
     });
@@ -10965,6 +11011,20 @@ function bindPageEvents(route){
           path[depth] = id; // فتح: نبقي آباءه بالمسار ونقفل أي فرع أعمق كان مفتوحًا
           state.libraryOpenPath = path;
         }
+        libraryPushHistory();
+        render().then(()=> scrollToLibraryTop());
+      });
+    });
+    document.querySelectorAll('[data-lib-back]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const path = Array.isArray(state.libraryOpenPath) ? state.libraryOpenPath : [];
+        /* لو وصلنا للمجلد عبر النقر (فيه سجل تنقّل)، نستخدم history.back ليبقى زر الرجوع بالمتصفح متسقًا */
+        if(history.state && Array.isArray(history.state.libPath) && history.state.libPath.length === path.length && path.length){
+          history.back();
+          return;
+        }
+        state.libraryOpenPath = path.slice(0, -1);
+        try{ history.replaceState({ libPath: state.libraryOpenPath.slice() }, '', location.href); }catch(e){}
         render().then(()=> scrollToLibraryTop());
       });
     });
