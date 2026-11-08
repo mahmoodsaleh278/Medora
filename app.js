@@ -6380,7 +6380,8 @@ function splitInlineOptions(line){
 /* يقسّم نصًا خامًا (مستخرجًا من PDF/Word أو ملصوقًا يدويًا) إلى مصفوفة أسئلة
    منظمة: {question, options[4], correctIndex, correctFound, explanation}.
    هذا استخراج تقريبي "أفضل جهد ممكن" — يُعرض بعده على الأدمن للمراجعة والتعديل. */
-function parseQuestionsFromText(rawText){
+function parseQuestionsFromText(rawText, maxOpts){
+  maxOpts = maxOpts || 4;
   const lines = [];
   let blank = false;
   normalizeImportText(rawText).split('\n').forEach(l=>{
@@ -6452,8 +6453,8 @@ function parseQuestionsFromText(rawText){
     while(options.length < 4) options.push('');
     results.push({
       question: questionText,
-      options: options.slice(0,4),
-      correctIndex: (correctIndex !== null && correctIndex < 4) ? correctIndex : 0,
+      options: options.slice(0, maxOpts),
+      correctIndex: (correctIndex !== null && correctIndex < maxOpts) ? correctIndex : 0,
       correctFound: correctIndex !== null,
       explanation: explanationParts.join(' ').trim(),
     });
@@ -6606,6 +6607,146 @@ async function handleImportSave(){
   if(error){ console.error('bulk import failed', error); { const d = describeDbError(error); alert('تعذّر حفظ الأسئلة المستوردة.' + (d.hint ? '\n' + d.hint : '') + '\n\n' + (d.code ? '['+d.code+'] ' : '') + d.raw); } state.questions = state.questions.filter(x=>!toAdd.includes(x)); return; }
   closeModal();
   render();
+}
+
+/* =========================================================
+   لوحة استيراد أسئلة داخل نافذة "إنشاء اختبار" و"تعديل أسئلة الاختبار"
+   - ملف PDF/Word أو نص ملصوق  ->  parseQuestionsFromText  ->  مراجعة  ->  إضافة للاختبار.
+   - لا تحفظ شيئًا في البنك: الأسئلة تُضاف مباشرة إلى مصفوفة أسئلة الاختبار عبر onAdd(list).
+   - box.dataset.pending === '1' طالما في أسئلة مستخرجة لم تُضف بعد (لمنع حفظ الاختبار بدونها بالغلط).
+   ========================================================= */
+function mountExamImportPanel(box, onAdd){
+  const MAXO = 5;
+  const letter = i => String.fromCharCode(65 + i);
+  let parsed = [];
+  box.dataset.pending = '0';
+  /* Enter داخل حقول اللوحة ما لازم يرسل نموذج الاختبار */
+  box.addEventListener('keydown', ev => { if(ev.key === 'Enter' && ev.target.tagName === 'INPUT') ev.preventDefault(); });
+
+  const renderInput = (statusHtml)=>{
+    parsed = []; box.dataset.pending = '0';
+    box.innerHTML = `
+      <div style="font-weight:700; margin-bottom:10px;">📄 استيراد أسئلة من ملف أو نص</div>
+      <div class="field"><label>ملف الأسئلة (PDF أو Word .docx)</label>
+        <input type="file" id="eimFile" accept=".pdf,.docx"></div>
+      <div class="field"><label>أو الصق مجموعة الأسئلة هنا</label>
+        <textarea id="eimText" rows="8" dir="ltr" style="text-align:left;" placeholder="1) What is the normal adult heart rate?&#10;A) 20-40&#10;B) 60-100&#10;C) 120-160&#10;D) 160-200&#10;Answer: B&#10;Explanation: ..."></textarea></div>
+      <p class="hint" style="margin:-6px 0 12px;">كل خيار بسطر مستقل (A) أو أ) )، والإجابة بصيغة «Answer: B» أو «الإجابة: ب»، والتفسير بصيغة «Explanation:» (اختياري). حتى 5 خيارات للسؤال. إن لم تُذكر الإجابة ستحددها بنفسك بالمراجعة.</p>
+      ${statusHtml || ''}
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="btn teal solid small" id="eimAnalyze">🔍 تحليل وتقسيم الأسئلة</button>
+        <button type="button" class="btn small" id="eimClose">إغلاق</button>
+      </div>`;
+    document.getElementById('eimClose').addEventListener('click', closePanel);
+    document.getElementById('eimAnalyze').addEventListener('click', analyze);
+  };
+
+  const closePanel = ()=>{ box.style.display = 'none'; box.innerHTML = ''; box.dataset.pending = '0'; };
+
+  const analyze = async ()=>{
+    const btn = document.getElementById('eimAnalyze');
+    const pasted = (document.getElementById('eimText').value || '').trim();
+    const file = document.getElementById('eimFile').files[0];
+    if(!pasted && !file){ renderInput(`<div class="form-msg error">ارفع ملفًا أو الصق نص الأسئلة أولًا.</div>`); return; }
+    btn.disabled = true; btn.textContent = 'جاري التحليل...';
+    try{
+      let text = pasted;
+      if(!text && file){
+        const ext = extOf(file.name);
+        const buffer = await file.arrayBuffer();
+        if(ext === 'docx') text = await extractTextFromDocxFile(buffer);
+        else if(ext === 'pdf') text = await extractTextFromPdfFile(buffer);
+        else if(ext === 'doc') throw new Error('صيغة .doc القديمة غير مدعومة، احفظ الملف بصيغة .docx ثم أعد المحاولة.');
+        else throw new Error('صيغة الملف غير مدعومة، ارفع PDF أو Word (.docx).');
+        if(!text.trim()) throw new Error('الملف لا يحتوي نصًا قابلًا للقراءة (ربما PDF ممسوح كصور). انسخ الأسئلة والصقها بالمربع بدل رفع الملف.');
+      }
+      const list = parseQuestionsFromText(text, MAXO);
+      if(!list.length){
+        renderInput(`<div class="form-msg error">ما قدرت ألاقي أسئلة. تأكد أن كل سؤال له خياران على الأقل، كل خيار بسطر مستقل، أو جرّب لصق النص يدويًا.</div>`);
+        return;
+      }
+      parsed = list; renderReview();
+    } catch(err){
+      renderInput(`<div class="form-msg error">${escapeHtml(err.message || 'حدث خطأ أثناء تحليل الملف.')}</div>`);
+    }
+  };
+
+  const renderReview = ()=>{
+    box.dataset.pending = '1';
+    const noAns = parsed.filter(q => !q.correctFound).length;
+    box.innerHTML = `
+      <div style="font-weight:700; margin-bottom:6px;">✅ تم استخراج ${parsed.length} سؤال — راجعها ثم أضفها للاختبار</div>
+      ${noAns ? `<div class="form-msg error" style="margin-bottom:10px;">⚠️ ${noAns} سؤال لم تُستخرج إجابته تلقائيًا (مظللة بالأحمر) — لازم تحدد الإجابة الصحيحة لكل واحد منها قبل الإضافة.</div>` : ''}
+      <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <button type="button" class="btn small" id="eimAll">تحديد الكل</button>
+        <button type="button" class="btn small" id="eimNone">إلغاء التحديد</button>
+      </div>
+      <div id="eimList" style="max-height:55vh; overflow:auto; padding-inline-end:4px;">
+      ${parsed.map((q, i) => `
+        <div class="eim-card" data-ans-ok="${q.correctFound ? '1' : '0'}" style="border:1px solid ${q.correctFound ? 'var(--border, #d9e2ec)' : 'var(--danger, #d64545)'}; border-radius:12px; padding:14px; margin-bottom:12px;">
+          <label style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px; margin-bottom:8px;">
+            <input type="checkbox" class="eim-include" checked> سؤال ${i + 1}
+            <span class="hint" style="margin-inline-start:auto; color:${q.correctFound ? 'var(--good, #1a9b6c)' : 'var(--danger, #d64545)'};">${q.correctFound ? '✓ تم التعرف على الإجابة' : '⚠️ حدد الإجابة'}</span>
+          </label>
+          <div class="field"><label>نص السؤال</label><textarea class="eim-q" rows="2" dir="ltr" style="text-align:left;">${escapeHtml(q.question)}</textarea></div>
+          ${[0,1,2,3,4].map(oi => `<div class="field"><label>الخيار ${letter(oi)}${oi >= 2 ? ' (اختياري)' : ''}</label><input type="text" class="eim-opt" dir="ltr" style="text-align:left;" value="${escapeHtml(q.options[oi] || '')}"></div>`).join('')}
+          <div class="field"><label>الإجابة الصحيحة</label>
+            <select class="eim-correct bank-select">${[0,1,2,3,4].map(oi => `<option value="${oi}" ${q.correctIndex === oi ? 'selected' : ''}>${letter(oi)}</option>`).join('')}</select></div>
+          <div class="field"><label>التفسير (اختياري)</label><textarea class="eim-exp" rows="2" dir="ltr" style="text-align:left;">${escapeHtml(q.explanation || '')}</textarea></div>
+        </div>`).join('')}
+      </div>
+      <div id="eimMsg"></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+        <button type="button" class="btn teal solid small" id="eimAdd">➕ إضافة الأسئلة المحددة للاختبار</button>
+        <button type="button" class="btn small" id="eimBack">⟲ رجوع</button>
+        <button type="button" class="btn small" id="eimCancel">إلغاء</button>
+      </div>`;
+    box.querySelectorAll('.eim-correct').forEach(sel => sel.addEventListener('change', ()=>{
+      const card = sel.closest('.eim-card'); card.dataset.ansOk = '1'; card.style.borderColor = 'var(--border, #d9e2ec)';
+    }));
+    document.getElementById('eimAll').addEventListener('click', ()=> box.querySelectorAll('.eim-include').forEach(c => c.checked = true));
+    document.getElementById('eimNone').addEventListener('click', ()=> box.querySelectorAll('.eim-include').forEach(c => c.checked = false));
+    document.getElementById('eimBack').addEventListener('click', ()=> renderInput());
+    document.getElementById('eimCancel').addEventListener('click', closePanel);
+    document.getElementById('eimAdd').addEventListener('click', addSelected);
+    box.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  };
+
+  const addSelected = ()=>{
+    const msg = document.getElementById('eimMsg');
+    const out = []; let firstBad = null;
+    const stamp = Date.now().toString(36);
+    box.querySelectorAll('.eim-card').forEach((card, i)=>{
+      if(!card.querySelector('.eim-include').checked) return;
+      const q = card.querySelector('.eim-q').value.trim();
+      const raw = Array.from(card.querySelectorAll('.eim-opt')).map(inp => inp.value.trim());
+      const correctRaw = Number(card.querySelector('.eim-correct').value);
+      const bad = (why)=>{ card.style.borderColor = 'var(--danger, #d64545)'; if(!firstBad) firstBad = { card, why }; };
+      if(card.dataset.ansOk !== '1') return bad('حدد الإجابة الصحيحة للأسئلة المظللة بالأحمر.');
+      if(!q) return bad('في سؤال نصه فاضي.');
+      if(raw.filter(Boolean).length < 2) return bad('كل سؤال لازم يكون له خياران على الأقل.');
+      if(!raw[correctRaw]) return bad('الإجابة الصحيحة تشير لخيار فاضي.');
+      const options = raw.filter(Boolean);
+      const correctIndex = raw.slice(0, correctRaw).filter(Boolean).length;
+      out.push({
+        id: 'c' + stamp + Math.random().toString(36).slice(2, 5) + i,
+        type: 'mcq', nature: 'past',
+        question: escapeHtml(q).replace(/\n/g, '<br>'),
+        explanation: escapeHtml(card.querySelector('.eim-exp').value.trim()).replace(/\n/g, '<br>'),
+        options, correctIndex
+      });
+    });
+    if(firstBad){
+      msg.innerHTML = `<div class="form-msg error">${firstBad.why}</div>`;
+      firstBad.card.scrollIntoView({ behavior:'smooth', block:'center' });
+      return;
+    }
+    if(!out.length){ msg.innerHTML = `<div class="form-msg error">ما حددت أي سؤال للإضافة.</div>`; return; }
+    onAdd(out);
+    closePanel();
+  };
+
+  renderInput();
 }
 
 /* =========================================================
@@ -9528,7 +9669,11 @@ function modalCreateExam(){
       <div class="field">
         <label>✍️ أسئلة تكتبها بنفسك لهذا الاختبار <span id="examCustomCount" class="hint"></span></label>
         <div id="examCustomList"></div>
-        <button type="button" class="btn small teal" id="examCustomAddBtn">${ICONS.plus} كتابة سؤال جديد</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn small teal" id="examCustomAddBtn">${ICONS.plus} كتابة سؤال جديد</button>
+          <button type="button" class="btn small" id="examImportBtn">📄 استيراد من ملف / لصق أسئلة</button>
+        </div>
+        <div id="examImportBox" style="display:none; margin-top:12px; padding:14px; border:1px dashed var(--teal); border-radius:12px;"></div>
         <div id="examCustomBuilder" style="display:none; margin-top:12px; padding:14px; border:1px dashed var(--teal); border-radius:12px;"></div>
       </div>
       <h4 style="margin:18px 0 8px;">⚙️ إعدادات الاختبار</h4>
@@ -9610,6 +9755,12 @@ function modalCreateExam(){
     });
   };
   document.getElementById('examCustomAddBtn').addEventListener('click', ()=> openBuilder(-1));
+  document.getElementById('examImportBtn').addEventListener('click', ()=>{
+    const ibox = document.getElementById('examImportBox');
+    if(ibox.style.display !== 'none'){ ibox.style.display = 'none'; ibox.innerHTML = ''; ibox.dataset.pending = '0'; return; }
+    ibox.style.display = 'block';
+    mountExamImportPanel(ibox, list => { customQs.push(...list); renderCustomList(); });
+  });
   renderCustomList();
 
   const renderLectures = ()=>{
@@ -9662,6 +9813,7 @@ function modalCreateExam(){
     if(!title){ msg.innerHTML = `<div class="form-msg error">أدخل عنوان الاختبار.</div>`; return; }
     const chosen = state.questions.filter(q => picker.selected.has(q.id));
     if(builderBox.style.display !== 'none'){ msg.innerHTML = `<div class="form-msg error">عندك سؤال مفتوح للكتابة — اضغط «إضافة السؤال للاختبار» أو «إلغاء» أولًا.</div>`; return; }
+    if(document.getElementById('examImportBox').dataset.pending === '1'){ msg.innerHTML = `<div class="form-msg error">عندك أسئلة مستخرجة من الملف لم تُضف بعد — اضغط «إضافة الأسئلة المحددة للاختبار» أو «إلغاء» أولًا.</div>`; return; }
     if(!chosen.length && !customQs.length){ msg.innerHTML = `<div class="form-msg error">اختر سؤالًا من البنك أو اكتب سؤالًا واحدًا على الأقل.</div>`; return; }
     const questions = shuffleArr([...chosen, ...customQs]).map(q => {
       const o = { id: q.id, type: q.type || 'mcq', question: q.question, nature: q.nature || 'past', explanation: q.explanation || '' };
@@ -9746,7 +9898,11 @@ function modalEditExamQuestions(id){
     ${(st.done || st.inProgress) ? `<div class="form-msg" style="margin-bottom:10px;">⚠️ ${st.done} طالب سلّموا${st.inProgress ? ` و${st.inProgress} يحلّون الآن` : ''}. تعديل الأسئلة يؤثر على النتائج عند إعادة التصحيح، والطلاب الذين يحلّون الآن يحتاجون تحديث الصفحة ليروا التعديلات.</div>` : ''}
     <form id="examQEditForm">
       <div id="eqList"></div>
-      <button type="button" class="btn small teal" id="eqAddBtn">${ICONS.plus} إضافة سؤال جديد</button>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="btn small teal" id="eqAddBtn">${ICONS.plus} إضافة سؤال جديد</button>
+        <button type="button" class="btn small" id="eqImportBtn">📄 استيراد من ملف / لصق أسئلة</button>
+      </div>
+      <div id="eqImportBox" style="display:none; margin-top:12px; padding:14px; border:1px dashed var(--teal); border-radius:12px;"></div>
       <div id="eqBuilder" style="display:none; margin-top:12px; padding:14px; border:1px dashed var(--teal); border-radius:12px;"></div>
       <label class="exam-check" style="margin-top:14px;"><input type="checkbox" id="eqRegrade" checked><span>إعادة تصحيح علامات الطلاب الذين سلّموا حسب الأسئلة والإجابات الجديدة <span class="hint" style="display:block;">أوقفها إذا أردت إبقاء العلامات القديمة كما هي.</span></span></label>
       <div id="eqMsg"></div>
@@ -9839,10 +9995,17 @@ function modalEditExamQuestions(id){
     builderBox.scrollIntoView({ behavior:'smooth', block:'nearest' });
   };
   document.getElementById('eqAddBtn').addEventListener('click', ()=> openBuilder(-1));
+  document.getElementById('eqImportBtn').addEventListener('click', ()=>{
+    const ibox = document.getElementById('eqImportBox');
+    if(ibox.style.display !== 'none'){ ibox.style.display = 'none'; ibox.innerHTML = ''; ibox.dataset.pending = '0'; return; }
+    ibox.style.display = 'block';
+    mountExamImportPanel(ibox, list => { qs.push(...list); renderList(); });
+  });
   renderList();
 
   document.getElementById('eqSaveBtn').addEventListener('click', async ()=>{
     const msg = document.getElementById('eqMsg');
+    if(document.getElementById('eqImportBox').dataset.pending === '1'){ msg.innerHTML = `<div class="form-msg error">عندك أسئلة مستخرجة من الملف لم تُضف بعد — اضغط «إضافة الأسئلة المحددة للاختبار» أو «إلغاء» أولًا.</div>`; return; }
     if(builderOpen()){ msg.innerHTML = `<div class="form-msg error">عندك سؤال مفتوح للتعديل — اضغط «حفظ تعديل السؤال» أو «إلغاء» أولًا.</div>`; return; }
     if(!qs.length){ msg.innerHTML = `<div class="form-msg error">يجب أن يحتوي الاختبار على سؤال واحد على الأقل.</div>`; return; }
     const btn = document.getElementById('eqSaveBtn'); btn.disabled = true;
