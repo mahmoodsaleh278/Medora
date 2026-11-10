@@ -1213,6 +1213,20 @@ async function toggleLectureHidden(lectureId){
   await setData('lectures', state.lectures, true);
   render();
 }
+/* تحريك محاضرة لأعلى (dir=-1) أو لأسفل (dir=1) ضمن نفس الكورس ونفس القسم (فيرست/ميد/فاينال).
+   الترتيب محفوظ بترتيب المصفوفة نفسها، فيطبّق تلقائيًا على الطلاب وبنك الأسئلة. */
+async function moveLecture(lectureId, dir){
+  const lec = state.lectures.find(l=>l.id===lectureId);
+  if(!lec) return;
+  const group = state.lectures.filter(l=>l.courseId===lec.courseId && l.section===lec.section);
+  const gi = group.findIndex(l=>l.id===lectureId);
+  const other = group[gi + dir];
+  if(gi < 0 || !other) return;
+  const a = state.lectures.indexOf(lec), b = state.lectures.indexOf(other);
+  state.lectures[a] = other; state.lectures[b] = lec;
+  await setData('lectures', state.lectures, true);
+  render();
+}
 /* تقدّم الطالب صار بجدول مستقل lecture_progress (صف لكل طالب/محاضرة)، بدل مصفوفة مشتركة
    لكل الطلاب. الـ RLS بترجّع للطالب صفوفه فقط، وكل ضغطة = insert أو delete لصف واحد
    فما في تعارض ولا ضياع بيانات مع تعدّد الطلاب بنفس الوقت. */
@@ -2640,6 +2654,15 @@ function pageCourseDetail(courseId){
           <h4>${escapeHtml(l.title)}</h4>
         </div>
         ${canManageLectures && l.hidden ? `<span class="lecture-tier-tag locked">🙈 مخفية عن الطلاب</span>` : ''}
+        ${canManageLectures ? (()=>{
+          const grp = lectures.filter(x=>x.section===l.section);
+          const gi = grp.findIndex(x=>x.id===l.id);
+          const btnStyle = 'border:1.5px solid var(--border); background:var(--card); color:var(--text); border-radius:8px; width:30px; height:30px; font-size:14px; line-height:1; cursor:pointer; padding:0;';
+          return `<span class="lecture-reorder" style="display:inline-flex; gap:4px; margin-inline-start:8px;">
+            <button type="button" title="تحريك لأعلى" data-move-lecture-up="${l.id}" style="${btnStyle} ${gi<=0?'opacity:.35; cursor:default;':''}" ${gi<=0?'disabled':''}>▲</button>
+            <button type="button" title="تحريك لأسفل" data-move-lecture-down="${l.id}" style="${btnStyle} ${gi>=grp.length-1?'opacity:.35; cursor:default;':''}" ${gi>=grp.length-1?'disabled':''}>▼</button>
+          </span>`;
+        })() : ''}
         <span class="lecture-toggle-icon"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg></span>
       </summary>
       <div class="lecture-row-content">
@@ -11172,6 +11195,13 @@ function bindPageEvents(route){
     });
     document.querySelectorAll('[data-edit-lecture]').forEach(btn=>{
       btn.addEventListener('click', ()=> modalEditLecture(btn.dataset.editLecture));
+    });
+    document.querySelectorAll('[data-move-lecture-up], [data-move-lecture-down]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        e.preventDefault(); e.stopPropagation(); /* منع فتح/إغلاق المحاضرة عند الضغط على السهم */
+        const up = btn.dataset.moveLectureUp;
+        moveLecture(up || btn.dataset.moveLectureDown, up ? -1 : 1);
+      });
     });
     document.querySelectorAll('[data-toggle-lecture-hidden]').forEach(btn=>{
       btn.addEventListener('click', ()=> toggleLectureHidden(btn.dataset.toggleLectureHidden));
