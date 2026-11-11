@@ -695,7 +695,7 @@ async function initData(){
   state.storeSettings = Object.assign({ visible:false }, pick('store_settings') || {});   // MEDIX STORE: مخفي افتراضيًا
   state.content = Object.assign({}, CONTENT_DEFAULTS, pick('content'));
   state.design = Object.assign({}, DESIGN_DEFAULTS, pick('design'));
-  await loadUserData();
+  await Promise.all([ loadUserData(), loadQuestionsTotal() ]);
   state.loaded = true;
 }
 
@@ -1304,6 +1304,27 @@ function dbErrorHtml(title, error){
   return `<div class="form-msg error">${escapeHtml(title)}`
     + (d.hint ? `<br><b>السبب المحتمل:</b> ${escapeHtml(d.hint)}` : '')
     + `<br><small dir="ltr" style="display:block;text-align:left;opacity:.85;word-break:break-word;">${d.code ? '['+escapeHtml(d.code)+'] ' : ''}${escapeHtml(d.raw)}</small></div>`;
+}
+/* العدد الكلي الحقيقي لأسئلة البنك (للعرض بالصفحة الرئيسية لكل الزوار/الطلاب).
+   الطالب بيتحمّل عنده فقط أسئلة كورساته، فما بنعتمد على state.questions.length.
+   بنجرّب دالة السيرفر questions_total() (بتتخطى RLS وبترجّع رقم فقط)، وإذا مش موجودة
+   بنجرّب عدّ مباشر من الجدول (حسب صلاحيات RLS). */
+async function loadQuestionsTotal(){
+  state.questionsTotal = null;
+  if(!supabaseClient) return;
+  try{
+    const { data, error } = await supabaseClient.rpc('questions_total');
+    if(!error && data != null && !isNaN(Number(data))){ state.questionsTotal = Number(data); return; }
+  }catch(_){ /* الدالة غير موجودة بعد، نكمل بالطريقة البديلة */ }
+  try{
+    const { count, error } = await supabaseClient.from('questions').select('id', { count:'exact', head:true });
+    if(!error && typeof count === 'number') state.questionsTotal = count;
+  }catch(e){ console.error('loadQuestionsTotal failed', e); }
+}
+/* العدد التقريبي لأقرب مئة (أدنى حد 500) */
+function approxQuestionsCount(){
+  const n = Math.max(state.questionsTotal || 0, state.questions.length);
+  return Math.max(500, Math.round(n / 100) * 100);
 }
 async function loadQuestions(){
   state.questions = [];
@@ -2047,7 +2068,7 @@ function pageHome(){
   </section>
   <div class="stats-strip">
     <div class="stat"><b>${state.courses.length}+</b><span>كورس متاح</span></div>
-    <div class="stat"><b>${Math.max(500, state.questions.length)}+</b><span>سؤال في البنك</span></div>
+    <div class="stat"><b>${approxQuestionsCount().toLocaleString('en')}+</b><span>سؤال في البنك</span></div>
     <div class="stat"><b>${cval('stat_partners_value')}${editBtn('stat_partners_value')}</b><span>${cval('stat_partners_label')}${editBtn('stat_partners_label')}</span></div>
   </div>
   <section class="section">
