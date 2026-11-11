@@ -2647,7 +2647,7 @@ function pageCourseDetail(courseId){
     const isStudent = state.session && state.session.type === 'student';
     const watched = isStudent && isLectureWatched(l.id);
     return `
-    <details class="lecture-row ${unlocked?'':'locked'} ${watched?'watched':''} ${l.hidden?'lecture-hidden':''}">
+    <details data-keep-open="lec:${l.id}" class="lecture-row ${unlocked?'':'locked'} ${watched?'watched':''} ${l.hidden?'lecture-hidden':''}">
       <summary class="lecture-row-summary">
         <div class="lecture-num">${watched ? '✓' : (i+1)}</div>
         <div class="lecture-row-main">
@@ -2713,7 +2713,7 @@ function pageCourseDetail(courseId){
       : `${!canManageLectures && actionHtml ? actionHtml : ''}<div class="section-group-empty">${canManageLectures ? 'لا توجد محاضرات بهذا القسم بعد.' : 'سيتم إضافة محاضرات هذا القسم قريبًا.'}</div>`;
 
     return `
-    <details class="section-group">
+    <details data-keep-open="sec:${section}" class="section-group">
       <summary class="section-group-summary">
         <div class="section-num-badge">${SECTION_NUM[section]}</div>
         <div class="section-group-title">
@@ -7852,7 +7852,15 @@ async function render(){
   }
   const isNewRoute = (route !== lastRenderedRoute);
   const scrollBefore = window.scrollY;
+  /* نفس الصفحة: نحفظ أي قسم/محاضرة مفتوحة قبل إعادة الرسم لنرجّع فتحها بعدها (ما نطلّع المستخدم منها) */
+  const openKeys = isNewRoute ? [] : Array.from(document.querySelectorAll('#app details[data-keep-open][open]')).map(d=> d.getAttribute('data-keep-open'));
   document.getElementById('app').innerHTML = html;
+  if(openKeys.length){
+    const openSet = new Set(openKeys);
+    document.querySelectorAll('#app details[data-keep-open]').forEach(d=>{
+      if(openSet.has(d.getAttribute('data-keep-open'))) d.setAttribute('open','');
+    });
+  }
   updateSeoMeta(route);
   /* MEDIX STORE: صفحة كاملة بهيدرها الخاص، فنخفي هيدر/فوتر المنصة أثناء وجودها */
   document.body.classList.toggle('mx-full', route === 'store' && !!window.MedixStore && isStoreAllowed());
