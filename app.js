@@ -2819,8 +2819,8 @@ function pageCourseDetail(courseId){
       ${courseSecs.map(section=>{
         const list = enrollmentsForSection(courseId, section);
         return `
-        <p style="font-size:12.5px; font-weight:800; color:var(--navy-2); margin:10px 0 4px;">${SECTION_LABELS[section]}</p>
-        ${list.length ? `<div class="enroll-list">${list.map(e=>`<span class="enroll-chip">🎓 ${escapeHtml(e.phone)}${!e.section ? ' (تفعيل كامل قديم)' : ''} <button data-unenroll="${escapeHtml(e.phone)}" data-unenroll-section="${section}" title="إلغاء التفعيل">✕</button></span>`).join('')}</div>` : `<p style="color:var(--muted); font-size:13px;">لا يوجد طلاب مفعّلين بعد.</p>`}
+        <p style="font-size:12.5px; font-weight:800; color:var(--navy-2); margin:10px 0 4px;">${SECTION_LABELS[section]} (${list.length})</p>
+        ${list.length ? `<div class="enroll-list">${list.map(e=>`<span class="enroll-chip">🎓 ${(()=>{ const st = state.students.find(s=>s.phone===e.phone); const nt = state.enrollmentNotes[enrollmentNoteKey(courseId, e.phone)]; return (st && st.fullName ? '<b>'+escapeHtml(st.fullName)+'</b> ' : '') + '<span dir="ltr">'+escapeHtml(e.phone)+'</span>' + (nt ? ' <span style="color:var(--muted);">📝 '+escapeHtml(nt)+'</span>' : ''); })()}${!e.section ? ' (تفعيل كامل قديم)' : ''} <button data-unenroll="${escapeHtml(e.phone)}" data-unenroll-section="${section}" title="إلغاء التفعيل">✕</button></span>`).join('')}</div>` : `<p style="color:var(--muted); font-size:13px;">لا يوجد طلاب مفعّلين بعد.</p>`}
         `;
       }).join('')}
     </div>` : '';
@@ -5260,31 +5260,43 @@ function modalEnrollStudent(courseId){
 
 /* =========================================================
    تصدير قائمة المسجّلين بمادة معينة إلى ملف إكسيل
-   (اسم الطالب / رقم الهاتف / اسم المادة / القسم / ملاحظة)
+   (اسم الطالب / رقم الهاتف / اسم المادة / مشترك بـ / ملاحظة) — صف واحد لكل طالب
    ========================================================= */
 async function exportEnrollmentsExcel(courseId){
   const course = state.courses.find(c=>c.id===courseId);
   if(!course) return;
   try{ await ensureXlsxLib(); }catch(e){}
   if(typeof XLSX === 'undefined'){ alert('تعذّر تحميل مكتبة الإكسيل، تأكد من اتصالك بالإنترنت وحاول مجددًا.'); return; }
-  const list = enrollmentsFor(courseId).slice().sort((a,b)=>{
+  /* صف واحد لكل طالب (بدون تكرار الرقم)، وعمود "الأقسام" بيجمع أقسامه: الفيرست + الميد ... */
+  const SEC_ORDER = ['first','mid','final'];
+  const byPhone = new Map();
+  enrollmentsFor(courseId).forEach(e=>{
+    if(!byPhone.has(e.phone)) byPhone.set(e.phone, { phone:e.phone, all:false, secs:new Set() });
+    const g = byPhone.get(e.phone);
+    if(e.section) g.secs.add(e.section); else g.all = true;
+  });
+  const list = Array.from(byPhone.values()).sort((a,b)=>{
     const sa = state.students.find(s=>s.phone===a.phone);
     const sb = state.students.find(s=>s.phone===b.phone);
     return (sa?.fullName || '').localeCompare(sb?.fullName || '', 'ar');
   });
   if(!list.length){ alert('لا يوجد طلاب مفعّلين بهذه المادة حاليًا.'); return; }
-  const rows = list.map(e=>{
-    const st = state.students.find(s=>s.phone===e.phone);
+  const rows = list.map(g=>{
+    const st = state.students.find(s=>s.phone===g.phone);
+    const secLabels = g.all
+      ? 'كل الأقسام'
+      : SEC_ORDER.filter(k=>g.secs.has(k)).concat(Array.from(g.secs).filter(k=>!SEC_ORDER.includes(k)))
+          .map(k=>SECTION_LABELS[k] || k).join(' + ');
     return {
       'اسم الطالب': st ? st.fullName : '(غير مسجّل كطالب)',
-      'رقم الهاتف': e.phone,
+      'رقم الهاتف': g.phone,
       'اسم المادة': course.title,
-      'القسم': e.section ? SECTION_LABELS[e.section] : 'كل الأقسام',
-      'ملاحظة': state.enrollmentNotes[enrollmentNoteKey(courseId, e.phone)] || ''
+      'مشترك بـ': secLabels,
+      'ملاحظة': state.enrollmentNotes[enrollmentNoteKey(courseId, g.phone)] || ''
     };
   });
-  const ws = XLSX.utils.json_to_sheet(rows, { header:['اسم الطالب','رقم الهاتف','اسم المادة','القسم','ملاحظة'] });
-  ws['!cols'] = [{ wch:24 }, { wch:14 }, { wch:28 }, { wch:12 }, { wch:30 }];
+  const ws = XLSX.utils.json_to_sheet(rows, { header:['اسم الطالب','رقم الهاتف','اسم المادة','مشترك بـ','ملاحظة'] });
+  ws['!cols'] = [{ wch:24 }, { wch:14 }, { wch:28 }, { wch:22 }, { wch:30 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'المسجلين');
   const safeTitle = (course.title || 'course').replace(/[\\/:*?"<>|]/g,'').trim() || 'course';
