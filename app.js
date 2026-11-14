@@ -685,7 +685,7 @@ async function initData(){
   const pick = k => Object.prototype.hasOwnProperty.call(bulk, k) ? bulk[k] : FALLBACKS[k];
   state.courses = pick('courses').map(normalizeCourse); state.lectures = pick('lectures').map(normalizeLecture);
   state.questions = supabaseClient ? [] : SEED_QUESTIONS;   // بتتعبى فعليًا من loadQuestions() تحت
-  state.students = []; state.messages = []; state.enrollments = []; state.summaries = []; state.summariesCount = null;
+  state.students = []; state.messages = []; state.enrollments = []; state.enrollmentNotes = {}; state.summaries = []; state.summariesCount = null;
   state.teachers = Array.isArray(pick('teachers')) ? pick('teachers') : [];
   state.lectureProgress = [];
   state.savedQuestions = [];
@@ -1261,6 +1261,14 @@ async function loadEnrollments(){
     const rows = await fetchAllRows('enrollments', 'id,phone,course_id,section', 'id');
     state.enrollments = rows.map(r=> ({ courseId: r.course_id, phone: r.phone, section: r.section || null }));
   }catch(e){ console.error('loadEnrollments failed', e); }
+  /* ملاحظات المشرف على التفعيلات: جدول منفصل مقروء للمشرف فقط (الطالب ما بيشوفها أبدًا) */
+  state.enrollmentNotes = {};
+  if(isAdminSession()){
+    try{
+      const nrows = await fetchAllRows('enrollment_notes', 'id,course_id,phone,note', 'id');
+      nrows.forEach(r=>{ if(r.note) state.enrollmentNotes[enrollmentNoteKey(r.course_id, r.phone)] = r.note; });
+    }catch(e){ console.error('loadEnrollmentNotes failed (هل أنشأت جدول enrollment_notes؟)', e); }
+  }
 }
 /* ---------- بنك الأسئلة: جدول questions حقيقي (بدل صف JSON واحد بـ medora_data) ----------
    كل جلسة تسحب بس الأسئلة يلي تخصّها: الطالب حسب كورساته المشترك فيها، المدرّس حسب
@@ -1444,6 +1452,29 @@ async function loadMyStudentContent(){
 }
 async function loadUserData(){
   await Promise.all([ loadMyProgress(), loadEnrollments(), loadBankAccess(), loadCoupons(), loadBankCoupons(), loadStudents(), loadMessages(), loadMyStudentContent(), loadQuestions() ]);
+}
+/* ---------------- ملاحظات المشرف على تفعيل الطالب بالكورس (enrollment_notes) ----------------
+   نفّذ هذا مرة واحدة في Supabase SQL Editor:
+
+   create table if not exists public.enrollment_notes (
+     id bigint generated always as identity primary key,
+     course_id text not null,
+     phone text not null,
+     note text not null default '',
+     updated_at timestamptz not null default now(),
+     unique (course_id, phone)
+   );
+   alter table public.enrollment_notes enable row level security;
+   -- المشرف فقط يقرأ/يكتب/يحذف الملاحظات (الطلاب ما إلهم أي صلاحية)
+   create policy "admin all enrollment notes" on public.enrollment_notes
+     for all using ( (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' )
+     with check ( (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' );
+*/
+function enrollmentNoteKey(courseId, phone){ return courseId + '|' + phone; }
+async function dbSaveEnrollmentNotes(courseId, phones, note){
+  const rows = phones.map(phone=> ({ course_id: courseId, phone, note, updated_at: new Date().toISOString() }));
+  const { error } = await supabaseClient.from('enrollment_notes').upsert(rows, { onConflict: 'course_id,phone' });
+  return error || null;
 }
 async function dbAddEnrollments(list){
   const rows = list.map(e=> ({ phone: e.phone, course_id: e.courseId, section: e.section || '' }));
@@ -1712,6 +1743,7 @@ async function logout(){
   state.session = null;
   state.lectureProgress = [];
   state.enrollments = [];
+  state.enrollmentNotes = {};
   state.coupons = []; state.bankCoupons = []; state.bankAccess = [];
   state.students = []; state.messages = []; state.summaries = []; state.savedQuestions = []; state.summariesCount = null;
   hyRun = null; hyAdmin = { loaded:false, loading:false, items:[], error:'' };
@@ -3622,6 +3654,7 @@ function pageAdminAnalytics(){
       <div class="card-panel" style="padding:18px 20px; margin-bottom:24px;">
         <div class="toolbar" style="margin-bottom:12px;">
           <h3 style="margin:0;">الطلاب المسجّلون (${totalStudents})</h3>
+          <button class="btn danger small" id="resetDeviceBtn">${ICONS.lock} إعادة تعيين أجهزة الطلاب</button>
           <input type="text" id="studentSearchInput" placeholder="🔍 ابحث بالاسم أو رقم الهاتف..." style="max-width:260px;">
         </div>
         <div id="studentsListWrap" style="display:flex; flex-direction:column; gap:10px; max-height:420px; overflow-y:auto;">
@@ -3633,6 +3666,7 @@ function pageAdminAnalytics(){
               </div>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <button class="btn teal small" data-reset-student-pw="${escapeHtml(s.phone)}">${ICONS.lock} تعيين كلمة سر جديدة</button>
+                <button class="btn small" data-reset-student-device="${escapeHtml(s.phone)}">${ICONS.lock} إعادة تعيين الجهاز</button>
                 <button class="btn danger small" data-del-student="${escapeHtml(s.phone)}">${ICONS.trash} حذف</button>
               </div>
             </div>`).join('') : `<p style="color:var(--muted); font-size:13.5px;">لا يوجد طلاب مسجّلون بعد.</p>`}
@@ -4211,6 +4245,8 @@ async function deleteStudent(phone){
   state.savedQuestions = state.savedQuestions.filter(q=>q.phone!==phone);
   state.enrollments = state.enrollments.filter(e=>e.phone!==phone);
   try{ await supabaseClient.from('enrollments').delete().eq('phone', phone); }catch(e){ console.error(e); }
+  try{ await supabaseClient.from('enrollment_notes').delete().eq('phone', phone); }catch(e){ console.error(e); }
+  Object.keys(state.enrollmentNotes || {}).forEach(k=>{ if(k.endsWith('|'+phone)) delete state.enrollmentNotes[k]; });
   state.lectureProgress = state.lectureProgress.filter(p=>p.phone!==phone);
   try{
     const { data, error } = await supabaseClient.functions.invoke('deleteStudent-phone-', { body: { phone } });
@@ -5158,6 +5194,11 @@ function modalEnrollStudent(courseId){
           ${secs.map(s=>`<label class="lecture-select-row"><span>${SECTION_LABELS[s]}</span><input type="checkbox" name="section_${s}" checked></label>`).join('')}
         </div>
       </div>
+      <div class="field">
+        <label>ملاحظة (اختياري)</label>
+        <input type="text" name="note" maxlength="200" placeholder="مثال: دفع كاش / منحة / عن طريق فلان">
+        <p class="hint" style="margin-top:6px; font-size:12.5px; color:var(--muted);">بتنحفظ لكل الأرقام الملصوقة هون، وبتظهر بعمود "ملاحظة" بملف الإكسيل لما تحمّل قائمة المسجلين. الطالب ما بشوفها.</p>
+      </div>
       <div id="enrollMsg"></div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">تفعيل الأقسام المحددة للجميع</button></div>
     </form>`);
@@ -5194,8 +5235,20 @@ function modalEnrollStudent(courseId){
         submitBtn.disabled = false; return;
       }
     }
+    /* الملاحظة الاختيارية: تنحفظ لكل طالب موجود (الجديد والمفعّل مسبقًا). لو تُركت فاضية ما نلمس أي ملاحظة قديمة. */
+    const note = String(fd.get('note') || '').trim();
+    let noteErr = null;
+    if(note){
+      const notePhones = success.concat(already);
+      if(notePhones.length){
+        noteErr = await dbSaveEnrollmentNotes(courseId, notePhones, note);
+        if(noteErr) console.error('save enrollment note failed', noteErr);
+        else notePhones.forEach(ph=>{ state.enrollmentNotes[enrollmentNoteKey(courseId, ph)] = note; });
+      }
+    }
     submitBtn.disabled = false;
     let html = '';
+    if(noteErr) html += `<div class="form-msg error">⚠️ تم التفعيل لكن تعذّر حفظ الملاحظة (تأكد من إنشاء جدول enrollment_notes بـ Supabase).</div>`;
     if(success.length) html += `<div class="form-msg ok">✅ تم تفعيل ${success.length} طالب بنجاح: ${success.map(escapeHtml).join('، ')}</div>`;
     if(already.length) html += `<div class="form-msg error">⚠️ ${already.length} طالب مفعّل مسبقًا لكل الأقسام المحددة: ${already.map(escapeHtml).join('، ')}</div>`;
     if(notFound.length) html += `<div class="form-msg error">❌ ${notFound.length} رقم غير مسجّل كطالب: ${notFound.map(escapeHtml).join('، ')}</div>`;
@@ -5207,7 +5260,7 @@ function modalEnrollStudent(courseId){
 
 /* =========================================================
    تصدير قائمة المسجّلين بمادة معينة إلى ملف إكسيل
-   (اسم الطالب / رقم الهاتف / اسم المادة / القسم)
+   (اسم الطالب / رقم الهاتف / اسم المادة / القسم / ملاحظة)
    ========================================================= */
 async function exportEnrollmentsExcel(courseId){
   const course = state.courses.find(c=>c.id===courseId);
@@ -5226,11 +5279,12 @@ async function exportEnrollmentsExcel(courseId){
       'اسم الطالب': st ? st.fullName : '(غير مسجّل كطالب)',
       'رقم الهاتف': e.phone,
       'اسم المادة': course.title,
-      'القسم': e.section ? SECTION_LABELS[e.section] : 'كل الأقسام'
+      'القسم': e.section ? SECTION_LABELS[e.section] : 'كل الأقسام',
+      'ملاحظة': state.enrollmentNotes[enrollmentNoteKey(courseId, e.phone)] || ''
     };
   });
-  const ws = XLSX.utils.json_to_sheet(rows, { header:['اسم الطالب','رقم الهاتف','اسم المادة','القسم'] });
-  ws['!cols'] = [{ wch:24 }, { wch:14 }, { wch:28 }, { wch:12 }];
+  const ws = XLSX.utils.json_to_sheet(rows, { header:['اسم الطالب','رقم الهاتف','اسم المادة','القسم','ملاحظة'] });
+  ws['!cols'] = [{ wch:24 }, { wch:14 }, { wch:28 }, { wch:12 }, { wch:30 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'المسجلين');
   const safeTitle = (course.title || 'course').replace(/[\\/:*?"<>|]/g,'').trim() || 'course';
@@ -5396,6 +5450,31 @@ function modalResetStudentDevice(){
     if(failed.length) html += `<div class="form-msg error">❌ فشلت العملية لـ ${failed.length} رقم: ${failed.map(escapeHtml).join('، ')}</div>`;
     if(invalid.length) html += `<div class="form-msg error">⚠️ مقاطع ما قدرت تُقرأ كأرقام صحيحة: ${invalid.map(escapeHtml).join('، ')}</div>`;
     msgBox.innerHTML = html;
+  });
+}
+
+/* إعادة تعيين جهاز طالب واحد مباشرة من لوحة التحليلات (بجانب رقمه) */
+function modalResetOneStudentDevice(phone){
+  const student = state.students.find(s=>s.phone===phone);
+  const name = student ? (student.fullName||phone) : phone;
+  openModal(`
+    <h3>${ICONS.lock} إعادة تعيين الجهاز</h3>
+    <p style="color:var(--muted); font-size:14.5px;">سيتم إلغاء ربط حساب "${escapeHtml(name)}" (${escapeHtml(phone)}) بجهازه الحالي، ليتمكن من تسجيل الدخول من جهاز جديد. هل أنت متأكد؟</p>
+    <div id="resetOneDeviceMsg"></div>
+    <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="button" class="btn danger small" id="confirmResetOneDevice">نعم، أعد التعيين</button></div>`);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  document.getElementById('confirmResetOneDevice').addEventListener('click', async (e)=>{
+    const btn = e.currentTarget;
+    const msgBox = document.getElementById('resetOneDeviceMsg');
+    if(!supabaseClient){ msgBox.innerHTML = `<div class="form-msg error">إعدادات الاتصال بقاعدة البيانات غير مكتملة.</div>`; return; }
+    btn.disabled = true;
+    msgBox.innerHTML = `<div class="form-msg">جاري إعادة التعيين...</div>`;
+    const { error, count } = await supabaseClient.from('student_devices').delete({ count:'exact' }).eq('phone', phone);
+    btn.disabled = false;
+    if(error){ msgBox.innerHTML = `<div class="form-msg error">❌ فشلت العملية، حاول مرة أخرى.</div>`; return; }
+    if(!count){ msgBox.innerHTML = `<div class="form-msg error">⚠️ هذا الطالب ما إله جهاز مسجَّل أصلًا.</div>`; return; }
+    msgBox.innerHTML = `<div class="form-msg ok">✅ تم إلغاء ربط جهاز الطالب بنجاح.</div>`;
+    btn.style.display = 'none';
   });
 }
 
@@ -11588,6 +11667,11 @@ function bindPageEvents(route){
     document.querySelectorAll('[data-reset-student-pw]').forEach(btn=>{
       btn.addEventListener('click', ()=> modalAdminResetStudentPassword(btn.dataset.resetStudentPw));
     });
+    document.querySelectorAll('[data-reset-student-device]').forEach(btn=>{
+      btn.addEventListener('click', ()=> modalResetOneStudentDevice(btn.dataset.resetStudentDevice));
+    });
+    const analyticsResetDeviceBtn = document.getElementById('resetDeviceBtn');
+    if(analyticsResetDeviceBtn) analyticsResetDeviceBtn.addEventListener('click', modalResetStudentDevice);
     document.querySelectorAll('[data-del-student]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const phone = btn.dataset.delStudent;
