@@ -10430,10 +10430,14 @@ const FB_DONE_KEY = 'medora_fb_done_';
 const FB_LABELS = ['', 'ضعيف', 'مقبول', 'جيد', 'جيد جدًا', 'ممتاز'];
 const FB_LABELS_EMOJI = ['اختر تقييمك', 'ضعيف 😕', 'مقبول 🙂', 'جيد 👍', 'جيد جدًا 😍', 'ممتاز 🔥'];
 const FB_THEMES = {
-  medora: { label:'ألوان المنصة', a:'#eaf5f8', b:'#c9e4ec', ink:'#0f4c5c', deco:'rgba(31,122,140,.10)', pill:'#ffffff', pillText:'#0f4c5c', av:'#1f7a8c', avText:'#ffffff', star:'#f5b942', starEdge:'#e39b14', starOff:'rgba(15,76,92,.16)' },
-  teal:   { label:'تركوازي داكن', a:'#1f7a8c', b:'#0f4c5c', ink:'#ffffff', deco:'rgba(255,255,255,.08)', pill:'rgba(255,255,255,.18)', pillText:'#ffffff', av:'#ffffff', avText:'#0f4c5c', star:'#fcd34d', starEdge:'#f5b942', starOff:'rgba(255,255,255,.28)' },
-  blue:   { label:'أزرق (طب الأسنان)', a:'#eaf0fb', b:'#cfdaf2', ink:'#17306b', deco:'rgba(47,95,196,.10)', pill:'#ffffff', pillText:'#17306b', av:'#2f5fc4', avText:'#ffffff', star:'#f5b942', starEdge:'#e39b14', starOff:'rgba(23,48,107,.16)' },
-  night:  { label:'ليلي', a:'#0f1f26', b:'#183039', ink:'#d9f1f6', deco:'rgba(53,169,192,.12)', pill:'rgba(217,241,246,.10)', pillText:'#d9f1f6', av:'#35a9c0', avText:'#0f1f26', star:'#fbbf24', starEdge:'#f59e0b', starOff:'rgba(217,241,246,.2)' },
+  medora: { label:'ألوان المنصة', a:'#eaf5f8', b:'#bfe0e9', ink:'#0f4c5c', pill:'#ffffff', pillText:'#0f4c5c', star:'#f5b942', starEdge:'#e39b14', starOff:'rgba(15,76,92,.16)',
+            paper:'#f8fcfd', rule:'#bcd9e2', bind:'#e1eff3', bindEdge:'#bcd9e2', hole:'#cde3ea', holeEdge:'#a6c5cf', margin:'#8fc4d0', text:'#17394a', accent:'#1f7a8c' },
+  teal:   { label:'تركوازي داكن', a:'#2a8799', b:'#0c4452', ink:'#ffffff', pill:'rgba(255,255,255,.18)', pillText:'#ffffff', star:'#fcd34d', starEdge:'#f5b942', starOff:'rgba(15,76,92,.18)',
+            paper:'#f4fafb', rule:'#b4d6de', bind:'#dcecf0', bindEdge:'#b4d6de', hole:'#c5dfe6', holeEdge:'#9fc0ca', margin:'#7fbcc9', text:'#0f3a47', accent:'#1f7a8c' },
+  blue:   { label:'أزرق (طب الأسنان)', a:'#eaf0fb', b:'#c4d3f0', ink:'#17306b', pill:'#ffffff', pillText:'#17306b', star:'#f5b942', starEdge:'#e39b14', starOff:'rgba(23,48,107,.16)',
+            paper:'#f8faff', rule:'#c3d0ee', bind:'#e3e9f9', bindEdge:'#c3d0ee', hole:'#d3dcf3', holeEdge:'#aebde6', margin:'#9db4ea', text:'#1b2a4e', accent:'#2f5fc4' },
+  night:  { label:'ليلي', a:'#122831', b:'#0c1a20', ink:'#d9f1f6', pill:'rgba(217,241,246,.10)', pillText:'#d9f1f6', star:'#fbbf24', starEdge:'#f59e0b', starOff:'rgba(217,241,246,.22)',
+            paper:'#1a3541', rule:'#2c4b58', bind:'#122730', bindEdge:'#2c4b58', hole:'#0c1a20', holeEdge:'#2c4b58', margin:'#3a8fa3', text:'#dcebf0', accent:'#6fd0e2' },
 };
 function fbThemeSwatch(id){ const t = FB_THEMES[id]; return `linear-gradient(135deg, ${t.a}, ${t.b})`; }
 
@@ -10518,12 +10522,12 @@ function injectFeedbackStyles(){
     .fbk-rlabel{ text-align:center; min-height:24px; margin-top:8px; font-weight:800; font-size:16px; color:var(--f-ac); }
 
     /* مربع الرأي بشكل دفتر مسطّر */
-    .fbk-note{ position:relative; border-radius:10px 14px 14px 10px; background:#fffef6; border:1px solid #e6dfc3; box-shadow:0 6px 16px rgba(15,76,92,.10), 0 1px 0 #fff inset; overflow:hidden; transform:rotate(-.4deg); }
-    .fbk-note::before{ content:''; position:absolute; top:0; bottom:0; right:0; width:26px; background:radial-gradient(circle at 50% 17px, #d9e6ea 5px, #b9ccd3 6px, transparent 7px) 0 0/100% 34px repeat-y, #f3efdc; border-left:1px dashed #d9d2b0; pointer-events:none; }
-    .fbk-note textarea{ display:block; width:100%; box-sizing:border-box; border:0; outline:0; resize:none; background-color:transparent; font-family:inherit; font-size:17px; line-height:34px; color:#27374a; height:170px; padding:0 62px 0 16px;
-      background-image:linear-gradient(to left, transparent 52px, #f2a4a4 52px, #f2a4a4 54px, transparent 54px), repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #b9d7e2 33px, #b9d7e2 34px);
+    .fbk-note{ position:relative; border-radius:10px 14px 14px 10px; background:#f8fcfd; border:1px solid #cfe3ea; box-shadow:0 6px 16px rgba(15,76,92,.10); overflow:hidden; transform:rotate(-.4deg); }
+    .fbk-note::before{ content:''; position:absolute; top:0; bottom:0; right:0; width:26px; background:radial-gradient(circle at 50% 17px, #cde3ea 5px, #a6c5cf 6px, transparent 7px) 0 0/100% 34px repeat-y, #e1eff3; border-left:1px dashed #bcd9e2; pointer-events:none; }
+    .fbk-note textarea{ display:block; width:100%; box-sizing:border-box; border:0; outline:0; resize:none; background-color:transparent; font-family:inherit; font-size:17px; line-height:34px; color:#17394a; height:170px; padding:0 62px 0 16px;
+      background-image:linear-gradient(to left, transparent 52px, #8fc4d0 52px, #8fc4d0 54px, transparent 54px), repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #bcd9e2 33px, #bcd9e2 34px);
       background-attachment:local; background-repeat:no-repeat, repeat; }
-    .fbk-note textarea::placeholder{ color:#a7b2b8; }
+    .fbk-note textarea::placeholder{ color:#97b0b9; }
     .fbk-note:focus-within{ box-shadow:0 0 0 3px rgba(31,122,140,.18), 0 6px 16px rgba(15,76,92,.10); }
     .fbk-cnt{ text-align:left; direction:ltr; font-size:12px; color:var(--f-mute); margin-top:6px; }
     .fbk-msg{ min-height:20px; margin-top:8px; font-size:14px; font-weight:700; color:#d33; text-align:center; }
@@ -10566,21 +10570,18 @@ function injectFeedbackStyles(){
     .fba-meta{ font-size:12px; color:var(--muted); margin-top:8px; }
 
     /* ---------- جدار آراء الطلاب ---------- */
-    .fbw-grid{ columns:3 280px; column-gap:16px; }
-    .fbw-card{ break-inside:avoid; margin-bottom:16px; padding:16px 14px 14px; border-radius:22px; background:#eaf5f8; border:1px solid #d3e6eb; box-shadow:0 10px 26px rgba(15,76,92,.10); }
-    body.dark .fbw-card{ background:#15262e; border-color:#24414c; }
-    .fbw-card .st{ text-align:center; color:#f5b942; font-size:26px; letter-spacing:2px; direction:ltr; margin-bottom:10px; text-shadow:0 3px 10px rgba(245,185,66,.4); }
-    .fbw-card .st s{ text-decoration:none; color:rgba(15,76,92,.18); text-shadow:none; }
-    body.dark .fbw-card .st s{ color:rgba(217,241,246,.2); }
-    .fbw-card .q{ position:relative; border-radius:10px 14px 14px 10px; background-color:#fffef6; border:1px solid #e6dfc3; box-shadow:0 4px 12px rgba(15,76,92,.10); padding:0 52px 0 14px; min-height:102px;
-      font-size:15px; line-height:34px; color:#27374a; white-space:pre-wrap; word-break:break-word; overflow:hidden;
-      background-image:linear-gradient(to left, transparent 44px, #f2a4a4 44px, #f2a4a4 46px, transparent 46px), repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #b9d7e2 33px, #b9d7e2 34px); }
-    .fbw-card .q::before{ content:''; position:absolute; top:0; bottom:0; right:0; width:22px; background:radial-gradient(circle at 50% 17px, #d9e6ea 4px, #b9ccd3 5px, transparent 6px) 0 0/100% 34px repeat-y, #f1ecd6; border-left:1px dashed #d6cfae; }
-    .fbw-card .q.lbl{ font-weight:800; color:#1f7a8c; font-size:20px; }
-    .fbw-card .who{ margin-top:12px; font-weight:800; font-size:14px; display:flex; align-items:center; gap:8px; color:#0f4c5c; }
-    body.dark .fbw-card .who{ color:#d9f1f6; }
-    .fbw-card .who i{ width:30px; height:30px; border-radius:50%; background:#1f7a8c; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-weight:900; }
-    .fbw-card .for{ font-size:12px; color:#5b7b88; margin-top:6px; }
+    .fbw-grid{ columns:3 280px; column-gap:18px; }
+    .fbw-card{ position:relative; break-inside:avoid; margin-bottom:18px; padding:0 66px 0 14px; border-radius:14px; overflow:hidden; background-color:#f8fcfd; border:1px solid #cfe3ea; box-shadow:0 10px 26px rgba(15,76,92,.12);
+      font-size:15px; line-height:34px; color:#17394a;
+      background-image:linear-gradient(to left, transparent 52px, #8fc4d0 52px, #8fc4d0 54px, transparent 54px), repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #bcd9e2 33px, #bcd9e2 34px); background-repeat:no-repeat, repeat; }
+    .fbw-card::before{ content:''; position:absolute; top:0; bottom:0; right:0; width:26px; background:radial-gradient(circle at 50% 17px, #cde3ea 5px, #a6c5cf 6px, transparent 7px) 0 0/100% 34px repeat-y, #e1eff3; border-left:1px dashed #bcd9e2; }
+    .fbw-card .hd{ display:flex; align-items:center; justify-content:space-between; gap:8px; height:34px; }
+    .fbw-card .nm{ font-weight:800; color:#1f7a8c; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:62%; }
+    .fbw-card .st{ color:#f5b942; font-size:14px; direction:ltr; white-space:nowrap; }
+    .fbw-card .st s{ text-decoration:none; color:rgba(15,76,92,.2); }
+    .fbw-card .q{ white-space:pre-wrap; word-break:break-word; }
+    .fbw-card .q.lbl{ font-weight:800; color:#1f7a8c; font-size:18px; }
+    .fbw-card .for{ font-size:12px; color:#5b7b88; }
     @media (max-width:640px){ .fbk-star{ font-size:44px; } .fba-grid{ grid-template-columns:1fr 1fr; gap:10px; } }
   `;
   document.head.appendChild(style);
@@ -10786,18 +10787,16 @@ async function fbDrawCard(canvas, e, courseTitle, themeId, mode, scale){
   try{ if(document.fonts && document.fonts.load){ await Promise.all([document.fonts.load('800 48px ' + fam, 'ابتث'), document.fonts.load('700 48px ' + fam, 'ابتث')]); } }catch(_){}
   const logo = await fbLogoImg();
 
-  /* الخلفية بألوان المنصة */
-  const bg = ctx.createLinearGradient(0, 0, W * 0.6, H);
+  /* خلفية سادة متدرّجة بألوان المنصة */
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
   bg.addColorStop(0, T.a); bg.addColorStop(1, T.b);
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = T.deco;
-  [[W * .92, H * .06, 320], [W * .03, H * .95, 280], [W * .85, H * .7, 110], [W * .12, H * .2, 70]].forEach(([x, y, rr]) => { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill(); });
 
   /* الرأس: الشعار + اسم المنصة + المادة */
   const padX = 90, top = mode === 'story' ? 250 : 80, ls = 84, lx = W - padX - ls;
   ctx.save(); ctx.beginPath(); ctx.arc(lx + ls / 2, top + ls / 2, ls / 2, 0, Math.PI * 2); ctx.clip();
   if(logo){ ctx.drawImage(logo, lx, top, ls, ls); }
-  else { ctx.fillStyle = T.av; ctx.fillRect(lx, top, ls, ls); ctx.fillStyle = T.avText; ctx.font = `800 44px ${fam}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('M', lx + ls / 2, top + ls / 2 + 2); }
+  else { ctx.fillStyle = T.accent; ctx.fillRect(lx, top, ls, ls); ctx.fillStyle = '#fff'; ctx.font = `800 44px ${fam}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('M', lx + ls / 2, top + ls / 2 + 2); }
   ctx.restore();
   ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = T.ink; ctx.font = `800 40px ${fam}`;
   ctx.fillText('MEDORA', lx - 20, top + ls / 2 + 2);
@@ -10809,75 +10808,67 @@ async function fbDrawCard(canvas, e, courseTitle, themeId, mode, scale){
     ctx.fillStyle = T.pillText; ctx.textAlign = 'center'; ctx.fillText(ct, padX + pw / 2, top + ls / 2 + 2);
   }
 
-  /* النجوم فوق الدفتر */
-  const starR = 44, starGap = 108, starsTop = top + ls + 44, starCy = starsTop + starR;
-  for(let i = 1; i <= 5; i++){
-    const cx = W / 2 + (3 - i) * starGap, on = i <= e.rating;
-    ctx.save();
-    if(on){ ctx.shadowColor = 'rgba(245,185,66,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6; }
-    fbStarPath(ctx, cx, starCy, starR); ctx.fillStyle = on ? T.star : T.starOff; ctx.fill();
-    ctx.shadowColor = 'transparent'; ctx.lineJoin = 'round'; ctx.lineWidth = 6; ctx.strokeStyle = on ? T.starEdge : T.starOff; ctx.stroke();
-    ctx.restore();
-  }
-
-  /* الدفتر المسطّر */
-  const bottomReserve = mode === 'story' ? 330 : 90, footH = 120;
-  const footY = H - bottomReserve - footH;
-  const px0 = padX, px1 = W - padX, pTop = starsTop + starR * 2 + 40, pBot = footY - 26, pH = pBot - pTop;
-  const bindW = 76, marginX = px1 - bindW - 54;
+  /* قياسات الدفتر */
+  const bottomReserve = mode === 'story' ? 330 : 90;
+  const areaTop = top + ls + 50, areaBot = H - bottomReserve, maxPH = areaBot - areaTop;
+  const px0 = padX, px1 = W - padX, bindW = 76, marginX = px1 - bindW - 50;
   const textR = marginX - 26, textL = px0 + 46, maxW = textR - textL;
-  const padTop = 30, padBot = 26;
+  const padTop = 24, padBot = 30;
   const comment = (e.comment || '').trim(), hasComment = !!comment;
   let lines = [], fs = 44, lh = 70;
-  const avail = pH - padTop - padBot;
+  const availRows = () => Math.floor((maxPH - padTop - padBot) / lh) - 1; /* ناقص سطر الرأس (الاسم + النجوم) */
   if(hasComment){
-    for(fs = 46; fs >= 26; fs -= 2){ ctx.font = `600 ${fs}px ${fam}`; lh = Math.round(fs * 1.62); lines = fbWrap(ctx, comment, maxW); if(lines.length * lh <= avail) break; }
-    const maxLines = Math.max(1, Math.floor(avail / lh));
+    for(fs = 46; fs >= 26; fs -= 2){ ctx.font = `600 ${fs}px ${fam}`; lh = Math.max(56, Math.round(fs * 1.62)); lines = fbWrap(ctx, comment, maxW); if(lines.length <= availRows()) break; }
+    const maxLines = Math.max(1, availRows());
     if(lines.length > maxLines){ lines = lines.slice(0, maxLines); lines[maxLines - 1] = fbFit(ctx, lines[maxLines - 1] + ' …', maxW); }
-  } else { fs = 64; lh = 100; lines = [FB_LABELS[e.rating] || '']; }
+  } else { fs = 60; lh = 92; lines = [FB_LABELS[e.rating] || '']; }
+  const minPH = mode === 'story' ? 620 : 420;
+  const pH = Math.min(maxPH, Math.max(minPH, padTop + (lines.length + 3) * lh + padBot));
+  const pTop = areaTop + (maxPH - pH) / 2, pBot = pTop + pH;
 
   ctx.save();
   const pcx = W / 2, pcy = (pTop + pBot) / 2;
   ctx.translate(pcx, pcy); ctx.rotate(-0.012); ctx.translate(-pcx, -pcy);
   /* ظل + ورقة */
   ctx.save(); ctx.shadowColor = 'rgba(15,76,92,.28)'; ctx.shadowBlur = 46; ctx.shadowOffsetY = 16;
-  fbRoundRect(ctx, px0, pTop, px1 - px0, pH, 26); ctx.fillStyle = '#fffef6'; ctx.fill(); ctx.restore();
+  fbRoundRect(ctx, px0, pTop, px1 - px0, pH, 26); ctx.fillStyle = T.paper; ctx.fill(); ctx.restore();
   ctx.save(); fbRoundRect(ctx, px0, pTop, px1 - px0, pH, 26); ctx.clip();
-  /* شريط التجليد على اليمين + الثقوب */
-  ctx.fillStyle = '#f1ecd6'; ctx.fillRect(px1 - bindW, pTop, bindW, pH);
-  ctx.strokeStyle = '#d6cfae'; ctx.lineWidth = 3; ctx.setLineDash([12, 10]);
+  /* شريط التجليد + الثقوب */
+  ctx.fillStyle = T.bind; ctx.fillRect(px1 - bindW, pTop, bindW, pH);
+  ctx.strokeStyle = T.bindEdge; ctx.lineWidth = 3; ctx.setLineDash([12, 10]);
   ctx.beginPath(); ctx.moveTo(px1 - bindW, pTop); ctx.lineTo(px1 - bindW, pBot); ctx.stroke(); ctx.setLineDash([]);
   for(let hy = pTop + 56; hy < pBot - 20; hy += 96){
-    ctx.beginPath(); ctx.arc(px1 - bindW / 2, hy, 15, 0, Math.PI * 2); ctx.fillStyle = '#c9dde3'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = '#a9c3cc'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(px1 - bindW / 2, hy, 15, 0, Math.PI * 2); ctx.fillStyle = T.hole; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = T.holeEdge; ctx.stroke();
   }
-  /* السطور الزرقاء + خط الهامش الأحمر */
+  /* السطور + خط الهامش */
   const lineTop = pTop + padTop;
-  ctx.strokeStyle = '#b9d7e2'; ctx.lineWidth = 2.5;
+  ctx.strokeStyle = T.rule; ctx.lineWidth = 2.5;
   for(let ly = lineTop + lh; ly < pBot - 10; ly += lh){ ctx.beginPath(); ctx.moveTo(px0, ly); ctx.lineTo(px1 - bindW, ly); ctx.stroke(); }
-  ctx.strokeStyle = '#f2a4a4'; ctx.lineWidth = 3.5;
+  ctx.strokeStyle = T.margin; ctx.lineWidth = 3.5;
   ctx.beginPath(); ctx.moveTo(marginX, pTop); ctx.lineTo(marginX, pBot); ctx.stroke();
-  /* نص الرأي فوق السطور */
-  ctx.direction = 'rtl'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = hasComment ? '#27374a' : '#1f7a8c';
-  ctx.font = `${hasComment ? 600 : 800} ${fs}px ${fam}`;
-  lines.forEach((ln, i) => ctx.fillText(ln, textR, lineTop + (i + 1) * lh - Math.round(lh * 0.27)));
-  ctx.restore();
-  ctx.restore();
 
-  /* الاسم */
-  ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
-  ctx.font = `800 44px ${fam}`;
-  const nm = fbFit(ctx, e.name || '', 520), nameW = ctx.measureText(nm).width;
-  const pillH = 104, avR = 40, pillW = nameW + avR * 2 + 74, ppx = (W - pillW) / 2, ppy = footY + 8;
-  ctx.save(); ctx.shadowColor = 'rgba(15,76,92,.16)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 6;
-  fbRoundRect(ctx, ppx, ppy, pillW, pillH, pillH / 2); ctx.fillStyle = T.pill; ctx.fill(); ctx.restore();
-  const acx = ppx + pillW - 14 - avR, acy = ppy + pillH / 2;
-  ctx.beginPath(); ctx.arc(acx, acy, avR, 0, Math.PI * 2); ctx.fillStyle = T.av; ctx.fill();
-  ctx.fillStyle = T.avText; ctx.textAlign = 'center'; ctx.font = `800 42px ${fam}`;
-  ctx.fillText(Array.from(e.name || '؟')[0].toUpperCase(), acx, acy + 2);
-  ctx.fillStyle = T.pillText; ctx.textAlign = 'right'; ctx.font = `800 44px ${fam}`;
-  ctx.fillText(nm, acx - avR - 20, acy + 2);
+  /* سطر الرأس: الاسم يمين، النجوم الصغيرة يسار */
+  const headBase = lineTop + lh - Math.round(lh * 0.27);
+  ctx.direction = 'rtl'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'right';
+  ctx.font = `800 40px ${fam}`; ctx.fillStyle = T.accent;
+  ctx.fillText(fbFit(ctx, e.name || '', maxW - 330), textR, headBase);
+  const sR = 21, sGap = 50;
+  for(let i = 1; i <= 5; i++){
+    const cx = textL + sR + (5 - i) * sGap, cy = headBase - 15, on = i <= e.rating;
+    ctx.save();
+    fbStarPath(ctx, cx, cy, sR); ctx.fillStyle = on ? T.star : T.starOff; ctx.fill();
+    ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = on ? T.starEdge : T.starOff; ctx.stroke();
+    ctx.restore();
+  }
+
+  /* نص الرأي تحت الاسم */
+  ctx.textAlign = 'right';
+  ctx.fillStyle = hasComment ? T.text : T.accent;
+  ctx.font = `${hasComment ? 600 : 800} ${fs}px ${fam}`;
+  lines.forEach((ln, i) => ctx.fillText(ln, textR, lineTop + (i + 2) * lh - Math.round(lh * 0.27)));
+  ctx.restore();
+  ctx.restore();
   return canvas;
 }
 
@@ -11178,9 +11169,8 @@ function pageFeedbackWall(){
   return `<section class="section"><div class="container">${head}
     ${fbWall.items.length ? `<div class="fbw-grid">${fbWall.items.map(e => `
       <div class="fbw-card">
-        <div class="st">${'★'.repeat(e.rating)}<s>${'★'.repeat(5 - e.rating)}</s></div>
+        <div class="hd i18n-skip"><span class="nm">${escapeHtml(e.name)}</span><span class="st">${'★'.repeat(e.rating)}<s>${'★'.repeat(5 - e.rating)}</s></span></div>
         <div class="q i18n-skip${e.comment.trim() ? '' : ' lbl'}">${e.comment.trim() ? escapeHtml(e.comment) : escapeHtml(FB_LABELS[e.rating])}</div>
-        <div class="who i18n-skip"><i>${escapeHtml(Array.from(e.name || '؟')[0].toUpperCase())}</i>${escapeHtml(e.name)}</div>
         ${e.formTitle ? `<div class="for i18n-skip">${escapeHtml(e.formTitle)}</div>` : ''}
       </div>`).join('')}</div>` : `<div class="empty-state" style="padding:26px;"><p>لا توجد آراء منشورة بعد.</p></div>`}
   </div></section>`;
