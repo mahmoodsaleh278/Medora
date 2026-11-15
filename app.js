@@ -10463,68 +10463,80 @@ function injectFeedbackStyles(){
   const style = document.createElement('style');
   style.id = 'fbStyles';
   style.textContent = `
-    /* ---------- صفحة الطالب ---------- */
-    .fbk{ position:fixed; inset:0; z-index:950; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; align-items:center; justify-content:center; padding:24px 16px; background:#070b18; color:#fff; font-family:inherit; }
+    /* ---------- صفحة الطالب (بألوان الموقع) ---------- */
+    .fbk{ --f-bg:#eaf5f8; --f-ink:#0f4c5c; --f-ac:#1f7a8c; --f-ac2:#35a9c0; --f-card:#ffffff; --f-line:#d3e6eb; --f-txt:#17394a; --f-mute:#5b7b88;
+      position:fixed; inset:0; z-index:950; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; align-items:center; justify-content:center; padding:24px 16px; background:var(--f-bg); color:var(--f-txt); font-family:inherit; }
+    body.dark .fbk{ --f-bg:#0f1f26; --f-ink:#d9f1f6; --f-ac:#35a9c0; --f-ac2:#6fd0e2; --f-card:#15262e; --f-line:#24414c; --f-txt:#d5e6ec; --f-mute:#8fb0bb; }
     .fbk-bg{ position:fixed; inset:0; overflow:hidden; pointer-events:none; }
-    .fbk-bg i{ position:absolute; border-radius:50%; filter:blur(70px); opacity:.55; animation:fbkFloat 14s ease-in-out infinite; }
-    .fbk-bg .b1{ width:420px; height:420px; background:#14b8a6; top:-120px; right:-100px; }
-    .fbk-bg .b2{ width:360px; height:360px; background:#7c3aed; bottom:-120px; left:-80px; animation-delay:-5s; }
-    .fbk-bg .b3{ width:260px; height:260px; background:#f97316; top:46%; left:36%; opacity:.26; animation-delay:-9s; }
+    .fbk-bg i{ position:absolute; border-radius:50%; filter:blur(60px); opacity:.45; animation:fbkFloat 14s ease-in-out infinite; }
+    .fbk-bg .b1{ width:420px; height:420px; background:#9fd6e2; top:-130px; right:-110px; }
+    .fbk-bg .b2{ width:360px; height:360px; background:#b9e4d9; bottom:-120px; left:-90px; animation-delay:-5s; }
+    .fbk-bg .b3{ width:240px; height:240px; background:#bfe3f0; top:48%; left:38%; opacity:.35; animation-delay:-9s; }
+    body.dark .fbk-bg i{ opacity:.18; }
     @keyframes fbkFloat{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(40px,-50px) scale(1.15); } }
     .fbk-inner{ position:relative; z-index:1; width:100%; max-width:480px; margin:auto; }
     .fbk-center{ text-align:center; }
-    .fbk-spin{ display:inline-block; width:38px; height:38px; border-radius:50%; border:4px solid rgba(255,255,255,.2); border-top-color:#5eead4; animation:fbkSpin .8s linear infinite; }
+    .fbk-spin{ display:inline-block; width:38px; height:38px; border-radius:50%; border:4px solid var(--f-line); border-top-color:var(--f-ac); animation:fbkSpin .8s linear infinite; }
     @keyframes fbkSpin{ to{ transform:rotate(360deg); } }
 
     .fbk-intro{ position:relative; text-align:center; cursor:pointer; user-select:none; -webkit-user-select:none; padding:40px 0; transition:opacity .38s ease, transform .38s ease, filter .38s ease; }
     .fbk-intro.leave{ opacity:0; transform:scale(1.08) translateY(-12px); filter:blur(8px); }
     .fbk-word{ display:flex; justify-content:center; direction:ltr; font-size:clamp(46px, 15vw, 96px); font-weight:900; line-height:1.15; font-family:'Poppins','Inter',system-ui,-apple-system,'Segoe UI',sans-serif; }
     .fbk-word span{ display:inline-block; opacity:0; transform:translateY(60%) rotate(8deg) scale(.6); filter:blur(12px);
-      background:linear-gradient(110deg,#5eead4,#a78bfa,#fb923c,#5eead4); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; -webkit-text-fill-color:transparent;
+      background:linear-gradient(110deg,#0f4c5c,#1f7a8c,#35a9c0,#1f7a8c,#0f4c5c); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; -webkit-text-fill-color:transparent;
       animation:fbkLetter .85s cubic-bezier(.2,.9,.3,1.3) forwards, fbkShine 4s linear infinite;
       animation-delay:calc(var(--i) * .075s + .2s), 0s; }
+    body.dark .fbk-word span{ background-image:linear-gradient(110deg,#6fd0e2,#35a9c0,#d9f1f6,#35a9c0,#6fd0e2); }
     @keyframes fbkLetter{ to{ opacity:1; transform:none; filter:blur(0); } }
     @keyframes fbkShine{ to{ background-position:300% 0; } }
-    .fbk-line{ height:4px; width:0; margin:14px auto 0; border-radius:4px; background:linear-gradient(90deg,#5eead4,#a78bfa,#fb923c); animation:fbkLine .8s ease 1.1s forwards; }
+    .fbk-line{ height:4px; width:0; margin:14px auto 0; border-radius:4px; background:linear-gradient(90deg,#1f7a8c,#35a9c0,#f5b942); animation:fbkLine .8s ease 1.1s forwards; }
     @keyframes fbkLine{ to{ width:150px; } }
-    .fbk-sub{ margin:18px 0 0; font-size:17px; font-weight:700; color:rgba(255,255,255,.85); opacity:0; animation:fbkFade .7s ease 1.4s forwards; }
-    .fbk-tap{ margin-top:22px; font-size:13px; color:rgba(255,255,255,.55); opacity:0; animation:fbkFade .6s ease 1.9s forwards, fbkBlink 1.6s ease-in-out 2.5s infinite; }
+    .fbk-sub{ margin:18px 0 0; font-size:17px; font-weight:700; color:var(--f-ink); opacity:0; animation:fbkFade .7s ease 1.4s forwards; }
+    .fbk-tap{ margin-top:22px; font-size:13px; color:var(--f-mute); opacity:0; animation:fbkFade .6s ease 1.9s forwards, fbkBlink 1.6s ease-in-out 2.5s infinite; }
     @keyframes fbkFade{ to{ opacity:1; } }
     @keyframes fbkBlink{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
-    .fbk-spark{ position:absolute; color:#fde68a; font-size:22px; opacity:0; animation:fbkTwinkle 2.4s ease-in-out infinite; }
+    .fbk-spark{ position:absolute; color:#f5b942; font-size:22px; opacity:0; animation:fbkTwinkle 2.4s ease-in-out infinite; }
     .fbk-spark.s1{ top:6%; right:14%; animation-delay:.9s; } .fbk-spark.s2{ top:30%; left:8%; font-size:16px; animation-delay:1.5s; } .fbk-spark.s3{ bottom:8%; right:24%; font-size:18px; animation-delay:2s; }
     @keyframes fbkTwinkle{ 0%,100%{ opacity:0; transform:scale(.4) rotate(0); } 50%{ opacity:1; transform:scale(1.2) rotate(45deg); } }
 
-    .fbk-glass{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:28px; padding:26px 22px; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); box-shadow:0 20px 60px rgba(0,0,0,.35); animation:fbkPop .6s cubic-bezier(.2,.9,.3,1.2); }
+    .fbk-glass{ background:var(--f-card); border:1px solid var(--f-line); border-radius:26px; padding:26px 22px; box-shadow:0 18px 50px rgba(15,76,92,.14); animation:fbkPop .6s cubic-bezier(.2,.9,.3,1.2); }
     @keyframes fbkPop{ from{ opacity:0; transform:translateY(30px) scale(.94); } to{ opacity:1; transform:none; } }
-    .fbk-tag{ display:inline-block; font-size:13px; font-weight:800; padding:5px 12px; border-radius:999px; background:rgba(94,234,212,.15); color:#5eead4; margin-bottom:10px; }
-    .fbk-title{ margin:0 0 6px; font-size:22px; line-height:1.4; color:#fff; }
-    .fbk-desc{ margin:0 0 6px; font-size:14px; line-height:1.7; color:rgba(255,255,255,.7); }
-    .fbk-lab{ display:block; margin:16px 0 8px; font-size:14px; font-weight:700; color:rgba(255,255,255,.85); }
-    .fbk-in{ width:100%; box-sizing:border-box; background:rgba(255,255,255,.08); border:1.5px solid rgba(255,255,255,.18); border-radius:14px; padding:13px 15px; color:#fff; font-size:16px; font-family:inherit; outline:none; transition:border-color .2s, box-shadow .2s, background .2s; resize:vertical; }
-    .fbk-in::placeholder{ color:rgba(255,255,255,.4); }
-    .fbk-in:focus{ border-color:#5eead4; background:rgba(255,255,255,.12); box-shadow:0 0 0 4px rgba(94,234,212,.15); }
+    .fbk-tag{ display:inline-block; font-size:13px; font-weight:800; padding:5px 12px; border-radius:999px; background:var(--f-line); color:var(--f-ac); margin-bottom:10px; }
+    .fbk-title{ margin:0 0 6px; font-size:22px; line-height:1.4; color:var(--f-ink); }
+    .fbk-desc{ margin:0 0 6px; font-size:14px; line-height:1.7; color:var(--f-mute); }
+    .fbk-lab{ display:block; margin:18px 0 8px; font-size:14px; font-weight:800; color:var(--f-ink); }
+    .fbk-in{ width:100%; box-sizing:border-box; background:var(--f-bg); border:1.5px solid var(--f-line); border-radius:14px; padding:13px 15px; color:var(--f-txt); font-size:16px; font-family:inherit; outline:none; transition:border-color .2s, box-shadow .2s; }
+    .fbk-in:focus{ border-color:var(--f-ac); box-shadow:0 0 0 4px rgba(31,122,140,.15); }
     .fbk-stars{ display:flex; justify-content:center; gap:6px; direction:ltr; }
-    .fbk-star{ appearance:none; background:none; border:0; padding:0 2px; cursor:pointer; font-size:50px; line-height:1; color:rgba(255,255,255,.22); transition:transform .15s, color .2s, text-shadow .2s; -webkit-tap-highlight-color:transparent; }
+    .fbk-star{ appearance:none; background:none; border:0; padding:0 2px; cursor:pointer; font-size:50px; line-height:1; color:var(--f-line); transition:transform .15s, color .2s, text-shadow .2s; -webkit-tap-highlight-color:transparent; }
     .fbk-star:hover{ transform:scale(1.18); }
-    .fbk-star.on{ color:#fbbf24; text-shadow:0 0 22px rgba(251,191,36,.65); }
+    .fbk-star.on{ color:#f5b942; text-shadow:0 4px 18px rgba(245,185,66,.55); }
     .fbk-star.pop{ animation:fbkStarPop .45s cubic-bezier(.2,.9,.3,1.6); }
     @keyframes fbkStarPop{ 0%{ transform:scale(.6) rotate(-25deg); } 60%{ transform:scale(1.4) rotate(10deg); } 100%{ transform:scale(1); } }
-    .fbk-rlabel{ text-align:center; min-height:24px; margin-top:8px; font-weight:800; font-size:16px; color:#fde68a; }
-    .fbk-cnt{ text-align:left; direction:ltr; font-size:12px; color:rgba(255,255,255,.45); margin-top:4px; }
-    .fbk-msg{ min-height:20px; margin-top:8px; font-size:14px; font-weight:700; color:#fca5a5; text-align:center; }
-    .fbk-btn{ width:100%; margin-top:8px; border:0; border-radius:16px; padding:15px; font-size:17px; font-weight:800; font-family:inherit; color:#06201c; cursor:pointer; background:linear-gradient(110deg,#5eead4,#a78bfa,#5eead4); background-size:200% 100%; animation:fbkShine2 5s linear infinite; box-shadow:0 10px 30px rgba(94,234,212,.28); transition:transform .15s, opacity .2s; }
+    .fbk-rlabel{ text-align:center; min-height:24px; margin-top:8px; font-weight:800; font-size:16px; color:var(--f-ac); }
+
+    /* مربع الرأي بشكل دفتر مسطّر */
+    .fbk-note{ position:relative; border-radius:10px 14px 14px 10px; background:#fffef6; border:1px solid #e6dfc3; box-shadow:0 6px 16px rgba(15,76,92,.10), 0 1px 0 #fff inset; overflow:hidden; transform:rotate(-.4deg); }
+    .fbk-note::before{ content:''; position:absolute; top:0; bottom:0; right:0; width:26px; background:radial-gradient(circle at 50% 17px, #d9e6ea 5px, #b9ccd3 6px, transparent 7px) 0 0/100% 34px repeat-y, #f3efdc; border-left:1px dashed #d9d2b0; pointer-events:none; }
+    .fbk-note textarea{ display:block; width:100%; box-sizing:border-box; border:0; outline:0; resize:none; background-color:transparent; font-family:inherit; font-size:17px; line-height:34px; color:#27374a; height:170px; padding:0 62px 0 16px;
+      background-image:linear-gradient(to left, transparent 52px, #f2a4a4 52px, #f2a4a4 54px, transparent 54px), repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #b9d7e2 33px, #b9d7e2 34px);
+      background-attachment:local; background-repeat:no-repeat, repeat; }
+    .fbk-note textarea::placeholder{ color:#a7b2b8; }
+    .fbk-note:focus-within{ box-shadow:0 0 0 3px rgba(31,122,140,.18), 0 6px 16px rgba(15,76,92,.10); }
+    .fbk-cnt{ text-align:left; direction:ltr; font-size:12px; color:var(--f-mute); margin-top:6px; }
+    .fbk-msg{ min-height:20px; margin-top:8px; font-size:14px; font-weight:700; color:#d33; text-align:center; }
+    .fbk-btn{ width:100%; margin-top:8px; border:0; border-radius:16px; padding:15px; font-size:17px; font-weight:800; font-family:inherit; color:#fff; cursor:pointer; background:linear-gradient(110deg,#1f7a8c,#0f4c5c,#1f7a8c); background-size:200% 100%; animation:fbkShine2 5s linear infinite; box-shadow:0 10px 26px rgba(15,76,92,.28); transition:transform .15s, opacity .2s; }
     .fbk-btn:hover{ transform:translateY(-2px); } .fbk-btn:active{ transform:scale(.98); } .fbk-btn:disabled{ opacity:.6; cursor:default; }
     @keyframes fbkShine2{ to{ background-position:200% 0; } }
-    .fbk-link{ background:none; border:0; color:rgba(255,255,255,.6); font-size:14px; font-family:inherit; text-decoration:underline; cursor:pointer; margin-top:14px; }
+    .fbk-link{ background:none; border:0; color:var(--f-mute); font-size:14px; font-family:inherit; text-decoration:underline; cursor:pointer; margin-top:14px; }
     .fbk-emoji{ font-size:54px; margin-bottom:8px; }
-    .fbk-done h2{ margin:14px 0 6px; font-size:24px; color:#fff; }
-    .fbk-done p{ margin:0; color:rgba(255,255,255,.75); line-height:1.8; }
+    .fbk-done h2{ margin:14px 0 6px; font-size:24px; color:var(--f-ink); }
+    .fbk-done p{ margin:0; color:var(--f-mute); line-height:1.8; }
     .fbk-check{ width:92px; height:92px; }
     .fbk-check circle{ stroke-dasharray:152; stroke-dashoffset:152; animation:fbkDraw .8s ease forwards; }
     .fbk-check path{ stroke-dasharray:40; stroke-dashoffset:40; animation:fbkDraw .5s ease .6s forwards; }
     @keyframes fbkDraw{ to{ stroke-dashoffset:0; } }
-    .fbk-stars-ro{ margin-top:14px; font-size:30px; color:#fbbf24; direction:ltr; text-shadow:0 0 18px rgba(251,191,36,.5); }
+    .fbk-stars-ro{ margin-top:14px; font-size:30px; color:#f5b942; direction:ltr; text-shadow:0 4px 14px rgba(245,185,66,.5); }
     .fbk-confetti{ position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:2; }
     .fbk-confetti i{ position:absolute; top:-20px; width:10px; height:16px; border-radius:3px; opacity:0; animation:fbkFall linear forwards; }
     @keyframes fbkFall{ 0%{ opacity:1; transform:translateY(0) rotate(0); } 100%{ opacity:.9; transform:translateY(105vh) rotate(720deg); } }
@@ -10594,12 +10606,12 @@ function pageFeedback(id){
   }
 
   if(r.stage === 'done'){
-    const colors = ['#5eead4', '#a78bfa', '#fb923c', '#fde68a', '#f472b6', '#60a5fa'];
+    const colors = ['#1f7a8c', '#35a9c0', '#0f4c5c', '#f5b942', '#9fd6e2', '#b9e4d9'];
     const confetti = r.already ? '' : `<div class="fbk-confetti">${Array.from({ length:34 }, () =>
       `<i style="left:${(Math.random() * 100).toFixed(1)}%; background:${colors[Math.floor(Math.random() * colors.length)]}; animation-duration:${(2.6 + Math.random() * 2.4).toFixed(2)}s; animation-delay:${(Math.random() * 1.2).toFixed(2)}s;"></i>`).join('')}</div>`;
     return wrap(`
       <div class="fbk-glass fbk-center fbk-done">
-        <svg class="fbk-check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24" fill="none" stroke="#5eead4" stroke-width="3"/><path d="M14 27l8 8 16-17" fill="none" stroke="#5eead4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="fbk-check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24" fill="none" stroke="#1f7a8c" stroke-width="3"/><path d="M14 27l8 8 16-17" fill="none" stroke="#1f7a8c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <h2 class="i18n-skip">${r.already ? 'شكرًا، وصلنا رأيك سابقًا 💙' : 'شكرًا ' + escapeHtml(r.name.trim()) + '! 💙'}</h2>
         <p>رأيك وصل، وبيساعدنا نطوّر الشرح أكثر وأكثر.</p>
         ${r.rating ? `<div class="fbk-stars-ro">${'★'.repeat(r.rating)}</div>` : ''}
@@ -10613,12 +10625,12 @@ function pageFeedback(id){
       <h2 class="fbk-title i18n-skip">${title}</h2>
       ${r.form.description ? `<p class="fbk-desc i18n-skip">${escapeHtml(r.form.description)}</p>` : ''}
       <label class="fbk-lab" for="fbkName">اسمك (الاسم اللي بدك يظهر مع رأيك)</label>
-      <input class="fbk-in" id="fbkName" maxlength="40" placeholder="مثال: سارة" value="${hubAttr(r.name)}">
-      <label class="fbk-lab">كيف كان الشرح؟</label>
+      <input class="fbk-in" id="fbkName" maxlength="40" value="${hubAttr(r.name)}">
+      <label class="fbk-lab">تقييمك للشرح</label>
       <div class="fbk-stars" id="fbkStars" role="radiogroup" aria-label="التقييم">${[1, 2, 3, 4, 5].map(n => `<button type="button" class="fbk-star${n <= r.rating ? ' on' : ''}" data-star="${n}" aria-label="${n} من 5">★</button>`).join('')}</div>
       <div class="fbk-rlabel" id="fbkRLabel">${FB_LABELS_EMOJI[r.rating]}</div>
       <label class="fbk-lab" for="fbkComment">رأيك (اختياري)</label>
-      <textarea class="fbk-in" id="fbkComment" rows="4" maxlength="500" placeholder="شو أكثر شي عجبك؟ وشو بتقترح نحسّن؟">${escapeHtml(r.comment)}</textarea>
+      <div class="fbk-note"><textarea id="fbkComment" maxlength="500" placeholder="اكتب رأيك هنا...">${escapeHtml(r.comment)}</textarea></div>
       <div class="fbk-cnt"><span id="fbkCnt">${r.comment.length}</span>/500</div>
       <input type="text" id="fbkHp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute; left:-9999px; width:0; height:0; opacity:0;">
       <div class="fbk-msg" id="fbkMsg"></div>
