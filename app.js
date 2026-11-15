@@ -10471,8 +10471,10 @@ function injectFeedbackStyles(){
   style.textContent = `
     /* ---------- صفحة الطالب (بألوان الموقع) ---------- */
     .fbk{ --f-bg:#eaf5f8; --f-ink:#0f4c5c; --f-ac:#1f7a8c; --f-ac2:#35a9c0; --f-card:#ffffff; --f-line:#d3e6eb; --f-txt:#17394a; --f-mute:#5b7b88;
-      position:fixed; inset:0; z-index:950; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; align-items:center; justify-content:center; padding:24px 16px; background:var(--f-bg); color:var(--f-txt); font-family:inherit; }
+      position:fixed; inset:0; width:100%; z-index:950; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; -webkit-overflow-scrolling:touch; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:24px 16px; background:var(--f-bg); color:var(--f-txt); font-family:inherit; }
     body.dark .fbk{ --f-bg:#0f1f26; --f-ink:#d9f1f6; --f-ac:#35a9c0; --f-ac2:#6fd0e2; --f-card:#15262e; --f-line:#24414c; --f-txt:#d5e6ec; --f-mute:#8fb0bb; }
+    html.fbk-lock, html.fbk-lock body{ overflow:hidden !important; overscroll-behavior:none; height:100%; }
+    .fbk *, .fbk *::before, .fbk *::after{ box-sizing:border-box; }
     .fbk-bg{ position:fixed; inset:0; overflow:hidden; pointer-events:none; }
     .fbk-bg i{ position:absolute; border-radius:50%; filter:blur(60px); opacity:.45; animation:fbkFloat 14s ease-in-out infinite; }
     .fbk-bg .b1{ width:420px; height:420px; background:#9fd6e2; top:-130px; right:-110px; }
@@ -10480,7 +10482,7 @@ function injectFeedbackStyles(){
     .fbk-bg .b3{ width:240px; height:240px; background:#bfe3f0; top:48%; left:38%; opacity:.35; animation-delay:-9s; }
     body.dark .fbk-bg i{ opacity:.18; }
     @keyframes fbkFloat{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(40px,-50px) scale(1.15); } }
-    .fbk-inner{ position:relative; z-index:1; width:100%; max-width:480px; margin:auto; }
+    .fbk-inner{ position:relative; z-index:1; width:100%; max-width:480px; margin:auto; overflow-x:clip; padding:6px 2px; }
     .fbk-center{ text-align:center; }
     .fbk-spin{ display:inline-block; width:38px; height:38px; border-radius:50%; border:4px solid var(--f-line); border-top-color:var(--f-ac); animation:fbkSpin .8s linear infinite; }
     @keyframes fbkSpin{ to{ transform:rotate(360deg); } }
@@ -11898,6 +11900,7 @@ function bindPageEvents(route){
   if(route.startsWith('folder/')) bindHubEvents(hubIdFromRoute(route));
   if(route === 'admin-hubs') bindHubAdminEvents();
   if(route.startsWith('feedback/')) bindFeedbackEvents(fbIdFromRoute(route));
+  document.documentElement.classList.toggle('fbk-lock', route.startsWith('feedback/'));
   if(route === 'admin-feedback') bindFeedbackAdminEvents();
   if(route === 'feedback-wall') fbLoadWall();
   if(route.startsWith('exam/')) bindExamEvents(examIdFromRoute(route));
