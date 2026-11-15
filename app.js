@@ -1574,8 +1574,8 @@ function courseSubscribeActionHtml(c, isAdmin){
 }
 
 /* ---------------- Quiz wizard state ---------------- */
-let quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{}, revealedWritten:{} };
-function resetQuiz(){ quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{}, revealedWritten:{} }; }
+let quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{}, revealedWritten:{}, flagged:{} };
+function resetQuiz(){ quiz = { step:'setup', university:null, major:null, courseId:null, selectedLectures:null, count:10, nature:'both', mode:'study', pool:[], idx:0, answers:{}, revealed:{}, revealedWritten:{}, flagged:{} }; }
 
 /* ---------------- Router ---------------- */
 function currentRoute(){
@@ -3440,13 +3440,16 @@ function pageBankRunning(){
   }
 
   const isLast = quiz.idx === total - 1;
+  quiz.flagged = quiz.flagged || {};
   const answeredCount = quiz.pool.filter(isQuestionAnswered).length;
+  const flaggedCount = quiz.pool.filter(x => quiz.flagged[x.id]).length;
+  const isFlagged = !!quiz.flagged[q.id];
   const navResultCls = (x)=>{
     if(quiz.mode !== 'study' || !isQuestionAnswered(x)) return '';
     const ok = isQuestionCorrect(x);          // null للأسئلة الكتابية (مراجعة ذاتية) فتبقى "مُجاب" عادي
     return ok === true ? 'q-correct' : ok === false ? 'q-wrong' : '';
   };
-  const navGrid = quiz.pool.map((x, i) => `<button type="button" class="exam-nb ${isQuestionAnswered(x) ? 'answered' : ''} ${navResultCls(x)} ${i === quiz.idx ? 'current' : ''}" data-quiz-goto="${i}" aria-label="السؤال ${i+1}">${i+1}</button>`).join('');
+  const navGrid = quiz.pool.map((x, i) => `<button type="button" class="exam-nb ${isQuestionAnswered(x) ? 'answered' : ''} ${navResultCls(x)} ${quiz.flagged[x.id] ? 'flagged' : ''} ${i === quiz.idx ? 'current' : ''}" data-quiz-goto="${i}" aria-label="السؤال ${i+1}">${i+1}</button>`).join('');
 
   const isStudent = state.session && state.session.type === 'student';
   const saved = isStudent && isQuestionSaved(q.id);
@@ -3466,13 +3469,15 @@ function pageBankRunning(){
       <div class="wizard-card">
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
           <span class="q-tag ${q.nature==='ref'?'ref':'past'}">${natureLabel(q.nature)}</span>
-          ${saveBtnHtml}
+          <span style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <button type="button" class="btn small exam-flag-btn ${isFlagged ? 'on' : ''}" id="quizFlagBtn">${isFlagged ? '🚩 مُعلَّم للمراجعة' : '⚑ علّم السؤال (مشكوك فيه)'}</button>
+            ${saveBtnHtml}
+          </span>
         </div>
         <div class="quiz-q-text i18n-skip" dir="ltr" style="text-align:left;">${renderRichContent(q.question)}</div>
         ${bodyHtml}
         ${revealed && q.explanation ? explainBoxHtml(renderRichContent(q.explanation)) : ''}
         <div class="wizard-nav">
-          <button class="btn small" id="quitQuizBtn">إنهاء والخروج</button>
           <button class="btn small" id="quizPrevBtn" ${quiz.idx === 0 ? 'disabled' : ''}>→ السابق</button>
           <button class="btn teal solid" id="quizNextBtn" ${canProceed ? '' : 'disabled'}>${isLast ? 'إنهاء وعرض النتيجة' : 'السؤال التالي'}</button>
         </div>
@@ -3482,7 +3487,8 @@ function pageBankRunning(){
         <div class="exam-nav-grid">${navGrid}</div>
         <div class="exam-legend">${quiz.mode === 'study'
           ? '<span><i class="g"></i>صحيحة</span><span><i class="r"></i>خاطئة</span><span><i></i>غير مُجاب</span>'
-          : '<span><i class="a"></i>مُجاب</span><span><i></i>غير مُجاب</span>'}</div>
+          : '<span><i class="a"></i>مُجاب</span><span><i></i>غير مُجاب</span>'}<span>🚩 مشكوك فيه (${flaggedCount})</span></div>
+        <button class="btn teal solid small" id="quizFinishBtn" style="width:100%; justify-content:center;">إنهاء وتسليم</button>
       </aside>
       </div>
     </div>
@@ -3492,6 +3498,25 @@ function pageBankRunning(){
 
 /* تُرجع true/false للأسئلة القابلة للتصحيح التلقائي (اختيار متعدد/توصيل)، و null للأسئلة الكتابية
    التي تحتاج مراجعة ذاتية من الطالب نفسه */
+function bankConfirmFinish(){
+  const unanswered = quiz.pool.map((q, i) => ({ q, i })).filter(x => !isQuestionAnswered(x.q));
+  const flagged = quiz.pool.map((q, i) => ({ q, i })).filter(x => quiz.flagged && quiz.flagged[x.q.id]);
+  const chips = (list) => list.map(x => `<button type="button" class="exam-nb" style="width:40px; display:inline-block; margin:3px;" data-quiz-jump="${x.i}">${x.i + 1}</button>`).join('');
+  openModal(`
+    <h3>تسليم الأسئلة؟</h3>
+    <p style="font-size:14.5px; line-height:1.9; color:var(--muted);">أجبت عن <b style="color:var(--ink);">${quiz.pool.length - unanswered.length}</b> من ${quiz.pool.length} سؤال.</p>
+    ${unanswered.length ? `<div class="form-msg error" style="text-align:start;">أسئلة بدون إجابة (${unanswered.length}):<div>${chips(unanswered)}</div></div>` : ''}
+    ${flagged.length ? `<div class="form-msg" style="text-align:start; background:#fef3c7; color:#92400e;">🚩 أسئلة علّمتها للمراجعة (${flagged.length}):<div>${chips(flagged)}</div></div>` : ''}
+    <div class="modal-actions"><button class="btn small" id="quizBackToQuiz">العودة للأسئلة</button><button class="btn teal solid small" id="quizConfirmSubmit">تسليم الآن</button></div>`);
+  document.getElementById('quizBackToQuiz').addEventListener('click', closeModal);
+  document.getElementById('quizConfirmSubmit').addEventListener('click', ()=>{
+    closeModal(); quiz.step = 'results'; render().then(()=> scrollToQuizTop());
+  });
+  document.querySelectorAll('[data-quiz-jump]').forEach(b => b.addEventListener('click', ()=>{
+    closeModal(); quiz.idx = Number(b.dataset.quizJump); render().then(()=> scrollToQuizTop());
+  }));
+}
+
 function isQuestionCorrect(q){
   const type = q.type || 'mcq';
   const a = quiz.answers[q.id];
@@ -11524,10 +11549,16 @@ function bindPageEvents(route){
       }
       if(nextBtn) nextBtn.addEventListener('click', ()=>{
         if(quiz.idx < quiz.pool.length - 1){ quiz.idx++; render().then(()=> scrollToQuizTop()); }
-        else { quiz.step = 'results'; render().then(()=> scrollToQuizTop()); }
+        else { bankConfirmFinish(); }
       });
-      const quitBtn = document.getElementById('quitQuizBtn');
-      if(quitBtn) quitBtn.addEventListener('click', ()=>{ resetQuiz(); render().then(()=> scrollToQuizTop()); });
+      const flagBtn = document.getElementById('quizFlagBtn');
+      if(flagBtn) flagBtn.addEventListener('click', ()=>{
+        quiz.flagged = quiz.flagged || {};
+        if(quiz.flagged[q.id]) delete quiz.flagged[q.id]; else quiz.flagged[q.id] = true;
+        render();
+      });
+      const finishBtn = document.getElementById('quizFinishBtn');
+      if(finishBtn) finishBtn.addEventListener('click', bankConfirmFinish);
       const prevBtn = document.getElementById('quizPrevBtn');
       if(prevBtn) prevBtn.addEventListener('click', ()=>{
         if(quiz.idx > 0){ quiz.idx--; render().then(()=> scrollToQuizTop()); }
@@ -11831,7 +11862,7 @@ function startQuiz(){
   pool = pool.filter(q => !q.lectureId || (isLectureIncluded(q.lectureId) && isLectureAccessibleForBank(q.lectureId)));
   pool = shuffleArr(pool);
   if(quiz.count) pool = pool.slice(0, quiz.count);
-  quiz.pool = pool; quiz.idx = 0; quiz.answers = {}; quiz.revealed = {}; quiz.revealedWritten = {};
+  quiz.pool = pool; quiz.idx = 0; quiz.answers = {}; quiz.revealed = {}; quiz.revealedWritten = {}; quiz.flagged = {};
   quiz.step = pool.length ? 'running' : 'no-questions';
   render().then(()=> scrollToQuizTop());
 }
