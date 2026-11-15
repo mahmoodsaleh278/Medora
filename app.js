@@ -10430,16 +10430,15 @@ const FB_DONE_KEY = 'medora_fb_done_';
 const FB_LABELS = ['', 'ضعيف', 'مقبول', 'جيد', 'جيد جدًا', 'ممتاز'];
 const FB_LABELS_EMOJI = ['اختر تقييمك', 'ضعيف 😕', 'مقبول 🙂', 'جيد 👍', 'جيد جدًا 😍', 'ممتاز 🔥'];
 const FB_THEMES = {
-  teal:   { label:'تركوازي', a:'#0f766e', b:'#0b3b4a', text:'#ffffff', sub:'rgba(255,255,255,.75)', deco:'rgba(255,255,255,.08)', quote:'rgba(255,255,255,.14)', star:'#fcd34d', starOff:'rgba(255,255,255,.25)', pill:'rgba(255,255,255,.16)', avatar:'#ffffff', avatarText:'#0f766e' },
-  violet: { label:'بنفسجي',  a:'#7c3aed', b:'#312e81', text:'#ffffff', sub:'rgba(255,255,255,.75)', deco:'rgba(255,255,255,.08)', quote:'rgba(255,255,255,.14)', star:'#fcd34d', starOff:'rgba(255,255,255,.25)', pill:'rgba(255,255,255,.16)', avatar:'#ffffff', avatarText:'#6d28d9' },
-  sunset: { label:'غروب',    a:'#fb923c', b:'#be185d', text:'#ffffff', sub:'rgba(255,255,255,.8)',  deco:'rgba(255,255,255,.10)', quote:'rgba(255,255,255,.18)', star:'#fff7ae', starOff:'rgba(255,255,255,.3)',  pill:'rgba(255,255,255,.2)',  avatar:'#ffffff', avatarText:'#be185d' },
-  night:  { label:'ليلي',    a:'#0b1220', b:'#1e293b', text:'#f8fafc', sub:'rgba(248,250,252,.7)',  deco:'rgba(45,212,191,.10)',  quote:'rgba(45,212,191,.16)',  star:'#fbbf24', starOff:'rgba(248,250,252,.18)', pill:'rgba(248,250,252,.10)', avatar:'#2dd4bf', avatarText:'#0b1220' },
-  light:  { label:'فاتح',    a:'#ffffff', b:'#e2f3ef', text:'#0f172a', sub:'rgba(15,23,42,.6)',     deco:'rgba(15,118,110,.08)',  quote:'rgba(15,118,110,.12)',  star:'#f59e0b', starOff:'rgba(15,23,42,.14)',    pill:'rgba(15,118,110,.10)',  avatar:'#0f766e', avatarText:'#ffffff' },
+  medora: { label:'ألوان المنصة', a:'#eaf5f8', b:'#c9e4ec', ink:'#0f4c5c', deco:'rgba(31,122,140,.10)', pill:'#ffffff', pillText:'#0f4c5c', av:'#1f7a8c', avText:'#ffffff', star:'#f5b942', starEdge:'#e39b14', starOff:'rgba(15,76,92,.16)' },
+  teal:   { label:'تركوازي داكن', a:'#1f7a8c', b:'#0f4c5c', ink:'#ffffff', deco:'rgba(255,255,255,.08)', pill:'rgba(255,255,255,.18)', pillText:'#ffffff', av:'#ffffff', avText:'#0f4c5c', star:'#fcd34d', starEdge:'#f5b942', starOff:'rgba(255,255,255,.28)' },
+  blue:   { label:'أزرق (طب الأسنان)', a:'#eaf0fb', b:'#cfdaf2', ink:'#17306b', deco:'rgba(47,95,196,.10)', pill:'#ffffff', pillText:'#17306b', av:'#2f5fc4', avText:'#ffffff', star:'#f5b942', starEdge:'#e39b14', starOff:'rgba(23,48,107,.16)' },
+  night:  { label:'ليلي', a:'#0f1f26', b:'#183039', ink:'#d9f1f6', deco:'rgba(53,169,192,.12)', pill:'rgba(217,241,246,.10)', pillText:'#d9f1f6', av:'#35a9c0', avText:'#0f1f26', star:'#fbbf24', starEdge:'#f59e0b', starOff:'rgba(217,241,246,.2)' },
 };
 function fbThemeSwatch(id){ const t = FB_THEMES[id]; return `linear-gradient(135deg, ${t.a}, ${t.b})`; }
 
 let fbRun = null;
-let fbAdmin = { loaded:false, loading:false, error:'', forms:[], stats:{}, formId:null, entries:[], entriesLoading:false, entriesError:'', theme:'teal', mode:'square', filter:'all', busy:'' };
+let fbAdmin = { loaded:false, loading:false, error:'', forms:[], stats:{}, formId:null, entries:[], entriesLoading:false, entriesError:'', theme:'medora', mode:'square', filter:'all', busy:'' };
 let fbWall = { loaded:false, loading:false, error:'', items:[] };
 
 function fbLink(id){ return location.origin + '/feedback/' + id; }
@@ -10452,7 +10451,10 @@ function fbNewId(){
 }
 function fbErrMsg(e){
   if(e && (e.code === '42P01' || e.code === 'PGRST205')) return 'نظام الفيدباك غير مفعّل بعد — شغّل ملف feedback.sql من Supabase أولًا.';
-  return (typeof isNetworkOrServerError === 'function' && isNetworkOrServerError(e)) ? SERVER_BUSY_MSG : 'حدث خطأ غير متوقع، حاول مرة أخرى.';
+  if(e && (e.code === '42501' || /permission denied|row-level security/i.test(String(e.message || '')))) return 'ما في صلاحية على جداول الفيدباك — شغّل ملف feedback.sql كامل (فيه أوامر grant و policies) ثم جرّب مرة ثانية.';
+  if(typeof isNetworkOrServerError === 'function' && isNetworkOrServerError(e)) return SERVER_BUSY_MSG;
+  const detail = e ? [e.code, e.message].filter(Boolean).join(' — ').slice(0, 160) : '';
+  return 'حدث خطأ غير متوقع، حاول مرة أخرى.' + (detail ? ' (' + detail + ')' : '');
 }
 function fbMapForm(r){ return { id:r.id, title:r.title, description:r.description || '', active:r.active !== false, createdAt:Number(r.created_at) || 0 }; }
 function fbMapEntry(r){ return { id:r.id, formId:r.form_id, formTitle:r.form_title || '', name:r.name, rating:Number(r.rating) || 0, comment:r.comment || '', featured:!!r.featured, createdAt:Number(r.created_at) || 0 }; }
@@ -10565,12 +10567,20 @@ function injectFeedbackStyles(){
 
     /* ---------- جدار آراء الطلاب ---------- */
     .fbw-grid{ columns:3 280px; column-gap:16px; }
-    .fbw-card{ break-inside:avoid; margin-bottom:16px; padding:22px 20px; border-radius:22px; color:#fff; box-shadow:0 10px 26px rgba(0,0,0,.12); }
-    .fbw-card .q{ font-size:16px; line-height:1.9; margin:10px 0 14px; white-space:pre-wrap; word-break:break-word; }
-    .fbw-card .st{ color:#fcd34d; font-size:20px; direction:ltr; text-align:right; }
-    .fbw-card .who{ font-weight:800; font-size:14px; display:flex; align-items:center; gap:8px; }
-    .fbw-card .who i{ width:30px; height:30px; border-radius:50%; background:rgba(255,255,255,.9); color:#0f766e; display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-weight:900; }
-    .fbw-card .for{ font-size:12px; opacity:.75; margin-top:6px; }
+    .fbw-card{ break-inside:avoid; margin-bottom:16px; padding:16px 14px 14px; border-radius:22px; background:#eaf5f8; border:1px solid #d3e6eb; box-shadow:0 10px 26px rgba(15,76,92,.10); }
+    body.dark .fbw-card{ background:#15262e; border-color:#24414c; }
+    .fbw-card .st{ text-align:center; color:#f5b942; font-size:26px; letter-spacing:2px; direction:ltr; margin-bottom:10px; text-shadow:0 3px 10px rgba(245,185,66,.4); }
+    .fbw-card .st s{ text-decoration:none; color:rgba(15,76,92,.18); text-shadow:none; }
+    body.dark .fbw-card .st s{ color:rgba(217,241,246,.2); }
+    .fbw-card .q{ position:relative; border-radius:10px 14px 14px 10px; background-color:#fffef6; border:1px solid #e6dfc3; box-shadow:0 4px 12px rgba(15,76,92,.10); padding:0 52px 0 14px; min-height:102px;
+      font-size:15px; line-height:34px; color:#27374a; white-space:pre-wrap; word-break:break-word; overflow:hidden;
+      background-image:linear-gradient(to left, transparent 44px, #f2a4a4 44px, #f2a4a4 46px, transparent 46px), repeating-linear-gradient(to bottom, transparent 0, transparent 33px, #b9d7e2 33px, #b9d7e2 34px); }
+    .fbw-card .q::before{ content:''; position:absolute; top:0; bottom:0; right:0; width:22px; background:radial-gradient(circle at 50% 17px, #d9e6ea 4px, #b9ccd3 5px, transparent 6px) 0 0/100% 34px repeat-y, #f1ecd6; border-left:1px dashed #d6cfae; }
+    .fbw-card .q.lbl{ font-weight:800; color:#1f7a8c; font-size:20px; }
+    .fbw-card .who{ margin-top:12px; font-weight:800; font-size:14px; display:flex; align-items:center; gap:8px; color:#0f4c5c; }
+    body.dark .fbw-card .who{ color:#d9f1f6; }
+    .fbw-card .who i{ width:30px; height:30px; border-radius:50%; background:#1f7a8c; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-weight:900; }
+    .fbw-card .for{ font-size:12px; color:#5b7b88; margin-top:6px; }
     @media (max-width:640px){ .fbk-star{ font-size:44px; } .fba-grid{ grid-template-columns:1fr 1fr; gap:10px; } }
   `;
   document.head.appendChild(style);
@@ -10767,7 +10777,7 @@ function fbFit(ctx, text, maxW){
 }
 
 async function fbDrawCard(canvas, e, courseTitle, themeId, mode, scale){
-  const T = FB_THEMES[themeId] || FB_THEMES.teal;
+  const T = FB_THEMES[themeId] || FB_THEMES.medora;
   const W = 1080, H = mode === 'story' ? 1920 : 1080;
   canvas.width = Math.round(W * scale); canvas.height = Math.round(H * scale);
   const ctx = canvas.getContext('2d');
@@ -10776,80 +10786,97 @@ async function fbDrawCard(canvas, e, courseTitle, themeId, mode, scale){
   try{ if(document.fonts && document.fonts.load){ await Promise.all([document.fonts.load('800 48px ' + fam, 'ابتث'), document.fonts.load('700 48px ' + fam, 'ابتث')]); } }catch(_){}
   const logo = await fbLogoImg();
 
-  /* الخلفية */
+  /* الخلفية بألوان المنصة */
   const bg = ctx.createLinearGradient(0, 0, W * 0.6, H);
   bg.addColorStop(0, T.a); bg.addColorStop(1, T.b);
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = T.deco;
-  [[W * .92, H * .08, 330], [W * .04, H * .93, 280], [W * .8, H * .64, 120], [W * .16, H * .22, 70]].forEach(([x, y, rr]) => { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill(); });
+  [[W * .92, H * .06, 320], [W * .03, H * .95, 280], [W * .85, H * .7, 110], [W * .12, H * .2, 70]].forEach(([x, y, rr]) => { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill(); });
 
   /* الرأس: الشعار + اسم المنصة + المادة */
-  const padX = 90, top = mode === 'story' ? 250 : 88, ls = 84, lx = W - padX - ls;
+  const padX = 90, top = mode === 'story' ? 250 : 80, ls = 84, lx = W - padX - ls;
   ctx.save(); ctx.beginPath(); ctx.arc(lx + ls / 2, top + ls / 2, ls / 2, 0, Math.PI * 2); ctx.clip();
   if(logo){ ctx.drawImage(logo, lx, top, ls, ls); }
-  else { ctx.fillStyle = T.pill; ctx.fillRect(lx, top, ls, ls); ctx.fillStyle = T.text; ctx.font = `800 44px ${fam}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('M', lx + ls / 2, top + ls / 2 + 2); }
+  else { ctx.fillStyle = T.av; ctx.fillRect(lx, top, ls, ls); ctx.fillStyle = T.avText; ctx.font = `800 44px ${fam}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('M', lx + ls / 2, top + ls / 2 + 2); }
   ctx.restore();
-  ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = T.text; ctx.font = `800 40px ${fam}`;
+  ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = T.ink; ctx.font = `800 40px ${fam}`;
   ctx.fillText('MEDORA', lx - 20, top + ls / 2 + 2);
   ctx.direction = 'rtl';
   if(courseTitle){
     ctx.font = `700 30px ${fam}`;
     const ct = fbFit(ctx, courseTitle, 380), pw = Math.min(ctx.measureText(ct).width + 56, 436), ph = 64;
     fbRoundRect(ctx, padX, top + (ls - ph) / 2, pw, ph, 32); ctx.fillStyle = T.pill; ctx.fill();
-    ctx.fillStyle = T.text; ctx.textAlign = 'center'; ctx.fillText(ct, padX + pw / 2, top + ls / 2 + 2);
+    ctx.fillStyle = T.pillText; ctx.textAlign = 'center'; ctx.fillText(ct, padX + pw / 2, top + ls / 2 + 2);
   }
 
-  /* منطقة المحتوى */
-  const bottomReserve = mode === 'story' ? 330 : 90, footH = 120;
-  const footY = H - bottomReserve - footH;
-  const areaTop = top + ls + 50, areaBottom = footY - 30;
-  const maxW = W - padX * 2 - 30, starR = 46, starGap = 112, starsH = starR * 2, gap = 64;
-  const comment = (e.comment || '').trim(), hasComment = !!comment;
-  let lines = [], fs = 60, lh = 96, blockH;
-  if(hasComment){
-    const avail = areaBottom - areaTop - starsH - gap;
-    for(fs = 64; fs >= 30; fs -= 2){ ctx.font = `700 ${fs}px ${fam}`; lh = Math.round(fs * 1.65); lines = fbWrap(ctx, comment, maxW); if(lines.length * lh <= avail) break; }
-    const maxLines = Math.max(1, Math.floor(avail / lh));
-    if(lines.length > maxLines){ lines = lines.slice(0, maxLines); lines[maxLines - 1] = fbFit(ctx, lines[maxLines - 1] + ' …', maxW); }
-    blockH = starsH + gap + lines.length * lh;
-  } else { blockH = starsH + gap + 130; }
-  const y0 = areaTop + Math.max(0, (areaBottom - areaTop - blockH) / 2);
-
-  /* علامة الاقتباس خلف النص */
-  ctx.save(); ctx.direction = 'ltr'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = T.quote; ctx.font = `900 420px Georgia, 'Times New Roman', serif`;
-  ctx.fillText('\u201D', W / 2, y0 + 250); ctx.restore();
-
-  /* النجوم */
+  /* النجوم فوق الدفتر */
+  const starR = 44, starGap = 108, starsTop = top + ls + 44, starCy = starsTop + starR;
   for(let i = 1; i <= 5; i++){
-    const cx = W / 2 + (3 - i) * starGap, cy = y0 + starR, on = i <= e.rating;
+    const cx = W / 2 + (3 - i) * starGap, on = i <= e.rating;
     ctx.save();
-    if(on){ ctx.shadowColor = T.star; ctx.shadowBlur = 28; }
-    fbStarPath(ctx, cx, cy, starR); ctx.fillStyle = on ? T.star : T.starOff; ctx.fill();
-    ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = on ? T.star : T.starOff; ctx.stroke();
+    if(on){ ctx.shadowColor = 'rgba(245,185,66,.55)'; ctx.shadowBlur = 22; ctx.shadowOffsetY = 6; }
+    fbStarPath(ctx, cx, starCy, starR); ctx.fillStyle = on ? T.star : T.starOff; ctx.fill();
+    ctx.shadowColor = 'transparent'; ctx.lineJoin = 'round'; ctx.lineWidth = 6; ctx.strokeStyle = on ? T.starEdge : T.starOff; ctx.stroke();
     ctx.restore();
   }
 
-  /* النص */
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl'; ctx.fillStyle = T.text;
-  const textTop = y0 + starsH + gap;
+  /* الدفتر المسطّر */
+  const bottomReserve = mode === 'story' ? 330 : 90, footH = 120;
+  const footY = H - bottomReserve - footH;
+  const px0 = padX, px1 = W - padX, pTop = starsTop + starR * 2 + 40, pBot = footY - 26, pH = pBot - pTop;
+  const bindW = 76, marginX = px1 - bindW - 54;
+  const textR = marginX - 26, textL = px0 + 46, maxW = textR - textL;
+  const padTop = 30, padBot = 26;
+  const comment = (e.comment || '').trim(), hasComment = !!comment;
+  let lines = [], fs = 44, lh = 70;
+  const avail = pH - padTop - padBot;
   if(hasComment){
-    ctx.font = `700 ${fs}px ${fam}`;
-    lines.forEach((ln, i) => ctx.fillText(ln, W / 2, textTop + i * lh + lh / 2));
-  } else {
-    ctx.font = `800 120px ${fam}`;
-    ctx.fillText(FB_LABELS[e.rating] || '', W / 2, textTop + 65);
+    for(fs = 46; fs >= 26; fs -= 2){ ctx.font = `600 ${fs}px ${fam}`; lh = Math.round(fs * 1.62); lines = fbWrap(ctx, comment, maxW); if(lines.length * lh <= avail) break; }
+    const maxLines = Math.max(1, Math.floor(avail / lh));
+    if(lines.length > maxLines){ lines = lines.slice(0, maxLines); lines[maxLines - 1] = fbFit(ctx, lines[maxLines - 1] + ' …', maxW); }
+  } else { fs = 64; lh = 100; lines = [FB_LABELS[e.rating] || '']; }
+
+  ctx.save();
+  const pcx = W / 2, pcy = (pTop + pBot) / 2;
+  ctx.translate(pcx, pcy); ctx.rotate(-0.012); ctx.translate(-pcx, -pcy);
+  /* ظل + ورقة */
+  ctx.save(); ctx.shadowColor = 'rgba(15,76,92,.28)'; ctx.shadowBlur = 46; ctx.shadowOffsetY = 16;
+  fbRoundRect(ctx, px0, pTop, px1 - px0, pH, 26); ctx.fillStyle = '#fffef6'; ctx.fill(); ctx.restore();
+  ctx.save(); fbRoundRect(ctx, px0, pTop, px1 - px0, pH, 26); ctx.clip();
+  /* شريط التجليد على اليمين + الثقوب */
+  ctx.fillStyle = '#f1ecd6'; ctx.fillRect(px1 - bindW, pTop, bindW, pH);
+  ctx.strokeStyle = '#d6cfae'; ctx.lineWidth = 3; ctx.setLineDash([12, 10]);
+  ctx.beginPath(); ctx.moveTo(px1 - bindW, pTop); ctx.lineTo(px1 - bindW, pBot); ctx.stroke(); ctx.setLineDash([]);
+  for(let hy = pTop + 56; hy < pBot - 20; hy += 96){
+    ctx.beginPath(); ctx.arc(px1 - bindW / 2, hy, 15, 0, Math.PI * 2); ctx.fillStyle = '#c9dde3'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#a9c3cc'; ctx.stroke();
   }
+  /* السطور الزرقاء + خط الهامش الأحمر */
+  const lineTop = pTop + padTop;
+  ctx.strokeStyle = '#b9d7e2'; ctx.lineWidth = 2.5;
+  for(let ly = lineTop + lh; ly < pBot - 10; ly += lh){ ctx.beginPath(); ctx.moveTo(px0, ly); ctx.lineTo(px1 - bindW, ly); ctx.stroke(); }
+  ctx.strokeStyle = '#f2a4a4'; ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.moveTo(marginX, pTop); ctx.lineTo(marginX, pBot); ctx.stroke();
+  /* نص الرأي فوق السطور */
+  ctx.direction = 'rtl'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = hasComment ? '#27374a' : '#1f7a8c';
+  ctx.font = `${hasComment ? 600 : 800} ${fs}px ${fam}`;
+  lines.forEach((ln, i) => ctx.fillText(ln, textR, lineTop + (i + 1) * lh - Math.round(lh * 0.27)));
+  ctx.restore();
+  ctx.restore();
 
   /* الاسم */
+  ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
   ctx.font = `800 44px ${fam}`;
   const nm = fbFit(ctx, e.name || '', 520), nameW = ctx.measureText(nm).width;
-  const pillH = 104, avR = 40, pillW = nameW + avR * 2 + 74, px = (W - pillW) / 2, py = footY + 8;
-  fbRoundRect(ctx, px, py, pillW, pillH, pillH / 2); ctx.fillStyle = T.pill; ctx.fill();
-  const acx = px + pillW - 14 - avR, acy = py + pillH / 2;
-  ctx.beginPath(); ctx.arc(acx, acy, avR, 0, Math.PI * 2); ctx.fillStyle = T.avatar; ctx.fill();
-  ctx.fillStyle = T.avatarText; ctx.textAlign = 'center'; ctx.font = `800 42px ${fam}`;
+  const pillH = 104, avR = 40, pillW = nameW + avR * 2 + 74, ppx = (W - pillW) / 2, ppy = footY + 8;
+  ctx.save(); ctx.shadowColor = 'rgba(15,76,92,.16)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 6;
+  fbRoundRect(ctx, ppx, ppy, pillW, pillH, pillH / 2); ctx.fillStyle = T.pill; ctx.fill(); ctx.restore();
+  const acx = ppx + pillW - 14 - avR, acy = ppy + pillH / 2;
+  ctx.beginPath(); ctx.arc(acx, acy, avR, 0, Math.PI * 2); ctx.fillStyle = T.av; ctx.fill();
+  ctx.fillStyle = T.avText; ctx.textAlign = 'center'; ctx.font = `800 42px ${fam}`;
   ctx.fillText(Array.from(e.name || '؟')[0].toUpperCase(), acx, acy + 2);
-  ctx.fillStyle = T.text; ctx.textAlign = 'right'; ctx.font = `800 44px ${fam}`;
+  ctx.fillStyle = T.pillText; ctx.textAlign = 'right'; ctx.font = `800 44px ${fam}`;
   ctx.fillText(nm, acx - avR - 20, acy + 2);
   return canvas;
 }
@@ -11148,16 +11175,14 @@ function pageFeedbackWall(){
   const head = `<div class="toolbar"><h2>🌟 آراء الطلاب</h2></div><p class="hint" style="margin:-10px 0 20px;">تقييمات حقيقية من طلاب المنصة عن الشرح والمواد.</p>`;
   if(fbWall.error) return `<section class="section"><div class="container">${head}<div class="empty-state"><p>${escapeHtml(fbWall.error)}</p></div></div></section>`;
   if(!fbWall.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
-  const keys = Object.keys(FB_THEMES).filter(k => k !== 'light');
   return `<section class="section"><div class="container">${head}
-    ${fbWall.items.length ? `<div class="fbw-grid">${fbWall.items.map((e, i) => {
-      const t = FB_THEMES[keys[i % keys.length]];
-      return `<div class="fbw-card" style="background:linear-gradient(145deg, ${t.a}, ${t.b});">
-        <div class="st">${'★'.repeat(e.rating)}<span style="opacity:.3">${'★'.repeat(5 - e.rating)}</span></div>
-        <div class="q i18n-skip">${e.comment.trim() ? escapeHtml(e.comment) : escapeHtml(FB_LABELS[e.rating])}</div>
+    ${fbWall.items.length ? `<div class="fbw-grid">${fbWall.items.map(e => `
+      <div class="fbw-card">
+        <div class="st">${'★'.repeat(e.rating)}<s>${'★'.repeat(5 - e.rating)}</s></div>
+        <div class="q i18n-skip${e.comment.trim() ? '' : ' lbl'}">${e.comment.trim() ? escapeHtml(e.comment) : escapeHtml(FB_LABELS[e.rating])}</div>
         <div class="who i18n-skip"><i>${escapeHtml(Array.from(e.name || '؟')[0].toUpperCase())}</i>${escapeHtml(e.name)}</div>
         ${e.formTitle ? `<div class="for i18n-skip">${escapeHtml(e.formTitle)}</div>` : ''}
-      </div>`; }).join('')}</div>` : `<div class="empty-state" style="padding:26px;"><p>لا توجد آراء منشورة بعد.</p></div>`}
+      </div>`).join('')}</div>` : `<div class="empty-state" style="padding:26px;"><p>لا توجد آراء منشورة بعد.</p></div>`}
   </div></section>`;
 }
 
