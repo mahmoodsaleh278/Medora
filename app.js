@@ -3440,6 +3440,13 @@ function pageBankRunning(){
   }
 
   const isLast = quiz.idx === total - 1;
+  const answeredCount = quiz.pool.filter(isQuestionAnswered).length;
+  const navResultCls = (x)=>{
+    if(quiz.mode !== 'study' || !isQuestionAnswered(x)) return '';
+    const ok = isQuestionCorrect(x);          // null للأسئلة الكتابية (مراجعة ذاتية) فتبقى "مُجاب" عادي
+    return ok === true ? 'q-correct' : ok === false ? 'q-wrong' : '';
+  };
+  const navGrid = quiz.pool.map((x, i) => `<button type="button" class="exam-nb ${isQuestionAnswered(x) ? 'answered' : ''} ${navResultCls(x)} ${i === quiz.idx ? 'current' : ''}" data-quiz-goto="${i}" aria-label="السؤال ${i+1}">${i+1}</button>`).join('');
 
   const isStudent = state.session && state.session.type === 'student';
   const saved = isStudent && isQuestionSaved(q.id);
@@ -3449,12 +3456,13 @@ function pageBankRunning(){
 
   return `
   <section class="section">
-    <div class="wizard-wrap">
+    <div class="exam-wrap">
       <div class="quiz-topline">
         <span>السؤال ${quiz.idx+1} من ${total}</span>
         <span class="quiz-mode-badge">${quiz.mode === 'study' ? '📖 نظام دراسي' : '⏱ نظام اختبار'}</span>
       </div>
       <div class="quiz-progress-bar"><div style="width:${pct}%;"></div></div>
+      <div class="exam-layout">
       <div class="wizard-card">
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
           <span class="q-tag ${q.nature==='ref'?'ref':'past'}">${natureLabel(q.nature)}</span>
@@ -3465,8 +3473,17 @@ function pageBankRunning(){
         ${revealed && q.explanation ? explainBoxHtml(renderRichContent(q.explanation)) : ''}
         <div class="wizard-nav">
           <button class="btn small" id="quitQuizBtn">إنهاء والخروج</button>
+          <button class="btn small" id="quizPrevBtn" ${quiz.idx === 0 ? 'disabled' : ''}>→ السابق</button>
           <button class="btn teal solid" id="quizNextBtn" ${canProceed ? '' : 'disabled'}>${isLast ? 'إنهاء وعرض النتيجة' : 'السؤال التالي'}</button>
         </div>
+      </div>
+      <aside class="exam-nav-card">
+        <h4><span>🗂 الأسئلة</span><span class="exam-meta">${answeredCount} / ${total} مُجاب</span></h4>
+        <div class="exam-nav-grid">${navGrid}</div>
+        <div class="exam-legend">${quiz.mode === 'study'
+          ? '<span><i class="g"></i>صحيحة</span><span><i class="r"></i>خاطئة</span><span><i></i>غير مُجاب</span>'
+          : '<span><i class="a"></i>مُجاب</span><span><i></i>غير مُجاب</span>'}</div>
+      </aside>
       </div>
     </div>
   </section>
@@ -9211,6 +9228,10 @@ function injectExamStyles(){
       font-family:inherit; font-weight:800; font-size:13.5px; cursor:pointer; padding:0; }
     .exam-nb.answered{ background: color-mix(in srgb, var(--teal) 14%, var(--card)); border-color: var(--teal); }
     .exam-nb.current{ outline:3px solid var(--teal); outline-offset:1px; }
+    .exam-nb.q-correct{ background:#dcfce7; border-color:#16a34a; color:#166534; }
+    .exam-nb.q-wrong{ background:#fee2e2; border-color:#dc2626; color:#991b1b; }
+    .exam-legend i.g{ background:#dcfce7; border-color:#16a34a; }
+    .exam-legend i.r{ background:#fee2e2; border-color:#dc2626; }
     .exam-nb.flagged::after{ content:'🚩'; position:absolute; top:-8px; inset-inline-end:-5px; font-size:12px; }
     .exam-legend{ display:flex; flex-wrap:wrap; gap:10px; font-size:11.5px; color:var(--muted); margin-bottom:14px; }
     .exam-legend i{ display:inline-block; width:12px; height:12px; border-radius:4px; border:1.5px solid var(--border); vertical-align:-2px; margin-inline-end:4px; }
@@ -11507,6 +11528,14 @@ function bindPageEvents(route){
       });
       const quitBtn = document.getElementById('quitQuizBtn');
       if(quitBtn) quitBtn.addEventListener('click', ()=>{ resetQuiz(); render().then(()=> scrollToQuizTop()); });
+      const prevBtn = document.getElementById('quizPrevBtn');
+      if(prevBtn) prevBtn.addEventListener('click', ()=>{
+        if(quiz.idx > 0){ quiz.idx--; render().then(()=> scrollToQuizTop()); }
+      });
+      document.querySelectorAll('[data-quiz-goto]').forEach(b=> b.addEventListener('click', ()=>{
+        const to = Number(b.dataset.quizGoto);
+        if(to !== quiz.idx){ quiz.idx = to; render().then(()=> scrollToQuizTop()); }
+      }));
     }
     if(quiz.step === 'results'){
       const newBtn = document.getElementById('newQuizBtn'); if(newBtn) newBtn.addEventListener('click', ()=>{ resetQuiz(); render().then(()=> scrollToQuizTop()); });
