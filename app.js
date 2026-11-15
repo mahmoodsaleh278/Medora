@@ -1728,6 +1728,7 @@ function renderNavState(){
         <a href="/admin-exams" class="btn small" style="border-color:#fff;color:#fff;">📝 الاختبارات</a>
         <a href="/admin-highyield" class="btn small" style="border-color:#fff;color:#fff;">🔥 High Yield</a>
         <a href="/admin-hubs" class="btn small" style="border-color:#fff;color:#fff;">📁 المجلدات</a>
+        <a href="/admin-feedback" class="btn small" style="border-color:#fff;color:#fff;">💬 الفيدباك</a>
         <a href="/store" class="btn small" style="border-color:#fff;color:#fff;">🛍️ المتجر</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
@@ -1747,6 +1748,7 @@ async function logout(){
   state.coupons = []; state.bankCoupons = []; state.bankAccess = [];
   state.students = []; state.messages = []; state.summaries = []; state.savedQuestions = []; state.summariesCount = null;
   hyRun = null; hyAdmin = { loaded:false, loading:false, items:[], error:'' };
+  fbAdmin = Object.assign(fbAdmin, { loaded:false, forms:[], stats:{}, formId:null, entries:[], error:'' });
   examStopTimers(); examRun = null; examAdmin = Object.assign(examAdmin, { loaded:false, exams:[], attempts:[], view:'list', examId:null, search:'' });
   navigate('home'); render();
 }
@@ -7855,6 +7857,7 @@ function setPageMeta({ title, description, noindex } = {}){
    noindex عشان ما تنفهرس بمحركات البحث. */
 function updateSeoMeta(route){
   if(route.startsWith('hy/')){ setPageMeta({ title: 'High Yield', noindex: true }); return; }
+  if(route.startsWith('feedback/')){ setPageMeta({ title: 'Feedback', noindex: true }); return; }
   if(route.startsWith('folder/')){ setPageMeta({ title: (hubRun && ((hubRun.data && hubRun.data.title) || (hubRun.pub && hubRun.pub.title))) || 'مجلد المادة', noindex: true }); return; }
   if(route.startsWith('exam/')){
     setPageMeta({ title: (examRun && examRun.info && examRun.info.title) ? examRun.info.title : 'اختبار', noindex: true });
@@ -7961,6 +7964,12 @@ function updateSeoMeta(route){
     case 'admin-hubs':
       setPageMeta({ title: 'مجلدات المواد', noindex: true });
       break;
+    case 'admin-feedback':
+      setPageMeta({ title: 'الفيدباك', noindex: true });
+      break;
+    case 'feedback-wall':
+      setPageMeta({ title: 'آراء الطلاب', description: 'تقييمات وآراء طلاب منصة MEDORA عن الشرح والمواد.' });
+      break;
 
     default:
       setPageMeta({ description: DEFAULT_DESCRIPTION });
@@ -7982,6 +7991,8 @@ async function render(){
     html = pageHighYield(hyIdFromRoute(route));
   } else if(route.startsWith('folder/')){
     html = pageHub(hubIdFromRoute(route));
+  } else if(route.startsWith('feedback/')){
+    html = pageFeedback(fbIdFromRoute(route));
   } else {
     switch(route){
       case 'home': html = pageHome(); break;
@@ -8005,6 +8016,8 @@ async function render(){
       case 'admin-exams': html = pageAdminExams(); break;
       case 'admin-highyield': html = pageAdminHighYield(); break;
       case 'admin-hubs': html = pageAdminHubs(); break;
+      case 'admin-feedback': html = pageAdminFeedback(); break;
+      case 'feedback-wall': html = pageFeedbackWall(); break;
       default: html = pageHome();
     }
   }
@@ -10405,6 +10418,739 @@ function bindAdminExamsEvents(){
 }
 
 /* =========================================================================
+   الفيدباك (Feedback)
+   - المشرف: صفحة /admin-feedback لإنشاء رابط فيدباك لكل مادة/محاضرة، يرسله للطلاب،
+     ويستقبل آراءهم كبطاقات جاهزة (مربع للمنشورات / 9:16 للستوري) يحمّلها كصور PNG،
+     وبإمكانه "نشر" أي رأي على جدار آراء الطلاب /feedback-wall ليراه كل الطلاب.
+   - الطالب: يفتح /feedback/<id> بدون تسجيل دخول، تظهر له كلمة Feedback بحركة، ثم يكتب
+     الاسم الذي يريد إظهاره، يقيّم بالنجوم، ويكتب رأيه.
+   - الجداول والصلاحيات المطلوبة: ملف feedback.sql (شغّله مرة واحدة من Supabase SQL Editor).
+   ========================================================================= */
+const FB_DONE_KEY = 'medora_fb_done_';
+const FB_LABELS = ['', 'ضعيف', 'مقبول', 'جيد', 'جيد جدًا', 'ممتاز'];
+const FB_LABELS_EMOJI = ['اختر تقييمك', 'ضعيف 😕', 'مقبول 🙂', 'جيد 👍', 'جيد جدًا 😍', 'ممتاز 🔥'];
+const FB_THEMES = {
+  teal:   { label:'تركوازي', a:'#0f766e', b:'#0b3b4a', text:'#ffffff', sub:'rgba(255,255,255,.75)', deco:'rgba(255,255,255,.08)', quote:'rgba(255,255,255,.14)', star:'#fcd34d', starOff:'rgba(255,255,255,.25)', pill:'rgba(255,255,255,.16)', avatar:'#ffffff', avatarText:'#0f766e' },
+  violet: { label:'بنفسجي',  a:'#7c3aed', b:'#312e81', text:'#ffffff', sub:'rgba(255,255,255,.75)', deco:'rgba(255,255,255,.08)', quote:'rgba(255,255,255,.14)', star:'#fcd34d', starOff:'rgba(255,255,255,.25)', pill:'rgba(255,255,255,.16)', avatar:'#ffffff', avatarText:'#6d28d9' },
+  sunset: { label:'غروب',    a:'#fb923c', b:'#be185d', text:'#ffffff', sub:'rgba(255,255,255,.8)',  deco:'rgba(255,255,255,.10)', quote:'rgba(255,255,255,.18)', star:'#fff7ae', starOff:'rgba(255,255,255,.3)',  pill:'rgba(255,255,255,.2)',  avatar:'#ffffff', avatarText:'#be185d' },
+  night:  { label:'ليلي',    a:'#0b1220', b:'#1e293b', text:'#f8fafc', sub:'rgba(248,250,252,.7)',  deco:'rgba(45,212,191,.10)',  quote:'rgba(45,212,191,.16)',  star:'#fbbf24', starOff:'rgba(248,250,252,.18)', pill:'rgba(248,250,252,.10)', avatar:'#2dd4bf', avatarText:'#0b1220' },
+  light:  { label:'فاتح',    a:'#ffffff', b:'#e2f3ef', text:'#0f172a', sub:'rgba(15,23,42,.6)',     deco:'rgba(15,118,110,.08)',  quote:'rgba(15,118,110,.12)',  star:'#f59e0b', starOff:'rgba(15,23,42,.14)',    pill:'rgba(15,118,110,.10)',  avatar:'#0f766e', avatarText:'#ffffff' },
+};
+function fbThemeSwatch(id){ const t = FB_THEMES[id]; return `linear-gradient(135deg, ${t.a}, ${t.b})`; }
+
+let fbRun = null;
+let fbAdmin = { loaded:false, loading:false, error:'', forms:[], stats:{}, formId:null, entries:[], entriesLoading:false, entriesError:'', theme:'teal', mode:'square', filter:'all', busy:'' };
+let fbWall = { loaded:false, loading:false, error:'', items:[] };
+
+function fbLink(id){ return location.origin + '/feedback/' + id; }
+function fbIdFromRoute(route){ return route && route.startsWith('feedback/') ? decodeURIComponent(route.slice(9).split('/')[0]) : null; }
+function fbNewId(){
+  const abc = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = '';
+  const r = new Uint8Array(8); (window.crypto || window.msCrypto).getRandomValues(r);
+  r.forEach(n => { s += abc[n % abc.length]; });
+  return s;
+}
+function fbErrMsg(e){
+  if(e && (e.code === '42P01' || e.code === 'PGRST205')) return 'نظام الفيدباك غير مفعّل بعد — شغّل ملف feedback.sql من Supabase أولًا.';
+  return (typeof isNetworkOrServerError === 'function' && isNetworkOrServerError(e)) ? SERVER_BUSY_MSG : 'حدث خطأ غير متوقع، حاول مرة أخرى.';
+}
+function fbMapForm(r){ return { id:r.id, title:r.title, description:r.description || '', active:r.active !== false, createdAt:Number(r.created_at) || 0 }; }
+function fbMapEntry(r){ return { id:r.id, formId:r.form_id, formTitle:r.form_title || '', name:r.name, rating:Number(r.rating) || 0, comment:r.comment || '', featured:!!r.featured, createdAt:Number(r.created_at) || 0 }; }
+function fbStarsHtml(n){ return '★'.repeat(n) + '<span style="opacity:.3">' + '★'.repeat(5 - n) + '</span>'; }
+
+function injectFeedbackStyles(){
+  if(document.getElementById('fbStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'fbStyles';
+  style.textContent = `
+    /* ---------- صفحة الطالب ---------- */
+    .fbk{ position:fixed; inset:0; z-index:950; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; align-items:center; justify-content:center; padding:24px 16px; background:#070b18; color:#fff; font-family:inherit; }
+    .fbk-bg{ position:fixed; inset:0; overflow:hidden; pointer-events:none; }
+    .fbk-bg i{ position:absolute; border-radius:50%; filter:blur(70px); opacity:.55; animation:fbkFloat 14s ease-in-out infinite; }
+    .fbk-bg .b1{ width:420px; height:420px; background:#14b8a6; top:-120px; right:-100px; }
+    .fbk-bg .b2{ width:360px; height:360px; background:#7c3aed; bottom:-120px; left:-80px; animation-delay:-5s; }
+    .fbk-bg .b3{ width:260px; height:260px; background:#f97316; top:46%; left:36%; opacity:.26; animation-delay:-9s; }
+    @keyframes fbkFloat{ 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(40px,-50px) scale(1.15); } }
+    .fbk-inner{ position:relative; z-index:1; width:100%; max-width:480px; margin:auto; }
+    .fbk-center{ text-align:center; }
+    .fbk-spin{ display:inline-block; width:38px; height:38px; border-radius:50%; border:4px solid rgba(255,255,255,.2); border-top-color:#5eead4; animation:fbkSpin .8s linear infinite; }
+    @keyframes fbkSpin{ to{ transform:rotate(360deg); } }
+
+    .fbk-intro{ position:relative; text-align:center; cursor:pointer; user-select:none; -webkit-user-select:none; padding:40px 0; transition:opacity .38s ease, transform .38s ease, filter .38s ease; }
+    .fbk-intro.leave{ opacity:0; transform:scale(1.08) translateY(-12px); filter:blur(8px); }
+    .fbk-word{ display:flex; justify-content:center; direction:ltr; font-size:clamp(46px, 15vw, 96px); font-weight:900; line-height:1.15; font-family:'Poppins','Inter',system-ui,-apple-system,'Segoe UI',sans-serif; }
+    .fbk-word span{ display:inline-block; opacity:0; transform:translateY(60%) rotate(8deg) scale(.6); filter:blur(12px);
+      background:linear-gradient(110deg,#5eead4,#a78bfa,#fb923c,#5eead4); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; -webkit-text-fill-color:transparent;
+      animation:fbkLetter .85s cubic-bezier(.2,.9,.3,1.3) forwards, fbkShine 4s linear infinite;
+      animation-delay:calc(var(--i) * .075s + .2s), 0s; }
+    @keyframes fbkLetter{ to{ opacity:1; transform:none; filter:blur(0); } }
+    @keyframes fbkShine{ to{ background-position:300% 0; } }
+    .fbk-line{ height:4px; width:0; margin:14px auto 0; border-radius:4px; background:linear-gradient(90deg,#5eead4,#a78bfa,#fb923c); animation:fbkLine .8s ease 1.1s forwards; }
+    @keyframes fbkLine{ to{ width:150px; } }
+    .fbk-sub{ margin:18px 0 0; font-size:17px; font-weight:700; color:rgba(255,255,255,.85); opacity:0; animation:fbkFade .7s ease 1.4s forwards; }
+    .fbk-tap{ margin-top:22px; font-size:13px; color:rgba(255,255,255,.55); opacity:0; animation:fbkFade .6s ease 1.9s forwards, fbkBlink 1.6s ease-in-out 2.5s infinite; }
+    @keyframes fbkFade{ to{ opacity:1; } }
+    @keyframes fbkBlink{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
+    .fbk-spark{ position:absolute; color:#fde68a; font-size:22px; opacity:0; animation:fbkTwinkle 2.4s ease-in-out infinite; }
+    .fbk-spark.s1{ top:6%; right:14%; animation-delay:.9s; } .fbk-spark.s2{ top:30%; left:8%; font-size:16px; animation-delay:1.5s; } .fbk-spark.s3{ bottom:8%; right:24%; font-size:18px; animation-delay:2s; }
+    @keyframes fbkTwinkle{ 0%,100%{ opacity:0; transform:scale(.4) rotate(0); } 50%{ opacity:1; transform:scale(1.2) rotate(45deg); } }
+
+    .fbk-glass{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:28px; padding:26px 22px; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); box-shadow:0 20px 60px rgba(0,0,0,.35); animation:fbkPop .6s cubic-bezier(.2,.9,.3,1.2); }
+    @keyframes fbkPop{ from{ opacity:0; transform:translateY(30px) scale(.94); } to{ opacity:1; transform:none; } }
+    .fbk-tag{ display:inline-block; font-size:13px; font-weight:800; padding:5px 12px; border-radius:999px; background:rgba(94,234,212,.15); color:#5eead4; margin-bottom:10px; }
+    .fbk-title{ margin:0 0 6px; font-size:22px; line-height:1.4; color:#fff; }
+    .fbk-desc{ margin:0 0 6px; font-size:14px; line-height:1.7; color:rgba(255,255,255,.7); }
+    .fbk-lab{ display:block; margin:16px 0 8px; font-size:14px; font-weight:700; color:rgba(255,255,255,.85); }
+    .fbk-in{ width:100%; box-sizing:border-box; background:rgba(255,255,255,.08); border:1.5px solid rgba(255,255,255,.18); border-radius:14px; padding:13px 15px; color:#fff; font-size:16px; font-family:inherit; outline:none; transition:border-color .2s, box-shadow .2s, background .2s; resize:vertical; }
+    .fbk-in::placeholder{ color:rgba(255,255,255,.4); }
+    .fbk-in:focus{ border-color:#5eead4; background:rgba(255,255,255,.12); box-shadow:0 0 0 4px rgba(94,234,212,.15); }
+    .fbk-stars{ display:flex; justify-content:center; gap:6px; direction:ltr; }
+    .fbk-star{ appearance:none; background:none; border:0; padding:0 2px; cursor:pointer; font-size:50px; line-height:1; color:rgba(255,255,255,.22); transition:transform .15s, color .2s, text-shadow .2s; -webkit-tap-highlight-color:transparent; }
+    .fbk-star:hover{ transform:scale(1.18); }
+    .fbk-star.on{ color:#fbbf24; text-shadow:0 0 22px rgba(251,191,36,.65); }
+    .fbk-star.pop{ animation:fbkStarPop .45s cubic-bezier(.2,.9,.3,1.6); }
+    @keyframes fbkStarPop{ 0%{ transform:scale(.6) rotate(-25deg); } 60%{ transform:scale(1.4) rotate(10deg); } 100%{ transform:scale(1); } }
+    .fbk-rlabel{ text-align:center; min-height:24px; margin-top:8px; font-weight:800; font-size:16px; color:#fde68a; }
+    .fbk-cnt{ text-align:left; direction:ltr; font-size:12px; color:rgba(255,255,255,.45); margin-top:4px; }
+    .fbk-msg{ min-height:20px; margin-top:8px; font-size:14px; font-weight:700; color:#fca5a5; text-align:center; }
+    .fbk-btn{ width:100%; margin-top:8px; border:0; border-radius:16px; padding:15px; font-size:17px; font-weight:800; font-family:inherit; color:#06201c; cursor:pointer; background:linear-gradient(110deg,#5eead4,#a78bfa,#5eead4); background-size:200% 100%; animation:fbkShine2 5s linear infinite; box-shadow:0 10px 30px rgba(94,234,212,.28); transition:transform .15s, opacity .2s; }
+    .fbk-btn:hover{ transform:translateY(-2px); } .fbk-btn:active{ transform:scale(.98); } .fbk-btn:disabled{ opacity:.6; cursor:default; }
+    @keyframes fbkShine2{ to{ background-position:200% 0; } }
+    .fbk-link{ background:none; border:0; color:rgba(255,255,255,.6); font-size:14px; font-family:inherit; text-decoration:underline; cursor:pointer; margin-top:14px; }
+    .fbk-emoji{ font-size:54px; margin-bottom:8px; }
+    .fbk-done h2{ margin:14px 0 6px; font-size:24px; color:#fff; }
+    .fbk-done p{ margin:0; color:rgba(255,255,255,.75); line-height:1.8; }
+    .fbk-check{ width:92px; height:92px; }
+    .fbk-check circle{ stroke-dasharray:152; stroke-dashoffset:152; animation:fbkDraw .8s ease forwards; }
+    .fbk-check path{ stroke-dasharray:40; stroke-dashoffset:40; animation:fbkDraw .5s ease .6s forwards; }
+    @keyframes fbkDraw{ to{ stroke-dashoffset:0; } }
+    .fbk-stars-ro{ margin-top:14px; font-size:30px; color:#fbbf24; direction:ltr; text-shadow:0 0 18px rgba(251,191,36,.5); }
+    .fbk-confetti{ position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:2; }
+    .fbk-confetti i{ position:absolute; top:-20px; width:10px; height:16px; border-radius:3px; opacity:0; animation:fbkFall linear forwards; }
+    @keyframes fbkFall{ 0%{ opacity:1; transform:translateY(0) rotate(0); } 100%{ opacity:.9; transform:translateY(105vh) rotate(720deg); } }
+
+    /* ---------- صفحة المشرف ---------- */
+    .fba-stats{ display:flex; gap:22px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
+    .fba-avg{ text-align:center; min-width:110px; }
+    .fba-avg b{ display:block; font-size:44px; line-height:1; color:var(--teal); }
+    .fba-avg .st{ color:#f59e0b; font-size:18px; direction:ltr; }
+    .fba-dist{ flex:1; min-width:220px; }
+    .fba-dist div{ display:flex; align-items:center; gap:8px; font-size:13px; margin:3px 0; direction:ltr; }
+    .fba-dist .bar{ flex:1; height:8px; border-radius:6px; background:rgba(0,0,0,.08); overflow:hidden; }
+    .fba-dist .bar i{ display:block; height:100%; background:linear-gradient(90deg,#f59e0b,#fbbf24); border-radius:6px; }
+    .fba-controls{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:18px; }
+    .fba-sw{ width:30px; height:30px; border-radius:50%; border:3px solid transparent; cursor:pointer; box-shadow:0 0 0 1px rgba(0,0,0,.15); padding:0; }
+    .fba-sw.on{ border-color:var(--teal); box-shadow:0 0 0 2px #fff inset, 0 0 0 1px rgba(0,0,0,.2); transform:scale(1.12); }
+    .fba-seg{ display:inline-flex; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+    .fba-seg button{ border:0; background:transparent; padding:8px 14px; font-family:inherit; font-weight:700; font-size:13px; cursor:pointer; }
+    .fba-seg button.on{ background:var(--teal); color:#fff; }
+    .fba-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:18px; }
+    .fba-item{ border:1px solid var(--border); border-radius:18px; padding:10px; background:#fff; }
+    .fba-item canvas{ width:100%; height:auto; display:block; border-radius:12px; background:#eef2f3; }
+    .fba-acts{ display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+    .fba-acts .btn{ flex:1; justify-content:center; min-width:0; padding-inline:8px; }
+    .fba-meta{ font-size:12px; color:var(--muted); margin-top:8px; }
+
+    /* ---------- جدار آراء الطلاب ---------- */
+    .fbw-grid{ columns:3 280px; column-gap:16px; }
+    .fbw-card{ break-inside:avoid; margin-bottom:16px; padding:22px 20px; border-radius:22px; color:#fff; box-shadow:0 10px 26px rgba(0,0,0,.12); }
+    .fbw-card .q{ font-size:16px; line-height:1.9; margin:10px 0 14px; white-space:pre-wrap; word-break:break-word; }
+    .fbw-card .st{ color:#fcd34d; font-size:20px; direction:ltr; text-align:right; }
+    .fbw-card .who{ font-weight:800; font-size:14px; display:flex; align-items:center; gap:8px; }
+    .fbw-card .who i{ width:30px; height:30px; border-radius:50%; background:rgba(255,255,255,.9); color:#0f766e; display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-weight:900; }
+    .fbw-card .for{ font-size:12px; opacity:.75; margin-top:6px; }
+    @media (max-width:640px){ .fbk-star{ font-size:44px; } .fba-grid{ grid-template-columns:1fr 1fr; gap:10px; } }
+  `;
+  document.head.appendChild(style);
+}
+injectFeedbackStyles();
+
+/* ============================ جهة الطالب ============================ */
+function fbEnsureRun(id){
+  if(!fbRun || fbRun.id !== id){
+    if(fbRun && fbRun.timer) clearTimeout(fbRun.timer);
+    let done = false; try{ done = localStorage.getItem(FB_DONE_KEY + id) === '1'; }catch(e){}
+    fbRun = { id, form:null, loading:false, error:'', stage: done ? 'done' : 'intro', already:done, name:'', rating:0, comment:'', sending:false, timer:null };
+  }
+  return fbRun;
+}
+
+function pageFeedback(id){
+  const r = fbEnsureRun(id);
+  const wrap = inner => `<div class="fbk" id="fbkRoot"><div class="fbk-bg"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div><div class="fbk-inner">${inner}</div></div>`;
+  if(r.error) return wrap(`<div class="fbk-glass fbk-center"><div class="fbk-emoji">😕</div><h2 style="color:#fff;font-size:19px;line-height:1.7;margin:0;">${escapeHtml(r.error)}</h2></div>`);
+  if(!r.form) return wrap(`<div class="fbk-center"><span class="fbk-spin"></span></div>`);
+  const title = escapeHtml(r.form.title);
+
+  if(r.stage === 'intro'){
+    return wrap(`
+      <div class="fbk-intro" id="fbkIntro">
+        <span class="fbk-spark s1">✦</span><span class="fbk-spark s2">✧</span><span class="fbk-spark s3">✦</span>
+        <div class="fbk-word i18n-skip" dir="ltr" aria-label="Feedback">${'Feedback'.split('').map((c, i) => `<span style="--i:${i}">${c}</span>`).join('')}</div>
+        <div class="fbk-line"></div>
+        <p class="fbk-sub i18n-skip">${title}</p>
+        <div class="fbk-tap">اضغط للمتابعة</div>
+      </div>`);
+  }
+
+  if(r.stage === 'done'){
+    const colors = ['#5eead4', '#a78bfa', '#fb923c', '#fde68a', '#f472b6', '#60a5fa'];
+    const confetti = r.already ? '' : `<div class="fbk-confetti">${Array.from({ length:34 }, () =>
+      `<i style="left:${(Math.random() * 100).toFixed(1)}%; background:${colors[Math.floor(Math.random() * colors.length)]}; animation-duration:${(2.6 + Math.random() * 2.4).toFixed(2)}s; animation-delay:${(Math.random() * 1.2).toFixed(2)}s;"></i>`).join('')}</div>`;
+    return wrap(`
+      <div class="fbk-glass fbk-center fbk-done">
+        <svg class="fbk-check" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24" fill="none" stroke="#5eead4" stroke-width="3"/><path d="M14 27l8 8 16-17" fill="none" stroke="#5eead4" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h2 class="i18n-skip">${r.already ? 'شكرًا، وصلنا رأيك سابقًا 💙' : 'شكرًا ' + escapeHtml(r.name.trim()) + '! 💙'}</h2>
+        <p>رأيك وصل، وبيساعدنا نطوّر الشرح أكثر وأكثر.</p>
+        ${r.rating ? `<div class="fbk-stars-ro">${'★'.repeat(r.rating)}</div>` : ''}
+        <button class="fbk-link" id="fbkAgain" type="button">إرسال رأي جديد</button>
+      </div>${confetti}`);
+  }
+
+  return wrap(`
+    <form class="fbk-glass" id="fbkForm" autocomplete="off" novalidate>
+      <span class="fbk-tag">💬 Feedback</span>
+      <h2 class="fbk-title i18n-skip">${title}</h2>
+      ${r.form.description ? `<p class="fbk-desc i18n-skip">${escapeHtml(r.form.description)}</p>` : ''}
+      <label class="fbk-lab" for="fbkName">اسمك (الاسم اللي بدك يظهر مع رأيك)</label>
+      <input class="fbk-in" id="fbkName" maxlength="40" placeholder="مثال: سارة" value="${hubAttr(r.name)}">
+      <label class="fbk-lab">كيف كان الشرح؟</label>
+      <div class="fbk-stars" id="fbkStars" role="radiogroup" aria-label="التقييم">${[1, 2, 3, 4, 5].map(n => `<button type="button" class="fbk-star${n <= r.rating ? ' on' : ''}" data-star="${n}" aria-label="${n} من 5">★</button>`).join('')}</div>
+      <div class="fbk-rlabel" id="fbkRLabel">${FB_LABELS_EMOJI[r.rating]}</div>
+      <label class="fbk-lab" for="fbkComment">رأيك (اختياري)</label>
+      <textarea class="fbk-in" id="fbkComment" rows="4" maxlength="500" placeholder="شو أكثر شي عجبك؟ وشو بتقترح نحسّن؟">${escapeHtml(r.comment)}</textarea>
+      <div class="fbk-cnt"><span id="fbkCnt">${r.comment.length}</span>/500</div>
+      <input type="text" id="fbkHp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute; left:-9999px; width:0; height:0; opacity:0;">
+      <div class="fbk-msg" id="fbkMsg"></div>
+      <button class="fbk-btn" id="fbkSend" type="submit">إرسال الرأي 🚀</button>
+    </form>`);
+}
+
+async function fbLoadForm(id){
+  const r = fbRun; if(!r || r.id !== id || r.loading) return;
+  r.loading = true;
+  try{
+    if(!supabaseClient) throw new Error('no client');
+    const { data, error } = await supabaseClient.from('feedback_forms').select('*').eq('id', id).maybeSingle();
+    if(error) throw error;
+    if(!data || data.active === false) r.error = 'هذا الرابط غير متاح حاليًا.';
+    else r.form = fbMapForm(data);
+  }catch(e){ console.error('fbLoadForm failed', e); r.error = fbErrMsg(e); }
+  r.loading = false;
+  if(fbRun === r && currentRoute().startsWith('feedback/')) render();
+}
+
+function fbGoForm(){
+  const r = fbRun; if(!r || r.stage !== 'intro') return;
+  if(r.timer){ clearTimeout(r.timer); r.timer = null; }
+  const el = document.getElementById('fbkIntro'); if(el) el.classList.add('leave');
+  setTimeout(() => { if(fbRun === r && r.stage === 'intro' && currentRoute().startsWith('feedback/')){ r.stage = 'form'; render(); } }, 380);
+}
+
+async function fbSubmit(){
+  const r = fbRun; if(!r || r.sending || !r.form) return;
+  const msg = document.getElementById('fbkMsg'), btn = document.getElementById('fbkSend');
+  const say = t => { if(msg) msg.textContent = t; };
+  const name = r.name.trim();
+  if(!name){ say('اكتب اسمك لو سمحت 🙏'); const n = document.getElementById('fbkName'); if(n) n.focus(); return; }
+  if(!r.rating){ say('اختر تقييمك بالنجوم ⭐'); return; }
+  say('');
+  const hp = document.getElementById('fbkHp');
+  if(hp && hp.value){ r.stage = 'done'; r.already = false; render(); return; } /* بوت: نتظاهر بالنجاح بدون حفظ */
+  r.sending = true; if(btn){ btn.disabled = true; btn.textContent = 'جارِ الإرسال...'; }
+  try{
+    const { error } = await supabaseClient.from('feedback_entries').insert({
+      form_id: r.form.id, form_title: r.form.title, name: name.slice(0, 40), rating: r.rating,
+      comment: r.comment.trim().slice(0, 500), created_at: Date.now(),
+    });
+    if(error) throw error;
+    try{ localStorage.setItem(FB_DONE_KEY + r.form.id, '1'); }catch(e){}
+    r.sending = false; r.already = false; r.stage = 'done'; render();
+  }catch(e){
+    console.error('fbSubmit failed', e);
+    r.sending = false;
+    say(fbErrMsg(e));
+    if(btn){ btn.disabled = false; btn.textContent = 'إرسال الرأي 🚀'; }
+  }
+}
+
+function bindFeedbackEvents(id){
+  const r = fbEnsureRun(id);
+  if(!r.form && !r.loading && !r.error){ fbLoadForm(id); return; }
+  if(!r.form) return;
+  if(r.stage === 'intro'){
+    const intro = document.getElementById('fbkIntro');
+    if(intro) intro.addEventListener('click', fbGoForm);
+    if(r.timer) clearTimeout(r.timer);
+    r.timer = setTimeout(fbGoForm, 3300);
+  }
+  if(r.stage === 'done'){
+    const again = document.getElementById('fbkAgain');
+    if(again) again.addEventListener('click', () => { r.stage = 'form'; r.rating = 0; r.comment = ''; r.already = false; render(); });
+  }
+  if(r.stage === 'form'){
+    const stars = Array.from(document.querySelectorAll('#fbkStars .fbk-star'));
+    const lab = document.getElementById('fbkRLabel');
+    const paint = n => { stars.forEach((s, i) => s.classList.toggle('on', i < n)); if(lab) lab.textContent = FB_LABELS_EMOJI[n]; };
+    stars.forEach((s, i) => {
+      s.addEventListener('mouseenter', () => paint(i + 1));
+      s.addEventListener('click', () => {
+        r.rating = i + 1; paint(r.rating);
+        s.classList.remove('pop'); void s.offsetWidth; s.classList.add('pop');
+        const m = document.getElementById('fbkMsg'); if(m) m.textContent = '';
+      });
+    });
+    const box = document.getElementById('fbkStars');
+    if(box) box.addEventListener('mouseleave', () => paint(r.rating));
+    const nameEl = document.getElementById('fbkName'), comEl = document.getElementById('fbkComment'), cnt = document.getElementById('fbkCnt');
+    if(nameEl) nameEl.addEventListener('input', () => { r.name = nameEl.value; });
+    if(comEl) comEl.addEventListener('input', () => { r.comment = comEl.value; if(cnt) cnt.textContent = comEl.value.length; });
+    const form = document.getElementById('fbkForm');
+    if(form) form.addEventListener('submit', e => { e.preventDefault(); fbSubmit(); });
+  }
+}
+
+/* ============================ رسم البطاقات (Canvas) ============================ */
+let fbLogoPromise = null;
+function fbLogoImg(){
+  if(!fbLogoPromise) fbLogoPromise = new Promise(res => {
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => res(img); img.onerror = () => res(null);
+    img.src = MEDORA_LOGO_SM;
+  });
+  return fbLogoPromise;
+}
+function fbRoundRect(ctx, x, y, w, h, r){
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function fbStarPath(ctx, cx, cy, R){
+  ctx.beginPath();
+  for(let i = 0; i < 10; i++){
+    const rad = i % 2 === 0 ? R : R * 0.48, ang = -Math.PI / 2 + i * Math.PI / 5;
+    const x = cx + Math.cos(ang) * rad, y = cy + Math.sin(ang) * rad;
+    if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+function fbWrap(ctx, text, maxW){
+  const out = [];
+  String(text).split(/\n/).forEach(par => {
+    const words = par.split(/\s+/).filter(Boolean); let line = '';
+    if(!words.length){ out.push(''); return; }
+    words.forEach(w => {
+      const t = line ? line + ' ' + w : w;
+      if(ctx.measureText(t).width > maxW && line){ out.push(line); line = w; } else line = t;
+    });
+    out.push(line);
+  });
+  return out;
+}
+function fbFit(ctx, text, maxW){
+  text = String(text);
+  if(ctx.measureText(text).width <= maxW) return text;
+  while(text.length > 1 && ctx.measureText(text + '…').width > maxW) text = text.slice(0, -1);
+  return text.trim() + '…';
+}
+
+async function fbDrawCard(canvas, e, courseTitle, themeId, mode, scale){
+  const T = FB_THEMES[themeId] || FB_THEMES.teal;
+  const W = 1080, H = mode === 'story' ? 1920 : 1080;
+  canvas.width = Math.round(W * scale); canvas.height = Math.round(H * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  const fam = getComputedStyle(document.body).fontFamily || 'sans-serif';
+  try{ if(document.fonts && document.fonts.load){ await Promise.all([document.fonts.load('800 48px ' + fam, 'ابتث'), document.fonts.load('700 48px ' + fam, 'ابتث')]); } }catch(_){}
+  const logo = await fbLogoImg();
+
+  /* الخلفية */
+  const bg = ctx.createLinearGradient(0, 0, W * 0.6, H);
+  bg.addColorStop(0, T.a); bg.addColorStop(1, T.b);
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = T.deco;
+  [[W * .92, H * .08, 330], [W * .04, H * .93, 280], [W * .8, H * .64, 120], [W * .16, H * .22, 70]].forEach(([x, y, rr]) => { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill(); });
+
+  /* الرأس: الشعار + اسم المنصة + المادة */
+  const padX = 90, top = mode === 'story' ? 250 : 88, ls = 84, lx = W - padX - ls;
+  ctx.save(); ctx.beginPath(); ctx.arc(lx + ls / 2, top + ls / 2, ls / 2, 0, Math.PI * 2); ctx.clip();
+  if(logo){ ctx.drawImage(logo, lx, top, ls, ls); }
+  else { ctx.fillStyle = T.pill; ctx.fillRect(lx, top, ls, ls); ctx.fillStyle = T.text; ctx.font = `800 44px ${fam}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('M', lx + ls / 2, top + ls / 2 + 2); }
+  ctx.restore();
+  ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = T.text; ctx.font = `800 40px ${fam}`;
+  ctx.fillText('MEDORA', lx - 20, top + ls / 2 + 2);
+  ctx.direction = 'rtl';
+  if(courseTitle){
+    ctx.font = `700 30px ${fam}`;
+    const ct = fbFit(ctx, courseTitle, 380), pw = Math.min(ctx.measureText(ct).width + 56, 436), ph = 64;
+    fbRoundRect(ctx, padX, top + (ls - ph) / 2, pw, ph, 32); ctx.fillStyle = T.pill; ctx.fill();
+    ctx.fillStyle = T.text; ctx.textAlign = 'center'; ctx.fillText(ct, padX + pw / 2, top + ls / 2 + 2);
+  }
+
+  /* منطقة المحتوى */
+  const bottomReserve = mode === 'story' ? 330 : 90, footH = 120;
+  const footY = H - bottomReserve - footH;
+  const areaTop = top + ls + 50, areaBottom = footY - 30;
+  const maxW = W - padX * 2 - 30, starR = 46, starGap = 112, starsH = starR * 2, gap = 64;
+  const comment = (e.comment || '').trim(), hasComment = !!comment;
+  let lines = [], fs = 60, lh = 96, blockH;
+  if(hasComment){
+    const avail = areaBottom - areaTop - starsH - gap;
+    for(fs = 64; fs >= 30; fs -= 2){ ctx.font = `700 ${fs}px ${fam}`; lh = Math.round(fs * 1.65); lines = fbWrap(ctx, comment, maxW); if(lines.length * lh <= avail) break; }
+    const maxLines = Math.max(1, Math.floor(avail / lh));
+    if(lines.length > maxLines){ lines = lines.slice(0, maxLines); lines[maxLines - 1] = fbFit(ctx, lines[maxLines - 1] + ' …', maxW); }
+    blockH = starsH + gap + lines.length * lh;
+  } else { blockH = starsH + gap + 130; }
+  const y0 = areaTop + Math.max(0, (areaBottom - areaTop - blockH) / 2);
+
+  /* علامة الاقتباس خلف النص */
+  ctx.save(); ctx.direction = 'ltr'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = T.quote; ctx.font = `900 420px Georgia, 'Times New Roman', serif`;
+  ctx.fillText('\u201D', W / 2, y0 + 250); ctx.restore();
+
+  /* النجوم */
+  for(let i = 1; i <= 5; i++){
+    const cx = W / 2 + (3 - i) * starGap, cy = y0 + starR, on = i <= e.rating;
+    ctx.save();
+    if(on){ ctx.shadowColor = T.star; ctx.shadowBlur = 28; }
+    fbStarPath(ctx, cx, cy, starR); ctx.fillStyle = on ? T.star : T.starOff; ctx.fill();
+    ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = on ? T.star : T.starOff; ctx.stroke();
+    ctx.restore();
+  }
+
+  /* النص */
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl'; ctx.fillStyle = T.text;
+  const textTop = y0 + starsH + gap;
+  if(hasComment){
+    ctx.font = `700 ${fs}px ${fam}`;
+    lines.forEach((ln, i) => ctx.fillText(ln, W / 2, textTop + i * lh + lh / 2));
+  } else {
+    ctx.font = `800 120px ${fam}`;
+    ctx.fillText(FB_LABELS[e.rating] || '', W / 2, textTop + 65);
+  }
+
+  /* الاسم */
+  ctx.font = `800 44px ${fam}`;
+  const nm = fbFit(ctx, e.name || '', 520), nameW = ctx.measureText(nm).width;
+  const pillH = 104, avR = 40, pillW = nameW + avR * 2 + 74, px = (W - pillW) / 2, py = footY + 8;
+  fbRoundRect(ctx, px, py, pillW, pillH, pillH / 2); ctx.fillStyle = T.pill; ctx.fill();
+  const acx = px + pillW - 14 - avR, acy = py + pillH / 2;
+  ctx.beginPath(); ctx.arc(acx, acy, avR, 0, Math.PI * 2); ctx.fillStyle = T.avatar; ctx.fill();
+  ctx.fillStyle = T.avatarText; ctx.textAlign = 'center'; ctx.font = `800 42px ${fam}`;
+  ctx.fillText(Array.from(e.name || '؟')[0].toUpperCase(), acx, acy + 2);
+  ctx.fillStyle = T.text; ctx.textAlign = 'right'; ctx.font = `800 44px ${fam}`;
+  ctx.fillText(nm, acx - avR - 20, acy + 2);
+  return canvas;
+}
+
+function fbCanvasBlob(canvas){ return new Promise(res => canvas.toBlob(res, 'image/png')); }
+async function fbExportBlob(e, courseTitle){
+  const cv = document.createElement('canvas');
+  await fbDrawCard(cv, e, courseTitle, fbAdmin.theme, fbAdmin.mode, 1);
+  return fbCanvasBlob(cv);
+}
+function fbFileName(e, i){
+  const base = String(e.name || 'student').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 30);
+  return `feedback-${i != null ? (i + 1) + '-' : ''}${base}-${fbAdmin.mode}.png`;
+}
+function fbSaveBlob(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name; a.setAttribute('data-external', '');
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+async function ensureJsZipLib(){
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', () => !!window.JSZip);
+}
+
+/* ============================ جهة المشرف ============================ */
+async function fbLoadAdmin(force){
+  if(fbAdmin.loading || (fbAdmin.loaded && !force)) return;
+  fbAdmin.loading = true; fbAdmin.error = '';
+  try{
+    const { data, error } = await supabaseClient.from('feedback_forms').select('*').order('created_at', { ascending:false });
+    if(error) throw error;
+    fbAdmin.forms = (data || []).map(fbMapForm);
+    const st = await supabaseClient.from('feedback_entries').select('form_id,rating').range(0, 9999);
+    const stats = {};
+    (st.data || []).forEach(x => { const s = stats[x.form_id] || (stats[x.form_id] = { n:0, sum:0 }); s.n++; s.sum += Number(x.rating) || 0; });
+    fbAdmin.stats = stats;
+  }catch(e){ console.error('fbLoadAdmin failed', e); fbAdmin.error = fbErrMsg(e); }
+  fbAdmin.loading = false; fbAdmin.loaded = true;
+  if(currentRoute() === 'admin-feedback') render();
+}
+async function fbLoadEntries(formId){
+  fbAdmin.formId = formId; fbAdmin.entries = []; fbAdmin.entriesLoading = true; fbAdmin.entriesError = ''; render();
+  try{
+    const { data, error } = await supabaseClient.from('feedback_entries').select('*').eq('form_id', formId).order('created_at', { ascending:false }).range(0, 999);
+    if(error) throw error;
+    fbAdmin.entries = (data || []).map(fbMapEntry);
+  }catch(e){ console.error('fbLoadEntries failed', e); fbAdmin.entriesError = fbErrMsg(e); }
+  fbAdmin.entriesLoading = false;
+  if(currentRoute() === 'admin-feedback') render();
+}
+
+function fbAdminCardHtml(f){
+  const s = fbAdmin.stats[f.id] || { n:0, sum:0 };
+  const avg = s.n ? (s.sum / s.n).toFixed(1) : '—';
+  const link = fbLink(f.id), waText = encodeURIComponent(`${f.title}\nشاركنا رأيك بالشرح 👇\n${link}`);
+  return `
+  <div class="card-panel" style="margin-bottom:16px; padding:20px 22px;">
+    <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <div>
+        <h3 style="margin:0 0 6px; font-size:18px;" class="i18n-skip">💬 ${escapeHtml(f.title)}</h3>
+        <div style="font-size:13px; color:var(--muted);" class="i18n-skip">${s.n} رأي • ⭐ ${avg} • ${examFmtDate(f.createdAt)}</div>
+      </div>
+      <span class="lecture-tier-tag ${f.active ? '' : 'locked'}">${f.active ? '🟢 يستقبل آراء' : '🔴 متوقف'}</span>
+    </div>
+    <div class="exam-link-row">
+      <input type="text" readonly value="${hubAttr(link)}" onclick="this.select()">
+      <button class="btn small teal" data-fb-copy="${hubAttr(f.id)}">📋 نسخ الرابط</button>
+      <a class="btn small" href="https://wa.me/?text=${waText}" target="_blank" rel="noopener">${ICONS.whatsapp} واتساب</a>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn small teal solid" data-fb-entries="${hubAttr(f.id)}">🗂 عرض الآراء (${s.n})</button>
+      <button class="btn small" data-fb-open="${hubAttr(f.id)}">👁 معاينة</button>
+      <button class="btn small edit" data-fb-edit="${hubAttr(f.id)}">${ICONS.edit} تعديل</button>
+      <button class="btn small" data-fb-toggle="${hubAttr(f.id)}">${f.active ? '⏸ إيقاف' : '▶️ تفعيل'}</button>
+      <button class="btn small danger" data-fb-del="${hubAttr(f.id)}">${ICONS.trash} حذف</button>
+    </div>
+  </div>`;
+}
+
+function fbFilteredEntries(){
+  const f = fbAdmin.filter;
+  return fbAdmin.entries.filter(e => f === 'comment' ? !!e.comment.trim() : f === 'featured' ? e.featured : true);
+}
+
+function pageAdminFeedback(){
+  if(!isAdminSession()){
+    return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
+  }
+  if(fbAdmin.error) return `<section class="section"><div class="container"><div class="empty-state"><h3>تعذّر التحميل</h3><p>${escapeHtml(fbAdmin.error)}</p><button class="btn small" id="fbRefreshBtn">🔄 إعادة المحاولة</button></div></div></section>`;
+  if(!fbAdmin.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
+
+  /* --- عرض آراء مادة معيّنة --- */
+  const form = fbAdmin.formId ? fbAdmin.forms.find(f => f.id === fbAdmin.formId) : null;
+  if(form){
+    const all = fbAdmin.entries, shown = fbFilteredEntries();
+    const n = all.length, avg = n ? all.reduce((a, e) => a + e.rating, 0) / n : 0;
+    const dist = [5, 4, 3, 2, 1].map(k => ({ k, c: all.filter(e => e.rating === k).length }));
+    const canShare = typeof navigator !== 'undefined' && !!navigator.share;
+    return `
+    <section class="section"><div class="container">
+      <div class="toolbar">
+        <h2 class="i18n-skip">💬 ${escapeHtml(form.title)}</h2>
+        <div class="toolbar-actions"><button class="btn small" id="fbBackBtn">→ كل الروابط</button><button class="btn small" id="fbReloadBtn">🔄 تحديث</button></div>
+      </div>
+      ${fbAdmin.entriesLoading ? `<div style="text-align:center; padding:30px;"><span class="loading-dot"></span> جارِ تحميل الآراء...</div>` :
+        fbAdmin.entriesError ? `<div class="empty-state"><p>${escapeHtml(fbAdmin.entriesError)}</p></div>` :
+        !n ? `<div class="empty-state" style="padding:26px;"><p>ما وصل أي رأي لهذا الرابط بعد. انسخ الرابط وأرسله للطلاب 👆</p></div>` : `
+      <div class="card-panel" style="padding:18px 20px; margin-bottom:16px;">
+        <div class="fba-stats">
+          <div class="fba-avg"><b>${avg.toFixed(1)}</b><div class="st">${'★'.repeat(Math.round(avg))}${'☆'.repeat(5 - Math.round(avg))}</div><div class="hint">${n} رأي</div></div>
+          <div class="fba-dist">${dist.map(d => `<div><span>${d.k}★</span><span class="bar"><i style="width:${n ? Math.round(d.c / n * 100) : 0}%"></i></span><span>${d.c}</span></div>`).join('')}</div>
+        </div>
+        <div class="fba-controls">
+          <span style="font-weight:800; font-size:13px;">لون البطاقة:</span>
+          ${Object.keys(FB_THEMES).map(k => `<button type="button" class="fba-sw${fbAdmin.theme === k ? ' on' : ''}" data-fb-theme="${k}" title="${FB_THEMES[k].label}" style="background:${fbThemeSwatch(k)}"></button>`).join('')}
+          <span class="fba-seg"><button type="button" data-fb-mode="square" class="${fbAdmin.mode === 'square' ? 'on' : ''}">⬛ مربع (منشور)</button><button type="button" data-fb-mode="story" class="${fbAdmin.mode === 'story' ? 'on' : ''}">📱 ستوري 9:16</button></span>
+          <select id="fbFilter" class="bank-select" style="width:auto;">
+            <option value="all" ${fbAdmin.filter === 'all' ? 'selected' : ''}>كل الآراء (${n})</option>
+            <option value="comment" ${fbAdmin.filter === 'comment' ? 'selected' : ''}>اللي معها تعليق (${all.filter(e => e.comment.trim()).length})</option>
+            <option value="featured" ${fbAdmin.filter === 'featured' ? 'selected' : ''}>المنشورة على المنصة (${all.filter(e => e.featured).length})</option>
+          </select>
+          <button class="btn small teal solid" id="fbZipBtn" ${fbAdmin.busy ? 'disabled' : ''}>${fbAdmin.busy || '📦 تحميل الكل (ZIP)'}</button>
+        </div>
+        <p class="hint" style="margin:0;">«🌟 نشر» يضيف الرأي لجدار آراء الطلاب بالمنصة (<a href="/feedback-wall" style="color:var(--teal); font-weight:800;">/feedback-wall</a>) ليشوفه كل الطلاب.</p>
+      </div>
+      <div class="fba-grid">
+        ${shown.map(e => `
+        <div class="fba-item">
+          <canvas data-fb-prev="${hubAttr(e.id)}" aria-label="بطاقة رأي ${hubAttr(e.name)}"></canvas>
+          <div class="fba-meta i18n-skip">${escapeHtml(e.name)} • ${examFmtDate(e.createdAt)}</div>
+          <div class="fba-acts">
+            <button class="btn small teal solid" data-fb-dl="${hubAttr(e.id)}">⬇️ تحميل</button>
+            ${canShare ? `<button class="btn small" data-fb-share="${hubAttr(e.id)}">↗️ مشاركة</button>` : ''}
+            <button class="btn small ${e.featured ? 'teal solid' : ''}" data-fb-feat="${hubAttr(e.id)}">${e.featured ? '🌟 منشور' : '🌟 نشر'}</button>
+            <button class="btn small danger" data-fb-delentry="${hubAttr(e.id)}">${ICONS.trash}</button>
+          </div>
+        </div>`).join('') || `<div class="empty-state" style="grid-column:1/-1; padding:20px;"><p>ما في آراء بهذا الفلتر.</p></div>`}
+      </div>`}
+    </div></section>`;
+  }
+
+  /* --- قائمة الروابط --- */
+  return `
+  <section class="section"><div class="container">
+    <div class="toolbar">
+      <h2>💬 الفيدباك</h2>
+      <div class="toolbar-actions"><a class="btn small" href="/feedback-wall">🌟 جدار آراء الطلاب</a><button class="btn teal solid" id="fbCreateBtn">${ICONS.plus} رابط فيدباك جديد</button></div>
+    </div>
+    <p class="hint" style="margin:-10px 0 20px;">أنشئ رابطًا لكل مادة أو محاضرة وأرسله للطلاب. الطالب بيفتح الرابط بدون تسجيل دخول، بيكتب اسمه، بيقيّم بالنجوم وبيكتب رأيه، وبيوصلك على شكل بطاقات جاهزة للتحميل كصور (منشور أو ستوري) أو للنشر على المنصة.</p>
+    ${fbAdmin.forms.length ? fbAdmin.forms.map(fbAdminCardHtml).join('') : `<div class="empty-state" style="padding:26px;"><p>ما في روابط فيدباك بعد. اضغط «رابط فيدباك جديد».</p></div>`}
+  </div></section>`;
+}
+
+function fbFormModal(f){
+  openModal(`
+    <h3>${f.id ? '✏️ تعديل رابط الفيدباك' : '💬 رابط فيدباك جديد'}</h3>
+    <form id="fbFormEl">
+      <div class="field"><label>اسم المادة / المحاضرة (يظهر للطالب وعلى البطاقة)</label><input type="text" name="title" required maxlength="120" value="${hubAttr(f.title)}" placeholder="مثال: Medical Surgical — محاضرة الدورة الدموية"></div>
+      <div class="field"><label>رسالة قصيرة للطالب (اختياري)</label><textarea name="description" rows="2" maxlength="300" placeholder="مثال: رأيك يهمني عشان أطوّر الشرح 💙">${escapeHtml(f.description || '')}</textarea></div>
+      <label style="display:flex; gap:8px; align-items:center; margin:8px 0;"><input type="checkbox" name="active" ${f.active ? 'checked' : ''}> يستقبل آراء</label>
+      <div id="fbFormMsg" style="color:var(--red,#d33); font-weight:700; font-size:13px;"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="fbCancel">إلغاء</button><button type="submit" class="btn teal solid small" id="fbSaveBtn">💾 حفظ</button></div>
+    </form>`);
+  document.getElementById('fbCancel').addEventListener('click', closeModal);
+  document.getElementById('fbFormEl').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const fd = ev.target.elements, title = fd['title'].value.trim();
+    if(!title) return;
+    const btn = document.getElementById('fbSaveBtn'); btn.disabled = true;
+    const row = { title, description: fd['description'].value.trim(), active: fd['active'].checked };
+    let error = null;
+    if(f.id){ ({ error } = await supabaseClient.from('feedback_forms').update(row).eq('id', f.id)); }
+    else { ({ error } = await supabaseClient.from('feedback_forms').insert(Object.assign({ id: fbNewId(), created_at: Date.now() }, row))); }
+    if(error){ document.getElementById('fbFormMsg').textContent = fbErrMsg(error); btn.disabled = false; return; }
+    closeModal(); fbAdmin.loaded = false; fbLoadAdmin(true);
+  });
+}
+
+async function fbPaintPreviews(){
+  const form = fbAdmin.forms.find(f => f.id === fbAdmin.formId); if(!form) return;
+  for(const cv of Array.from(document.querySelectorAll('canvas[data-fb-prev]'))){
+    const e = fbAdmin.entries.find(x => x.id === cv.dataset.fbPrev);
+    if(e && cv.isConnected){ try{ await fbDrawCard(cv, e, form.title, fbAdmin.theme, fbAdmin.mode, 0.36); }catch(err){ console.error(err); } }
+  }
+}
+
+function bindFeedbackAdminEvents(){
+  fbLoadAdmin();
+  const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  const findForm = id => fbAdmin.forms.find(x => x.id === id);
+  const findEntry = id => fbAdmin.entries.find(x => x.id === id);
+  on('fbCreateBtn', () => fbFormModal({ id:null, title:'', description:'', active:true }));
+  on('fbRefreshBtn', () => { fbAdmin.error = ''; fbAdmin.loaded = false; fbLoadAdmin(true); });
+  on('fbBackBtn', () => { fbAdmin.formId = null; fbAdmin.entries = []; fbAdmin.loaded = false; fbLoadAdmin(true); render(); });
+  on('fbReloadBtn', () => fbLoadEntries(fbAdmin.formId));
+
+  document.querySelectorAll('[data-fb-copy]').forEach(b => b.addEventListener('click', () => {
+    const link = fbLink(b.dataset.fbCopy);
+    const done = () => { const o = b.innerHTML; b.innerHTML = '✅ تم النسخ'; setTimeout(() => { b.innerHTML = o; }, 1600); };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done).catch(() => prompt('انسخ الرابط:', link));
+    else prompt('انسخ الرابط:', link);
+  }));
+  document.querySelectorAll('[data-fb-open]').forEach(b => b.addEventListener('click', () => { window.open(fbLink(b.dataset.fbOpen), '_blank', 'noopener'); }));
+  document.querySelectorAll('[data-fb-entries]').forEach(b => b.addEventListener('click', () => fbLoadEntries(b.dataset.fbEntries)));
+  document.querySelectorAll('[data-fb-edit]').forEach(b => b.addEventListener('click', () => { const f = findForm(b.dataset.fbEdit); if(f) fbFormModal(f); }));
+  document.querySelectorAll('[data-fb-toggle]').forEach(b => b.addEventListener('click', async () => {
+    const f = findForm(b.dataset.fbToggle); if(!f) return;
+    b.disabled = true;
+    const { error } = await supabaseClient.from('feedback_forms').update({ active: !f.active }).eq('id', f.id);
+    if(error){ alert(fbErrMsg(error)); b.disabled = false; return; }
+    f.active = !f.active; render();
+  }));
+  document.querySelectorAll('[data-fb-del]').forEach(b => b.addEventListener('click', () => {
+    const f = findForm(b.dataset.fbDel); if(!f) return;
+    confirmDelete('سيتم حذف الرابط وكل الآراء الواصلة عليه نهائيًا. هل أنت متأكد؟', async () => {
+      const { error } = await supabaseClient.from('feedback_forms').delete().eq('id', f.id);
+      if(error){ alert(fbErrMsg(error)); return; }
+      fbAdmin.forms = fbAdmin.forms.filter(x => x.id !== f.id); delete fbAdmin.stats[f.id]; render();
+    });
+  }));
+
+  /* --- عرض الآراء --- */
+  document.querySelectorAll('[data-fb-theme]').forEach(b => b.addEventListener('click', () => {
+    fbAdmin.theme = b.dataset.fbTheme;
+    document.querySelectorAll('[data-fb-theme]').forEach(x => x.classList.toggle('on', x === b));
+    fbPaintPreviews();
+  }));
+  document.querySelectorAll('[data-fb-mode]').forEach(b => b.addEventListener('click', () => { fbAdmin.mode = b.dataset.fbMode; render(); }));
+  const flt = document.getElementById('fbFilter'); if(flt) flt.addEventListener('change', () => { fbAdmin.filter = flt.value; render(); });
+  if(document.querySelector('canvas[data-fb-prev]')) fbPaintPreviews();
+
+  const formOf = () => fbAdmin.forms.find(f => f.id === fbAdmin.formId);
+  document.querySelectorAll('[data-fb-dl]').forEach(b => b.addEventListener('click', async () => {
+    const e = findEntry(b.dataset.fbDl), f = formOf(); if(!e || !f) return;
+    const o = b.innerHTML; b.disabled = true; b.textContent = '...';
+    try{ fbSaveBlob(await fbExportBlob(e, f.title), fbFileName(e)); }catch(err){ console.error(err); alert('تعذّر إنشاء الصورة.'); }
+    b.disabled = false; b.innerHTML = o;
+  }));
+  document.querySelectorAll('[data-fb-share]').forEach(b => b.addEventListener('click', async () => {
+    const e = findEntry(b.dataset.fbShare), f = formOf(); if(!e || !f) return;
+    try{
+      const blob = await fbExportBlob(e, f.title), file = new File([blob], fbFileName(e), { type:'image/png' });
+      if(navigator.canShare && navigator.canShare({ files:[file] })) await navigator.share({ files:[file] });
+      else fbSaveBlob(blob, fbFileName(e));
+    }catch(err){ if(err && err.name !== 'AbortError'){ console.error(err); alert('تعذّرت المشاركة.'); } }
+  }));
+  document.querySelectorAll('[data-fb-feat]').forEach(b => b.addEventListener('click', async () => {
+    const e = findEntry(b.dataset.fbFeat); if(!e) return;
+    b.disabled = true;
+    const { error } = await supabaseClient.from('feedback_entries').update({ featured: !e.featured }).eq('id', e.id);
+    if(error){ alert(fbErrMsg(error)); b.disabled = false; return; }
+    e.featured = !e.featured; fbWall.loaded = false; render();
+  }));
+  document.querySelectorAll('[data-fb-delentry]').forEach(b => b.addEventListener('click', () => {
+    const e = findEntry(b.dataset.fbDelentry); if(!e) return;
+    confirmDelete('حذف هذا الرأي نهائيًا؟', async () => {
+      const { error } = await supabaseClient.from('feedback_entries').delete().eq('id', e.id);
+      if(error){ alert(fbErrMsg(error)); return; }
+      fbAdmin.entries = fbAdmin.entries.filter(x => x.id !== e.id);
+      const s = fbAdmin.stats[e.formId]; if(s){ s.n = Math.max(0, s.n - 1); s.sum -= e.rating; }
+      fbWall.loaded = false; render();
+    });
+  }));
+  on('fbZipBtn', async () => {
+    const f = formOf(), list = fbFilteredEntries(); if(!f || !list.length || fbAdmin.busy) return;
+    const btn = document.getElementById('fbZipBtn');
+    const setBusy = t => { fbAdmin.busy = t; if(btn){ btn.disabled = !!t; btn.textContent = t || '📦 تحميل الكل (ZIP)'; } };
+    try{
+      setBusy('جارِ التحضير...');
+      await ensureJsZipLib();
+      const zip = new JSZip();
+      for(let i = 0; i < list.length; i++){
+        setBusy(`${i + 1} / ${list.length}`);
+        zip.file(fbFileName(list[i], i), await fbExportBlob(list[i], f.title));
+      }
+      setBusy('جارِ الضغط...');
+      fbSaveBlob(await zip.generateAsync({ type:'blob' }), `feedback-${String(f.title).replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 30)}-${fbAdmin.mode}.zip`);
+    }catch(err){ console.error(err); alert('تعذّر إنشاء ملف ZIP، تحقق من اتصال الإنترنت وحاول مرة أخرى.'); }
+    setBusy('');
+  });
+}
+
+/* ============================ جدار آراء الطلاب (عام) ============================ */
+async function fbLoadWall(){
+  if(fbWall.loading || fbWall.loaded) return;
+  fbWall.loading = true; fbWall.error = '';
+  try{
+    const { data, error } = await supabaseClient.from('feedback_entries').select('*').eq('featured', true).order('created_at', { ascending:false }).limit(60);
+    if(error) throw error;
+    fbWall.items = (data || []).map(fbMapEntry);
+  }catch(e){ console.error('fbLoadWall failed', e); fbWall.error = fbErrMsg(e); }
+  fbWall.loading = false; fbWall.loaded = true;
+  if(currentRoute() === 'feedback-wall') render();
+}
+function pageFeedbackWall(){
+  const head = `<div class="toolbar"><h2>🌟 آراء الطلاب</h2></div><p class="hint" style="margin:-10px 0 20px;">تقييمات حقيقية من طلاب المنصة عن الشرح والمواد.</p>`;
+  if(fbWall.error) return `<section class="section"><div class="container">${head}<div class="empty-state"><p>${escapeHtml(fbWall.error)}</p></div></div></section>`;
+  if(!fbWall.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
+  const keys = Object.keys(FB_THEMES).filter(k => k !== 'light');
+  return `<section class="section"><div class="container">${head}
+    ${fbWall.items.length ? `<div class="fbw-grid">${fbWall.items.map((e, i) => {
+      const t = FB_THEMES[keys[i % keys.length]];
+      return `<div class="fbw-card" style="background:linear-gradient(145deg, ${t.a}, ${t.b});">
+        <div class="st">${'★'.repeat(e.rating)}<span style="opacity:.3">${'★'.repeat(5 - e.rating)}</span></div>
+        <div class="q i18n-skip">${e.comment.trim() ? escapeHtml(e.comment) : escapeHtml(FB_LABELS[e.rating])}</div>
+        <div class="who i18n-skip"><i>${escapeHtml(Array.from(e.name || '؟')[0].toUpperCase())}</i>${escapeHtml(e.name)}</div>
+        ${e.formTitle ? `<div class="for i18n-skip">${escapeHtml(e.formTitle)}</div>` : ''}
+      </div>`; }).join('')}</div>` : `<div class="empty-state" style="padding:26px;"><p>لا توجد آراء منشورة بعد.</p></div>`}
+  </div></section>`;
+}
+
+
+/* =========================================================================
    مجلدات المواد (Study Hubs)
    - المشرف: صفحة /admin-hubs لإنشاء مجلد يجمع ملفات High Yield + اختبارات لنفس المادة،
      ويرتّبها ويسمّي المحاضرات، ثم ينسخ رابطًا واحدًا /folder/<id> ويرسله للطلاب.
@@ -11109,6 +11855,7 @@ function bindPageEvents(route){
   }
   if(hyRun && !route.startsWith('hy/')){ hyFlush(); hyRun = null; }
   if(hubRun && !route.startsWith('folder/')) hubRun = null;
+  if(fbRun && !route.startsWith('feedback/')){ if(fbRun.timer) clearTimeout(fbRun.timer); fbRun = null; }
   /* زر الرجوع للمجلد: يظهر فوق صفحة الملخص/الاختبار إذا الطالب وصلها من مجلد */
   if(route.startsWith('hy/') || route.startsWith('exam/')){
     let back = null; try{ back = sessionStorage.getItem(HUB_BACK_KEY); }catch(e){}
@@ -11123,6 +11870,9 @@ function bindPageEvents(route){
   if(route === 'admin-highyield') bindHyAdminEvents();
   if(route.startsWith('folder/')) bindHubEvents(hubIdFromRoute(route));
   if(route === 'admin-hubs') bindHubAdminEvents();
+  if(route.startsWith('feedback/')) bindFeedbackEvents(fbIdFromRoute(route));
+  if(route === 'admin-feedback') bindFeedbackAdminEvents();
+  if(route === 'feedback-wall') fbLoadWall();
   if(route.startsWith('exam/')) bindExamEvents(examIdFromRoute(route));
   if(route === 'admin-exams') bindAdminExamsEvents();
   document.querySelectorAll('[data-self-enroll]').forEach(btn=>{
