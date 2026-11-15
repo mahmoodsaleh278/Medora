@@ -2712,7 +2712,7 @@ function pageCourseDetail(courseId){
         <div class="lecture-row-main">
           <h4>${escapeHtml(l.title)}</h4>
         </div>
-        ${canManageLectures && l.hidden ? `<span class="lecture-tier-tag locked">🙈 مخفية عن الطلاب</span>` : ''}
+        ${canManageLectures && l.hidden ? `<span class="lecture-tier-tag locked">مخفية عن الطلاب</span>` : ''}
         ${canManageLectures ? (()=>{
           const grp = lectures.filter(x=>x.section===l.section);
           const gi = grp.findIndex(x=>x.id===l.id);
@@ -2737,7 +2737,7 @@ function pageCourseDetail(courseId){
         </div>` : `
         <div class="lecture-lock-msg">${ICONS.lock} ${lockMsg}</div>`}
         ${canManageLectures ? `<div class="lecture-row-admin">
-          <button class="btn ${l.hidden?'teal':''} small" data-toggle-lecture-hidden="${l.id}">${l.hidden ? '👁️ إظهار للطلاب' : '🙈 إخفاء عن الطلاب'}</button>
+          <button class="btn ${l.hidden?'teal':''} small" data-toggle-lecture-hidden="${l.id}">${l.hidden ? '👁️ إظهار للطلاب' : 'إخفاء عن الطلاب'}</button>
           <button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button>
           <button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button>
         </div>` : ''}
@@ -3423,7 +3423,7 @@ function pageBankRunning(){
       <div class="written-answer-box">
         <textarea id="writtenAnswerInput" class="i18n-skip" dir="ltr" style="text-align:left;" placeholder="Type your answer here...">${escapeHtml(typeof answered==='string' ? answered : '')}</textarea>
       </div>
-      ${q.modelAnswer ? `<button type="button" class="btn small" id="revealWrittenBtn">${showModel ? '🙈 إخفاء نموذج الإجابة' : '👁 إظهار نموذج الإجابة'}</button>` : ''}
+      ${q.modelAnswer ? `<button type="button" class="btn small" id="revealWrittenBtn">${showModel ? 'إخفاء نموذج الإجابة' : '👁 إظهار نموذج الإجابة'}</button>` : ''}
       ${showModel && q.modelAnswer ? explainBoxHtml(escapeHtml(q.modelAnswer), 'Model Answer:') : ''}
       <div style="margin-bottom:10px;"></div>
     `;
@@ -6147,7 +6147,7 @@ function modalAddLecture(courseId){
         <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
       </div>
       <div class="field">
-        <label class="watch-toggle"><input type="checkbox" name="hidden"><span>🙈 إخفاء هذه المحاضرة عن الطلاب (تبقى محفوظة، ويمكنك إظهارها لاحقًا)</span></label>
+        <label class="watch-toggle"><input type="checkbox" name="hidden"><span>إخفاء هذه المحاضرة عن الطلاب (تبقى محفوظة، ويمكنك إظهارها لاحقًا)</span></label>
       </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ المحاضرة</button></div>
     </form>`);
@@ -6211,7 +6211,7 @@ function modalEditLecture(lectureId){
         <button type="button" class="btn small" id="addFileRow">${ICONS.plus} إضافة ملف</button>
       </div>
       <div class="field">
-        <label class="watch-toggle"><input type="checkbox" name="hidden" ${lecture.hidden?'checked':''}><span>🙈 إخفاء هذه المحاضرة عن الطلاب (تبقى محفوظة، ويمكنك إظهارها لاحقًا)</span></label>
+        <label class="watch-toggle"><input type="checkbox" name="hidden" ${lecture.hidden?'checked':''}><span>إخفاء هذه المحاضرة عن الطلاب (تبقى محفوظة، ويمكنك إظهارها لاحقًا)</span></label>
       </div>
       <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إلغاء</button><button type="submit" class="btn teal solid small">حفظ التعديلات</button></div>
     </form>`);
@@ -9760,7 +9760,7 @@ function examSettingsSummary(s){
   s = s || {};
   const parts = [];
   parts.push(s.durationMinutes ? `⏱ ${s.durationMinutes} دقيقة` : '⏱ بدون وقت');
-  parts.push(s.showScore ? '🎯 العلامة مباشرة' : '🙈 العلامة مخفية');
+  parts.push(s.showScore ? '🎯 العلامة مباشرة' : 'العلامة مخفية');
   if(s.showAnswers) parts.push(s.showExplanations ? '✅ إجابات + تفسير' : '✅ إجابات');
   parts.push(`🔁 ${s.maxAttempts === 0 ? 'محاولات غير محدودة' : (s.maxAttempts === undefined ? 1 : s.maxAttempts) + ' محاولة'}`);
   if(s.shuffleQuestions) parts.push('🔀 خلط الأسئلة');
@@ -9805,7 +9805,7 @@ function examAdminCardHtml(e){
       <button class="btn edit small" data-exam-edit="${e.id}">${ICONS.edit} الإعدادات</button>
       <button class="btn edit small" data-exam-qedit="${e.id}">✏️ تعديل الأسئلة والإجابات</button>
       <button class="btn small" data-exam-toggle="${e.id}">${e.active ? '⏸ إغلاق الاختبار' : '▶️ إعادة فتحه'}</button>
-      ${!(e.settings && e.settings.showScore) ? `<button class="btn small ${e.released ? '' : 'teal'}" data-exam-release="${e.id}">${e.released ? '🙈 إخفاء النتائج عن الطلاب' : '🎯 إظهار النتائج للطلاب'}</button>` : ''}
+      ${!(e.settings && e.settings.showScore) ? `<button class="btn small ${e.released ? '' : 'teal'}" data-exam-release="${e.id}">${e.released ? 'إخفاء النتائج عن الطلاب' : '🎯 إظهار النتائج للطلاب'}</button>` : ''}
       <button class="btn danger small" data-exam-del="${e.id}">${ICONS.trash} حذف</button>
     </div>
   </div>`;
@@ -10461,7 +10461,7 @@ function fbErrMsg(e){
   return 'حدث خطأ غير متوقع، حاول مرة أخرى.' + (detail ? ' (' + detail + ')' : '');
 }
 function fbMapForm(r){ return { id:r.id, title:r.title, description:r.description || '', active:r.active !== false, createdAt:Number(r.created_at) || 0 }; }
-function fbMapEntry(r){ return { id:r.id, formId:r.form_id, formTitle:r.form_title || '', name:r.name, rating:Number(r.rating) || 0, comment:r.comment || '', featured:!!r.featured, createdAt:Number(r.created_at) || 0 }; }
+function fbMapEntry(r){ return { id:r.id, formId:r.form_id, formTitle:r.form_title || '', name:r.name, anonymous:r.anonymous === true, rating:Number(r.rating) || 0, comment:r.comment || '', featured:!!r.featured, createdAt:Number(r.created_at) || 0 }; }
 function fbStarsHtml(n){ return '★'.repeat(n) + '<span style="opacity:.3">' + '★'.repeat(5 - n) + '</span>'; }
 
 function injectFeedbackStyles(){
@@ -10531,6 +10531,10 @@ function injectFeedbackStyles(){
       background-attachment:local; background-repeat:no-repeat, repeat; }
     .fbk-note textarea::placeholder{ color:#97b0b9; }
     .fbk-note:focus-within{ box-shadow:0 0 0 3px rgba(31,122,140,.18), 0 6px 16px rgba(15,76,92,.10); }
+    .fbk-anon{ display:flex; align-items:flex-start; gap:10px; margin-top:10px; font-size:13px; line-height:1.6; color:var(--f-ink); cursor:pointer; }
+    .fbk-anon input{ width:18px; height:18px; margin:2px 0 0; flex:none; accent-color:#1f7a8c; cursor:pointer; }
+    .fbk-anon small{ display:block; font-size:12px; color:var(--f-mute); }
+    .fba-anon{ display:inline-block; margin-inline-start:6px; padding:1px 8px; border-radius:999px; background:#fff3d6; color:#8a5a00; font-size:12px; font-weight:800; }
     .fbk-cnt{ text-align:left; direction:ltr; font-size:12px; color:var(--f-mute); margin-top:6px; }
     .fbk-msg{ min-height:20px; margin-top:8px; font-size:14px; font-weight:700; color:#d33; text-align:center; }
     .fbk-btn{ width:100%; margin-top:8px; border:0; border-radius:16px; padding:15px; font-size:17px; font-weight:800; font-family:inherit; color:#fff; cursor:pointer; background:var(--f-ac); box-shadow:0 10px 26px rgba(31,122,140,.28); transition:transform .15s, opacity .2s; }
@@ -10595,7 +10599,7 @@ function fbEnsureRun(id){
   if(!fbRun || fbRun.id !== id){
     if(fbRun && fbRun.timer) clearTimeout(fbRun.timer);
     let done = false; try{ done = localStorage.getItem(FB_DONE_KEY + id) === '1'; }catch(e){}
-    fbRun = { id, form:null, loading:false, error:'', stage: done ? 'done' : 'intro', already:done, name:'', rating:0, comment:'', sending:false, timer:null };
+    fbRun = { id, form:null, loading:false, error:'', stage: done ? 'done' : 'intro', already:done, name:'', anon:false, rating:0, comment:'', sending:false, timer:null };
   }
   return fbRun;
 }
@@ -10639,6 +10643,7 @@ function pageFeedback(id){
       ${r.form.description ? `<p class="fbk-desc i18n-skip">${escapeHtml(r.form.description)}</p>` : ''}
       <label class="fbk-lab" for="fbkName">اسمك (الاسم اللي بدك يظهر مع رأيك)</label>
       <input class="fbk-in" id="fbkName" maxlength="40" value="${hubAttr(r.name)}">
+      <label class="fbk-anon" for="fbkAnon"><input type="checkbox" id="fbkAnon"${r.anon ? ' checked' : ''}><span>أخفِ اسمي عن باقي الطلاب<small>اسمك بيظهر للمدرس فقط، ولن يظهر لأي طالب آخر.</small></span></label>
       <label class="fbk-lab">تقييمك للشرح</label>
       <div class="fbk-stars" id="fbkStars" role="radiogroup" aria-label="التقييم">${[1, 2, 3, 4, 5].map(n => `<button type="button" class="fbk-star${n <= r.rating ? ' on' : ''}" data-star="${n}" aria-label="${n} من 5">★</button>`).join('')}</div>
       <div class="fbk-rlabel" id="fbkRLabel">${FB_LABELS_EMOJI[r.rating]}</div>
@@ -10685,7 +10690,7 @@ async function fbSubmit(){
   r.sending = true; if(btn){ btn.disabled = true; btn.textContent = 'جارِ الإرسال...'; }
   try{
     const { error } = await supabaseClient.from('feedback_entries').insert({
-      form_id: r.form.id, form_title: r.form.title, name: name.slice(0, 40), rating: r.rating,
+      form_id: r.form.id, form_title: r.form.title, name: name.slice(0, 40), anonymous: !!r.anon, rating: r.rating,
       comment: r.comment.trim().slice(0, 500), created_at: Date.now(),
     });
     if(error) throw error;
@@ -10729,6 +10734,8 @@ function bindFeedbackEvents(id){
     if(box) box.addEventListener('mouseleave', () => paint(r.rating));
     const nameEl = document.getElementById('fbkName'), comEl = document.getElementById('fbkComment'), cnt = document.getElementById('fbkCnt');
     if(nameEl) nameEl.addEventListener('input', () => { r.name = nameEl.value; });
+    const anonEl = document.getElementById('fbkAnon');
+    if(anonEl) anonEl.addEventListener('change', () => { r.anon = anonEl.checked; });
     if(comEl) comEl.addEventListener('input', () => { r.comment = comEl.value; if(cnt) cnt.textContent = comEl.value.length; });
     const form = document.getElementById('fbkForm');
     if(form) form.addEventListener('submit', e => { e.preventDefault(); fbSubmit(); });
@@ -10854,7 +10861,7 @@ async function fbDrawCard(canvas, e, courseTitle, themeId, mode, scale){
   const headBase = lineTop + lh - Math.round(lh * 0.27);
   ctx.direction = 'rtl'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'right';
   ctx.font = `800 40px ${fam}`; ctx.fillStyle = T.accent;
-  ctx.fillText(fbFit(ctx, e.name || '', maxW - 330), textR, headBase);
+  ctx.fillText(fbFit(ctx, e.anonymous ? 'طالب من المنصة' : (e.name || ''), maxW - 330), textR, headBase);
   const sR = 21, sGap = 50;
   for(let i = 1; i <= 5; i++){
     const cx = textL + sR + (5 - i) * sGap, cy = headBase - 15, on = i <= e.rating;
@@ -10881,7 +10888,7 @@ async function fbExportBlob(e, courseTitle){
   return fbCanvasBlob(cv);
 }
 function fbFileName(e, i){
-  const base = String(e.name || 'student').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 30);
+  const base = String(e.anonymous ? 'student' : (e.name || 'student')).replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 30);
   return `feedback-${i != null ? (i + 1) + '-' : ''}${base}-${fbAdmin.mode}.png`;
 }
 function fbSaveBlob(blob, name){
@@ -10998,8 +11005,8 @@ function pageAdminFeedback(){
       <div class="fba-grid">
         ${shown.map(e => `
         <div class="fba-item">
-          <canvas data-fb-prev="${hubAttr(e.id)}" aria-label="بطاقة رأي ${hubAttr(e.name)}"></canvas>
-          <div class="fba-meta i18n-skip">${escapeHtml(e.name)} • ${examFmtDate(e.createdAt)}</div>
+          <canvas data-fb-prev="${hubAttr(e.id)}" aria-label="بطاقة رأي ${hubAttr(e.anonymous ? 'طالب' : e.name)}"></canvas>
+          <div class="fba-meta i18n-skip">${escapeHtml(e.name)}${e.anonymous ? ' <span class="fba-anon">مخفي عن الطلاب</span>' : ''} • ${examFmtDate(e.createdAt)}</div>
           <div class="fba-acts">
             <button class="btn small teal solid" data-fb-dl="${hubAttr(e.id)}">⬇️ تحميل</button>
             ${canShare ? `<button class="btn small" data-fb-share="${hubAttr(e.id)}">↗️ مشاركة</button>` : ''}
@@ -11171,7 +11178,7 @@ function pageFeedbackWall(){
   return `<section class="section"><div class="container">${head}
     ${fbWall.items.length ? `<div class="fbw-grid">${fbWall.items.map(e => `
       <div class="fbw-card">
-        <div class="hd i18n-skip"><span class="nm">${escapeHtml(e.name)}</span><span class="st">${'★'.repeat(e.rating)}<s>${'★'.repeat(5 - e.rating)}</s></span></div>
+        <div class="hd i18n-skip"><span class="nm">${e.anonymous ? 'طالب من المنصة' : escapeHtml(e.name)}</span><span class="st">${'★'.repeat(e.rating)}<s>${'★'.repeat(5 - e.rating)}</s></span></div>
         <div class="q i18n-skip${e.comment.trim() ? '' : ' lbl'}">${e.comment.trim() ? escapeHtml(e.comment) : escapeHtml(FB_LABELS[e.rating])}</div>
         ${e.formTitle ? `<div class="for i18n-skip">${escapeHtml(e.formTitle)}</div>` : ''}
       </div>`).join('')}</div>` : `<div class="empty-state" style="padding:26px;"><p>لا توجد آراء منشورة بعد.</p></div>`}
