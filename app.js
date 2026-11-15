@@ -10525,8 +10525,8 @@ function injectFeedbackStyles(){
     .fbk-note:focus-within{ box-shadow:0 0 0 3px rgba(31,122,140,.18), 0 6px 16px rgba(15,76,92,.10); }
     .fbk-cnt{ text-align:left; direction:ltr; font-size:12px; color:var(--f-mute); margin-top:6px; }
     .fbk-msg{ min-height:20px; margin-top:8px; font-size:14px; font-weight:700; color:#d33; text-align:center; }
-    .fbk-btn{ width:100%; margin-top:8px; border:0; border-radius:16px; padding:15px; font-size:17px; font-weight:800; font-family:inherit; color:#fff; cursor:pointer; background:linear-gradient(110deg,#1f7a8c,#0f4c5c,#1f7a8c); background-size:200% 100%; animation:fbkShine2 5s linear infinite; box-shadow:0 10px 26px rgba(15,76,92,.28); transition:transform .15s, opacity .2s; }
-    .fbk-btn:hover{ transform:translateY(-2px); } .fbk-btn:active{ transform:scale(.98); } .fbk-btn:disabled{ opacity:.6; cursor:default; }
+    .fbk-btn{ width:100%; margin-top:8px; border:0; border-radius:16px; padding:15px; font-size:17px; font-weight:800; font-family:inherit; color:#fff; cursor:pointer; background:var(--f-ac); box-shadow:0 10px 26px rgba(31,122,140,.28); transition:transform .15s, opacity .2s; }
+    .fbk-btn:hover{ transform:translateY(-2px); filter:brightness(1.06); } .fbk-btn:active{ transform:scale(.98); } .fbk-btn:disabled{ opacity:.6; cursor:default; }
     @keyframes fbkShine2{ to{ background-position:200% 0; } }
     .fbk-link{ background:none; border:0; color:var(--f-mute); font-size:14px; font-family:inherit; text-decoration:underline; cursor:pointer; margin-top:14px; }
     .fbk-emoji{ font-size:54px; margin-bottom:8px; }
@@ -10634,7 +10634,7 @@ function pageFeedback(id){
       <div class="fbk-cnt"><span id="fbkCnt">${r.comment.length}</span>/500</div>
       <input type="text" id="fbkHp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute; left:-9999px; width:0; height:0; opacity:0;">
       <div class="fbk-msg" id="fbkMsg"></div>
-      <button class="fbk-btn" id="fbkSend" type="submit">إرسال الرأي 🚀</button>
+      <button class="fbk-btn" id="fbkSend" type="submit">ارسل الـ Feedback</button>
     </form>`);
 }
 
@@ -10682,7 +10682,7 @@ async function fbSubmit(){
     console.error('fbSubmit failed', e);
     r.sending = false;
     say(fbErrMsg(e));
-    if(btn){ btn.disabled = false; btn.textContent = 'إرسال الرأي 🚀'; }
+    if(btn){ btn.disabled = false; btn.textContent = 'ارسل الـ Feedback'; }
   }
 }
 
