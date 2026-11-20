@@ -14,18 +14,30 @@
   const TABLE = 'store_products', BUCKET = 'store', CUR = 'د.أ';
   const LOGO_URL = '/medix-logo.jpg';
 
+  /* on:false = الصنف مخفي من المتجر كله (المنتجات بتضل بقاعدة البيانات). لإرجاع الأسنان: خلّي on:true */
   const CATS = [
-    { id:'nursing',   name:'التمريض' },
-    { id:'dentistry', name:'طب الأسنان' },
-    { id:'bundles',   name:'الباقات' },
+    { id:'nursing',   name:'التمريض',    on:true  },
+    { id:'dentistry', name:'طب الأسنان', on:false },
+    { id:'bundles',   name:'الباقات',    on:true  },
   ];
   const catName = id => (CATS.find(c => c.id === id) || {}).name || '';
+  const catOn = id => { const c = CATS.find(x => x.id === id); return !c || c.on !== false; };
+  const visCats = () => CATS.filter(c => c.on !== false);
+  const cat = p => p.category || 'nursing';
+  /* فلتر الأداة: مطابقة على اسم المنتج (بدون تعديل بقاعدة البيانات) */
+  const TOOLS = [
+    { id:'steth',  name:'سماعات طبية',     art:'steth',    kw:['سماع','steth'] },
+    { id:'bp',     name:'أجهزة ضغط الدم',  art:'gauge',    kw:['ضغط','pressure','sphygm'] },
+    { id:'light',  name:'أقلام الفحص',     art:'penlight', kw:['قلم','penlight','pen light'] },
+    { id:'hammer', name:'مطارق الأعصاب',   art:'hammer',   kw:['مطرق','hammer','reflex'] },
+  ];
+  const matchTool = (p, t) => { const x = (p.title || '').toLowerCase(); return t.kw.some(k => x.includes(k)); };
   const DEFAULTS = {
     headline: 'جهّز نفسك لتميّز سنواتك السريرية.',
-    sub: 'أدوات تشخيص وأسنان مختارة بعناية لطلاب التمريض وطب الأسنان، وبأسعار تناسب الطلاب. ابدأ سنواتك السريرية بأدوات تثق فيها.',
+    sub: 'أدوات تمريض مختارة بعناية — سماعات، أجهزة ضغط، أقلام فحص وأكثر — وبأسعار تناسب الطلاب. ابدأ سنواتك السريرية بأدوات تثق فيها.',
   };
 
-  const S = { loaded:false, loading:false, error:'', items:[], tab:'all', slide:0, q:'', cartOpen:false, qv:null };
+  const S = { loaded:false, loading:false, error:'', items:[], tab:'all', tool:'', sort:'new', slide:0, q:'', cartOpen:false, qv:null };
 
   /* ---------- أدوات صغيرة ---------- */
   const esc = s => escapeHtml(String(s == null ? '' : s));
@@ -228,8 +240,28 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
 .mx-incl{display:grid;gap:.4rem;font-size:.9rem}.mx-incl li{display:flex;align-items:center;gap:.5rem}.mx-incl svg{color:var(--m-tt)}
 .mx-fin{border-top:1px solid var(--m-line);padding:1.5rem 0;font-size:.88rem;color:var(--m-muted)}
 .mx-fin .mx-in{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:space-between;align-items:center}
+/* أدوات التمريض + شريط الفلترة + مجموعات المنتجات */
+.mx-tools{margin-top:2rem;display:grid;gap:1rem;grid-template-columns:repeat(2,1fr)}
+.mx-tool{display:flex;align-items:center;gap:.9rem;border:1px solid var(--m-line);background:var(--m-surface);border-radius:1.1rem;padding:.9rem;text-align:start;transition:border-color .15s,box-shadow .15s}
+.mx-tool:hover,.mx-tool.on{border-color:var(--m-t6);box-shadow:var(--m-lift)}
+.mx-tool.on{background:var(--m-tint)}
+.mx-tool .ti{width:3.4rem;height:3.4rem;flex:none;border-radius:.8rem;background:var(--m-tint);padding:.35rem}
+.mx-tool.on .ti{background:var(--m-surface)}
+.mx-tool b{display:block;color:var(--m-fg);font-size:.92rem;line-height:1.4}.mx-tool small{color:var(--m-muted);font-size:.78rem}
+.mx-bar{margin-top:1.5rem;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem}
+.mx-bl{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;font-size:.9rem;color:var(--m-muted)}
+.mx-fchip{display:inline-flex;align-items:center;gap:.4rem;border-radius:999px;background:var(--m-navy);color:#fff;padding:.25rem .5rem .25rem .8rem;font-size:.82rem;font-weight:700}
+.mx-sort{display:flex;align-items:center;gap:.5rem;font-size:.88rem;color:var(--m-muted)}
+.mx-sort select{border:1px solid var(--m-line);background:var(--m-surface);color:var(--m-fg);border-radius:999px;padding:.35rem .9rem;font:inherit;font-size:.88rem;outline:0;cursor:pointer}
+.mx-sort select:focus{border-color:var(--m-t6)}
+.mx-feat .mx-grid{margin-top:1.25rem}
+.mx-grp{margin-top:2.5rem}.mx-grp:first-child{margin-top:1.5rem}
+.mx-grp .mx-grid{margin-top:1.1rem}
+.mx-gh{display:flex;align-items:baseline;gap:.75rem;border-bottom:1px solid var(--m-line);padding-bottom:.6rem}
+.mx-gh h3{font-size:1.25rem}.mx-gh span{color:var(--m-muted);font-size:.85rem}
 @media(min-width:640px){.mx-grid{grid-template-columns:repeat(2,1fr)}}
 @media(min-width:768px){.mx-nav{display:flex}.mx-chips{display:none}.mx-search{order:0;width:auto;flex:1;max-width:20rem;margin-inline-start:auto}.mx-acts{margin-inline-start:0}.mx-cats{grid-template-columns:1fr 1fr}.mx-qvb{grid-template-columns:1fr 1fr}.mx-hero .mx-in{padding-top:5rem;padding-bottom:5rem}}
+@media(min-width:768px){.mx-tools{grid-template-columns:repeat(4,1fr)}}
 @media(min-width:1024px){.mx-grid{grid-template-columns:repeat(4,1fr)}.mx-hero .mx-in{grid-template-columns:1.05fr 1fr}}
 @media(prefers-reduced-motion:reduce){.mx-root *{animation:none!important;transition-duration:.01ms!important}}`;
     document.head.appendChild(st);
@@ -245,7 +277,8 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
       S.items = data || []; S.loaded = true;
       const ids = new Set(S.items.map(p => String(p.id)));
       Object.keys(cart).forEach(k => { if(!ids.has(k)) delete cart[k]; }); saveCart();
-      wish = new Set([...wish].filter(k => ids.has(String(k)))); saveWish();
+      const visIds = new Set(S.items.filter(p => catOn(cat(p))).map(p => String(p.id)));
+      wish = new Set([...wish].filter(k => visIds.has(String(k)))); saveWish();
     }catch(e){
       console.error('MEDIX STORE load failed', e);
       S.error = 'تعذّر تحميل المنتجات حاليًا، حاول مرة ثانية.';
@@ -256,7 +289,7 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
 
   /* ---------- مكوّنات الواجهة ---------- */
   const slides = () => {
-    const act = S.items.filter(p => p.active !== false && p.in_stock !== false);
+    const act = S.items.filter(p => catOn(cat(p)) && p.active !== false && p.in_stock !== false);
     const f = act.filter(p => p.featured);
     return (f.length ? f : act).slice(0, 5);
   };
@@ -284,23 +317,23 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
       </div></div></div>`;
   }
 
+  const navBtns = () => visCats().map(c => `<button data-act="cat" data-id="${c.id}">${esc(c.name)}</button>`).join('') + `<button data-act="go" data-id="mxFeat">الأكثر طلبًا</button>`;
+
   function headHtml(){
     return `<div class="mx-head"><div class="mx-in">
       <a class="mx-brand" href="/home" aria-label="MEDIX Store"><img src="${esc(LOGO_URL)}" alt=""><b>MEDIX <span>Store</span></b></a>
       <nav class="mx-nav" aria-label="التصنيفات">
-        <button data-act="cat" data-id="nursing">التمريض</button><button data-act="cat" data-id="dentistry">طب الأسنان</button>
-        <button data-act="cat" data-id="bundles">الباقات</button><button data-act="go" data-id="mxFeat">الأكثر طلبًا</button>
+        ${navBtns()}
       </nav>
       <div class="mx-search">
         <span class="si">${ic('search', 16)}</span>
-        <input id="mxQ" type="search" autocomplete="off" placeholder="ابحث عن سماعة، مسبار، طقم..." value="${esc(S.q)}" aria-label="بحث">
+        <input id="mxQ" type="search" autocomplete="off" placeholder="ابحث عن سماعة، جهاز ضغط، طقم..." value="${esc(S.q)}" aria-label="بحث">
         <div class="mx-sl" id="mxSl" hidden></div>
       </div>
       <div class="mx-acts" id="mxActs">${actsHtml()}</div>
     </div>
     <nav class="mx-chips" aria-label="التصنيفات">
-      <button data-act="cat" data-id="nursing">التمريض</button><button data-act="cat" data-id="dentistry">طب الأسنان</button>
-      <button data-act="cat" data-id="bundles">الباقات</button><button data-act="go" data-id="mxFeat">الأكثر طلبًا</button>
+      ${navBtns()}
     </nav></div>`;
   }
 
@@ -325,36 +358,54 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
     return `<section class="mx-hero"><div class="mx-in">
       <div><h1>${esc(cfg('headline'))}</h1><p class="lead">${esc(cfg('sub'))}</p>
         <div class="mx-cta"><button class="mx-btn teal" data-act="cat" data-id="nursing">تسوّق أدوات التمريض</button>
-          <button class="mx-btn line" data-act="cat" data-id="dentistry">استكشف أدوات الأسنان</button></div>
+          <button class="mx-btn line" data-act="cat" data-id="bundles">شاهد الباقات</button></div>
         <ul class="mx-trust"><li>${ic('shield')}<span>أدوات مختارة للطلاب</span></li><li>${ic('check')}<span>أسعار مناسبة للطلاب</span></li><li>${ic('check')}<span>طلب سهل عبر واتساب</span></li></ul></div>
       <div id="mxHero">${heroVisualHtml()}</div></div></section>`;
   }
 
-  function catsHtml(){
+  function toolTiles(){
+    const admin = isAdminSession();
+    const vis = S.items.filter(p => catOn(cat(p)) && (admin || p.active !== false));
+    return TOOLS.map(t => ({ t, n: vis.filter(p => matchTool(p, t)).length }))
+      .filter(x => !S.loaded || x.n > 0)
+      .map(({ t, n }) => `<button class="mx-tool ${S.tool === t.id ? 'on' : ''}" data-act="tool" data-id="${t.id}" aria-pressed="${S.tool === t.id}">
+        <span class="ti">${art(t.art)}</span><span><b>${esc(t.name)}</b>${S.loaded ? `<small>${n} منتج</small>` : ''}</span></button>`).join('');
+  }
+  function toolsHtml(){
+    const tiles = toolTiles();
     const arrow = ic('arrow', 16, '', 'mx-flip');
-    return `<section class="mx-sec"><div class="mx-in">
-      <h2>اختر تخصصك</h2><p class="sub">كتالوجان، كل واحد مبني على ما يحتاجه برنامجك فعلاً.</p>
-      <div class="mx-cats">
-        <button class="mx-cat navy" data-act="cat" data-id="nursing"><div class="tx"><h3>التمريض</h3><p>كل ما تحتاجه للجولات السريرية والمهارات ومختبرات التدريب.</p><ul><li>سماعات طبية</li><li>مطارق الأعصاب</li><li>أقلام الفحص</li><li>أجهزة ضغط الدم</li></ul></div>
-          <span class="go">تسوّق التمريض ${arrow}</span>
-          <div class="art"><div class="a a1">${art('steth')}</div><div class="a a2">${art('penlight')}</div><div class="a a3">${art('gauge')}</div></div></button>
-        <button class="mx-cat tint" data-act="cat" data-id="dentistry"><div class="tx"><h3>طب الأسنان</h3><p>أدوات تشخيصية وترميمية وخلع قابلة للتعقيم لمختبرات ما قبل السريري.</p><ul><li>أطقم الفحص</li><li>مرايا ومجسّات</li><li>أدوات الحشوات</li><li>أدوات تدريب الخلع</li></ul></div>
-          <span class="go">تسوّق الأسنان ${arrow}</span>
-          <div class="art"><div class="a a1">${art('mirror')}</div><div class="a a2">${art('hammer')}</div><div class="a a3">${art('kit')}</div></div></button>
-      </div>
+    return `<section class="mx-sec" id="mxToolsSec"><div class="mx-in">
+      <h2>تسوّق حسب الأداة</h2><p class="sub">اختر الأداة اللي بدك إياها ونوصلك لمنتجاتها مباشرة.</p>
+      ${tiles ? `<div class="mx-tools" id="mxTools">${tiles}</div>` : '<div id="mxTools"></div>'}
       <button class="mx-strip" data-act="cat" data-id="bundles"><span><b>بداية سنة سريرية جديدة؟</b><br><small>باقات البداية تجمع أدواتك الأساسية في طلب واحد.</small></span><span class="go">شاهد الباقات ${arrow}</span></button>
     </div></section>`;
   }
 
   function list(){
-    const admin = isAdminSession();
-    return S.items.filter(p => (admin || p.active !== false) &&
-      (S.tab === 'all' || (S.tab === 'wish' ? wish.has(p.id) : p.category === S.tab)));
+    const admin = isAdminSession(), tool = TOOLS.find(t => t.id === S.tool);
+    return S.items.filter(p => catOn(cat(p)) && (admin || p.active !== false) &&
+      (S.tab === 'all' || (S.tab === 'wish' ? wish.has(p.id) : cat(p) === S.tab)) &&
+      (!tool || matchTool(p, tool)));
+  }
+  function sorted(L){
+    const num = p => Number(p.price) || 0, oos = p => p.in_stock === false ? 1 : 0;
+    const cmp = S.sort === 'asc' ? (a, b) => num(a) - num(b) : S.sort === 'desc' ? (a, b) => num(b) - num(a) : () => 0;
+    return L.map((p, i) => ({ p, i })).sort((a, b) => oos(a.p) - oos(b.p) || cmp(a.p, b.p) || a.i - b.i).map(x => x.p);
   }
   function tabsHtml(){
-    const T = [['all', 'الكل'], ...CATS.map(c => [c.id, c.name])];
+    const T = [['all', 'الكل'], ...visCats().map(c => [c.id, c.name])];
     if(wish.size) T.push(['wish', '❤ المفضّلة']);
     return T.map(([k, l]) => `<button class="${S.tab === k ? 'on' : ''}" data-act="tab" data-id="${k}" aria-pressed="${S.tab === k}">${l}</button>`).join('');
+  }
+  function infoHtml(){
+    if(!S.loaded) return '';
+    const n = list().length, t = TOOLS.find(x => x.id === S.tool);
+    return `<span>${n} منتج</span>${t ? `<button class="mx-fchip" data-act="clrtool" aria-label="إلغاء الفلتر">${esc(t.name)} ${ic('x', 14)}</button>` : ''}`;
+  }
+  function barHtml(){
+    const o = (v, l) => `<option value="${v}" ${S.sort === v ? 'selected' : ''}>${l}</option>`;
+    return `<div class="mx-bar"><div class="mx-bl" id="mxInfo">${infoHtml()}</div>
+      <label class="mx-sort"><span>ترتيب:</span><select id="mxSort" aria-label="ترتيب المنتجات">${o('new', 'الأحدث')}${o('asc', 'السعر: الأقل أولًا')}${o('desc', 'السعر: الأعلى أولًا')}</select></label></div>`;
   }
   function cardHtml(p){
     const admin = isAdminSession(), out = p.in_stock === false, w = wish.has(p.id), img = imgOf(p);
@@ -375,17 +426,23 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
       </div></li>`;
   }
   function gridHtml(){
-    if(S.error) return `<li class="mx-empty"><h3>⚠️ ${esc(S.error)}</h3><button class="mx-btn teal sm" data-act="retry">إعادة المحاولة</button></li>`;
-    if(!S.loaded) return `<li class="mx-empty"><span class="loading-dot"></span> جارِ تحميل المنتجات...</li>`;
-    const L = list();
-    if(!L.length) return `<li class="mx-empty"><h3>لا توجد منتجات هنا بعد</h3><p>${S.items.length ? 'جرّب تصنيفًا آخر.' : 'ترقّبوا منتجاتنا قريبًا!'}</p></li>`;
-    return L.map(cardHtml).join('');
+    const wrap = x => `<ul class="mx-grid">${x}</ul>`;
+    if(S.error) return wrap(`<li class="mx-empty"><h3>⚠️ ${esc(S.error)}</h3><button class="mx-btn teal sm" data-act="retry">إعادة المحاولة</button></li>`);
+    if(!S.loaded) return wrap(`<li class="mx-empty"><span class="loading-dot"></span> جارِ تحميل المنتجات...</li>`);
+    const L = sorted(list());
+    if(!L.length) return wrap(`<li class="mx-empty"><h3>لا توجد منتجات هنا بعد</h3><p>${S.items.length ? 'جرّب تصنيفًا أو أداة ثانية.' : 'ترقّبوا منتجاتنا قريبًا!'}</p></li>`);
+    if(S.tab === 'all' && !S.tool && S.sort === 'new'){
+      const groups = visCats().map(c => ({ c, items: L.filter(p => cat(p) === c.id) })).filter(g => g.items.length);
+      if(groups.length > 1) return groups.map(g => `<section class="mx-grp"><div class="mx-gh"><h3>${esc(g.c.name)}</h3><span>${g.items.length} منتج</span></div>${wrap(g.items.map(cardHtml).join(''))}</section>`).join('');
+    }
+    return wrap(L.map(cardHtml).join(''));
   }
   function featHtml(){
     return `<section class="mx-feat" id="mxFeat"><div class="mx-in">
-      <div class="mx-fh"><div class="mx-sec" style="padding:0"><h2>الأكثر طلبًا هذا الفصل</h2><p class="sub">الأدوات التي يعيد الطلاب شراءها وينصحون بها.</p></div>
+      <div class="mx-fh"><div class="mx-sec" style="padding:0"><h2>منتجات التمريض</h2><p class="sub">الأدوات التي يعيد الطلاب شراءها وينصحون بها.</p></div>
       <div class="mx-tabs" id="mxTabs" role="group" aria-label="تصفية المنتجات">${tabsHtml()}</div></div>
-      <ul class="mx-grid" id="mxGrid">${gridHtml()}</ul></div></section>`;
+      ${barHtml()}
+      <div id="mxGrid">${gridHtml()}</div></div></section>`;
   }
 
   function drawerHtml(){
@@ -425,7 +482,7 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
     const open = S.cartOpen, qvOpen = !!by(S.qv);
     return `<div class="mx-root" id="mxRoot">
       ${adminBarHtml()}${headHtml()}
-      <main>${heroHtml()}${catsHtml()}${featHtml()}</main>
+      <main>${heroHtml()}${toolsHtml()}${featHtml()}</main>
       <div class="mx-fin"><div class="mx-in"><span>© ${new Date().getFullYear()} MEDIX Store — جزء من منصة MEDORA</span><a href="/home" style="font-weight:700;color:var(--m-tt)">العودة إلى MEDORA</a></div></div>
       <div class="mx-ov" id="mxOv" data-act="close" ${open || qvOpen ? '' : 'hidden'}></div>
       <aside class="mx-drawer ${open ? 'open' : ''}" id="mxDrawer" role="dialog" aria-modal="true" aria-label="السلة" ${open ? '' : 'inert'}>${drawerHtml()}</aside>
@@ -435,7 +492,10 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
 
   /* ---------- تحديثات جزئية (بدون إعادة رسم الصفحة كلها) ---------- */
   function updActs(){ const e = $('#mxActs'); if(e) e.innerHTML = actsHtml(); }
-  function updGrid(){ const t = $('#mxTabs'), g = $('#mxGrid'); if(t) t.innerHTML = tabsHtml(); if(g) g.innerHTML = gridHtml(); }
+  function updGrid(){
+    const t = $('#mxTabs'), g = $('#mxGrid'), i = $('#mxInfo'), tl = $('#mxTools');
+    if(t) t.innerHTML = tabsHtml(); if(g) g.innerHTML = gridHtml(); if(i) i.innerHTML = infoHtml(); if(tl) tl.innerHTML = toolTiles();
+  }
   function updHero(){ const h = $('#mxHero'); if(h){ h.innerHTML = heroVisualHtml(); bindTilt(); } }
   function updOverlays(){
     const open = S.cartOpen, qvOpen = !!by(S.qv);
@@ -470,8 +530,10 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
       case 'wish': wish.has(id) ? wish.delete(id) : wish.add(id); saveWish(); if(S.tab === 'wish' && !wish.size) S.tab = 'all'; updActs(); updGrid(); break;
       case 'qv': { S.qv = id; const q = $('#mxQ'); if(q) q.value = ''; S.q = ''; if(sl) sl.hidden = true; updOverlays(); break; }
       case 'tab': S.tab = id; updGrid(); break;
-      case 'cat': S.tab = id; closeAll(); updGrid(); scrollTo('mxFeat'); break;
-      case 'wishnav': if(wish.size){ S.tab = 'wish'; updGrid(); scrollTo('mxFeat'); } break;
+      case 'tool': S.tool = (S.tool === id ? '' : id); S.tab = 'all'; updGrid(); if(S.tool) scrollTo('mxFeat'); break;
+      case 'clrtool': S.tool = ''; updGrid(); break;
+      case 'cat': S.tab = id; S.tool = ''; closeAll(); updGrid(); scrollTo('mxFeat'); break;
+      case 'wishnav': if(wish.size){ S.tab = 'wish'; S.tool = ''; updGrid(); scrollTo('mxFeat'); } break;
       case 'slide': S.slide = +id; updHero(); break;
       case 'prev': { const n = slides().length || 1; S.slide = (S.slide + n - 1) % n; updHero(); break; }
       case 'next': { const n = slides().length || 1; S.slide = (S.slide + 1) % n; updHero(); break; }
@@ -491,14 +553,15 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
     if(e.target.id !== 'mxQ') return;
     S.q = e.target.value;
     const t = S.q.trim().toLowerCase(), sl = $('#mxSl'); if(!sl) return;
-    const res = t ? S.items.filter(p => (isAdminSession() || p.active !== false) && ((p.title || '').toLowerCase().includes(t) || (p.description || '').toLowerCase().includes(t) || catName(p.category).includes(t))).slice(0, 5) : [];
+    const res = t ? S.items.filter(p => catOn(cat(p)) && (isAdminSession() || p.active !== false) && ((p.title || '').toLowerCase().includes(t) || (p.description || '').toLowerCase().includes(t) || catName(p.category).includes(t))).slice(0, 5) : [];
     sl.hidden = !t;
-    sl.innerHTML = res.length ? res.map(p => `<button data-act="qv" data-id="${esc(p.id)}"><span>${esc(p.title)}</span><span class="mx-muted" style="font-size:.78rem">${esc(catName(p.category))}</span></button>`).join('') : '<p>لا نتائج. جرّب "سماعة" أو "أسنان".</p>';
+    sl.innerHTML = res.length ? res.map(p => `<button data-act="qv" data-id="${esc(p.id)}"><span>${esc(p.title)}</span><span class="mx-muted" style="font-size:.78rem">${esc(catName(p.category))}</span></button>`).join('') : '<p>لا نتائج. جرّب "سماعة" أو "ضغط".</p>';
   }
   function onKey(e){
     if(e.target.id === 'mxQ' && e.key === 'Enter'){ const b = document.querySelector('#mxSl button'); if(b){ e.preventDefault(); b.click(); } }
   }
   function onChange(e){
+    if(e.target.id === 'mxSort'){ S.sort = e.target.value; updGrid(); return; }
     if(e.target.id !== 'mxVis') return;
     state.storeSettings = Object.assign({}, state.storeSettings, { visible: e.target.checked });
     setData('store_settings', state.storeSettings, true).then(() => render());
@@ -571,7 +634,7 @@ html[dir=rtl] .mx-drawer{transform:translateX(-100%)}
           <div class="field" style="flex:1"><label>السعر قبل الخصم (اختياري)</label><input type="number" name="old_price" min="0" step="0.01" value="${esc(p.old_price)}"></div>
         </div>
         <div style="display:flex;gap:10px;">
-          <div class="field" style="flex:1"><label>التصنيف</label><select name="category">${CATS.map(c => `<option value="${c.id}" ${p.category === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}</select></div>
+          <div class="field" style="flex:1"><label>التصنيف</label><select name="category">${visCats().map(c => `<option value="${c.id}" ${p.category === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}</select></div>
           <div class="field" style="flex:1"><label>شارة على المنتج (اختياري)</label><input type="text" name="badge" maxlength="24" placeholder="مثال: الأكثر طلبًا" value="${esc(p.badge)}"></div>
         </div>
         <div class="field"><label>صورة المنتج (ارفع صورة)</label><input type="file" name="imageFile" accept="image/*"></div>
