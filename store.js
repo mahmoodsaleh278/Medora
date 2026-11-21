@@ -138,8 +138,8 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .mx-head .mx-in{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.5rem;padding-top:.8rem;padding-bottom:.8rem}
 .mx-brand{display:flex;align-items:center;gap:.55rem}
 .mx-brand img{height:2rem;width:auto;border-radius:6px}
-.mx-x{background:linear-gradient(135deg,currentColor 0%,currentColor 52%,#1E6BFF 54%,#1E6BFF 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:inherit}
-.mx-brand b{font-size:1.45rem;font-weight:900;color:var(--m-fg);font-family:Lexend,Cairo,system-ui,sans-serif;letter-spacing:-.01em;line-height:1}
+.mx-xs{display:inline-block;height:.72em;width:.92em;vertical-align:-.02em;margin-inline:.02em;color:inherit;overflow:visible}
+.mx-brand b{direction:ltr;unicode-bidi:isolate;font-size:1.45rem;font-weight:900;color:var(--m-fg);font-family:Lexend,Cairo,system-ui,sans-serif;letter-spacing:-.01em;line-height:1}
 .mx-nav{display:none;align-items:center;gap:.25rem}
 .mx-nav button{border-radius:999px;padding:.4rem .9rem;font-size:.95rem;font-weight:600}.mx-nav button:hover{background:var(--m-mist)}
 .mx-search{position:relative;order:9;width:100%}
@@ -174,8 +174,8 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .mx-deliv{display:grid;gap:0;align-items:center;background:var(--m-mist);border:1px solid var(--m-line);border-radius:1.75rem;padding:.8rem 1.25rem .6rem;overflow:hidden;text-align:center}
 .dv-txt b{display:block;font-size:clamp(1.7rem,6vw,2.7rem);font-weight:900;line-height:1.3;color:var(--m-fg)}
 .dv-txt em{display:block;font-style:normal;color:var(--m-ink)}
-.dv-vis{position:relative;direction:ltr;order:-1;height:clamp(7rem,32vw,10.5rem);overflow:hidden}
-.dv-truck{position:absolute;left:50%;bottom:.5rem;width:min(88%,23rem);height:auto;mix-blend-mode:multiply;transform:translateX(-50%);transform-origin:50% 100%;animation:mxbob .5s ease-in-out infinite,mxdrive 5s ease-in-out infinite}
+.dv-vis{position:relative;direction:ltr;order:-1;display:flex;justify-content:center;align-items:flex-end}
+.dv-truck{display:block;width:min(88%,19rem);height:auto;mix-blend-mode:multiply;animation:none}
 .dv-road{position:absolute;left:0;right:0;bottom:.3rem;height:4px;border-radius:4px;background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--m-fg) 40%,transparent) 0 26px,transparent 26px 52px);background-size:52px 4px;animation:mxroad .22s linear infinite}
 .dv-dust{position:absolute;left:calc(50% - 9.5rem);bottom:.35rem;width:.9rem;height:.9rem;border-radius:50%;background:color-mix(in srgb,var(--m-fg) 28%,transparent);opacity:0;animation:mxdust .7s ease-out infinite}
 .dv-dust.d2{animation-delay:.23s;bottom:.75rem}.dv-dust.d3{animation-delay:.46s;bottom:.45rem}
@@ -189,7 +189,7 @@ body.dark .dv-vis{background:#fff;border-radius:1.1rem}
 @keyframes mxdust{0%{transform:translate(0,0) scale(.4);opacity:.55}100%{transform:translate(-3.2rem,-.9rem) scale(1.5);opacity:0}}
 @keyframes mxroad{to{background-position-x:-52px}}
 @keyframes mxline{0%{transform:translateX(70%);opacity:0}25%{opacity:.4}100%{transform:translateX(-90%);opacity:0}}
-@media(min-width:640px){.mx-deliv{grid-template-columns:1fr minmax(20rem,28rem);gap:.5rem;padding:.9rem 2.25rem;text-align:start}.dv-vis{order:0;height:11rem}.dv-truck{width:min(92%,24rem)}}
+@media(min-width:640px){.mx-deliv{grid-template-columns:auto minmax(14rem,20rem);justify-content:center;gap:1rem;padding:1rem 2.25rem;text-align:start}.dv-vis{order:0}.dv-truck{width:100%}.dv-truck{width:min(92%,24rem)}}
 /* الهيرو */
 .mx-hero{overflow:hidden;background:var(--m-hero)}
 .mx-hero .mx-in{display:grid;gap:2rem;align-items:center;padding-top:2.5rem;padding-bottom:2.5rem}
@@ -376,7 +376,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
   const baseList = () => { const admin = isAdminSession(); return S.items.filter(p => catOn(cat(p)) && (admin || p.active !== false)); };
   const filtersOn = () => S.tab !== 'all' || !!S.tool || S.min !== '' || S.max !== '' || S.stock;
 
-  const brandName = () => 'MEDI<span class="mx-x">X</span> STORE';
+  const brandName = () => 'MEDI<svg class="mx-xs" viewBox="110 100 730 575" aria-hidden="true"><path fill="currentColor" d="M150 115H292Q318 115 338 135L556 372Q564 380 556 390L300 656Q290 662 276 662H128Q116 662 126 650L380 382L146 122Q140 115 150 115Z"/><path fill="#2A9D9A" d="M510 280L668 118Q675 114 690 114H818Q830 114 822 124L604 372Q598 378 592 372L512 290Q506 284 510 280Z"/><path fill="#2A9D9A" d="M490 492L578 400Q584 394 592 400L822 650Q830 660 818 660H650Q638 660 630 652L494 500Q486 494 490 492Z"/></svg> STORE';
 
   function actsHtml(){
     return `<button class="mx-ib" data-act="theme" aria-label="تبديل الوضع الليلي">${ic('moon', 20)}</button>
@@ -532,10 +532,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
         <div class="mx-deliv">
           <div class="dv-txt"><b>التوصيل مجاني<em>لمحافظة الكرك</em></b></div>
           <div class="dv-vis" aria-hidden="true">
-            <div class="dv-lines"><i></i><i></i><i></i></div>
             <img class="dv-truck" src="${esc(TRUCK_URL)}" alt="" loading="lazy" onerror="this.parentNode.style.display='none'">
-            <div class="dv-road"></div>
-            <span class="dv-dust"></span><span class="dv-dust d2"></span><span class="dv-dust d3"></span>
           </div>
         </div>
         <div class="mx-top" style="margin-top:1.75rem"><h2>منتجات التمريض</h2></div>
