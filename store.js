@@ -14,6 +14,7 @@ try{
   const WA_NUMBER = '962781492144';
   const TABLE = 'store_products', BUCKET = 'store', CUR = 'د.أ';
   const LOGO_URL = '/medix-logo.jpg';
+  const TRUCK_URL = '/medora-truck.jpg';   /* ارفع الصورة بنفس مجلد الموقع الرئيسي */
 
   /* on:false = الصنف مخفي من المتجر كله (المنتجات بتضل بقاعدة البيانات). لإرجاع الأسنان: خلّي on:true */
   const CATS = [
@@ -165,6 +166,11 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .mx-fbar .mx-pr{flex:none;align-items:center}
 .mx-fbar .mx-chk{flex:none;white-space:nowrap;font-size:.88rem}
 .mx-feat,.mx-hero{scroll-margin-top:5rem}
+/* بانر التوصيل */
+.mx-deliv{display:flex;align-items:center;gap:1rem;background:var(--m-mist);border:1px solid var(--m-line);border-radius:1.25rem;padding:.5rem 1.25rem .5rem .75rem}
+.mx-deliv img{width:6.5rem;height:auto;flex:none;mix-blend-mode:multiply;border-radius:.6rem}
+body.dark .mx-deliv img{mix-blend-mode:normal;background:#fff}
+.mx-deliv b{font-size:clamp(1.05rem,3.4vw,1.45rem);font-weight:900;color:var(--m-fg);line-height:1.4}
 /* الهيرو */
 .mx-hero{overflow:hidden;background:var(--m-hero)}
 .mx-hero .mx-in{display:grid;gap:2rem;align-items:center;padding-top:2.5rem;padding-bottom:2.5rem}
@@ -502,9 +508,10 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
   }
   function shopHtml(){
     return `<section class="mx-feat" id="mxFeat"><div class="mx-in">
-      <nav class="mx-crumb" aria-label="مسار التنقّل"><a href="/home">الرئيسية</a>${ic('l', 14)}<b>المتجر</b></nav>
+      <nav class="mx-crumb" aria-label="مسار التنقّل"><b>المتجر</b></nav>
       <div class="mx-lst" style="margin-top:1rem">
-        <div class="mx-top"><h2>منتجات التمريض</h2></div>
+        <div class="mx-deliv"><img src="${esc(TRUCK_URL)}" alt="" loading="lazy" onerror="this.style.display='none'"><b>التوصيل مجاني لمحافظة الكرك</b></div>
+        <div class="mx-top" style="margin-top:1.25rem"><h2>منتجات التمريض</h2></div>
         <div class="mx-bl" id="mxInfo">${infoHtml()}</div>
         <div id="mxGrid">${gridHtml()}</div>
       </div></div></section>`;
