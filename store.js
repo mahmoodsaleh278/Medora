@@ -138,6 +138,7 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .mx-head .mx-in{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.5rem;padding-top:.8rem;padding-bottom:.8rem}
 .mx-brand{display:flex;align-items:center;gap:.55rem}
 .mx-brand img{height:2rem;width:auto;border-radius:6px}
+.mx-x{background:linear-gradient(135deg,currentColor 0%,currentColor 52%,#1E6BFF 54%,#1E6BFF 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:inherit}
 .mx-brand b{font-size:1.45rem;font-weight:900;color:var(--m-fg);font-family:Lexend,Cairo,system-ui,sans-serif;letter-spacing:-.01em;line-height:1}
 .mx-nav{display:none;align-items:center;gap:.25rem}
 .mx-nav button{border-radius:999px;padding:.4rem .9rem;font-size:.95rem;font-weight:600}.mx-nav button:hover{background:var(--m-mist)}
@@ -150,8 +151,9 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .mx-sl button,.mx-sl p{display:flex;width:100%;justify-content:space-between;gap:.5rem;text-align:start;border-radius:.7rem;padding:.55rem .75rem;font-size:.9rem}
 .mx-sl button:hover{background:var(--m-mist)}.mx-sl p{color:var(--m-muted)}
 .mx-acts{display:flex;align-items:center;margin-inline-start:auto}
-.mx-ib{position:relative;border-radius:999px;padding:.6rem;color:var(--m-fg)}.mx-ib:hover{background:var(--m-mist)}
-.mx-badge-n{position:absolute;top:.1rem;inset-inline-end:.1rem;min-width:1rem;height:1rem;border-radius:999px;padding:0 .25rem;font-size:.65rem;font-weight:700;background:var(--m-ink);color:var(--m-onink);display:grid;place-items:center;line-height:1}
+.mx-acts{gap:.45rem}
+.mx-ib{position:relative;border-radius:999px;padding:.62rem;color:var(--m-fg);background:var(--m-mist);border:1.5px solid var(--m-fg);display:grid;place-items:center;transition:background .15s,color .15s}.mx-ib svg{width:22px;height:22px;stroke-width:2.6}.mx-ib:hover{background:var(--m-ink);color:var(--m-onink);border-color:var(--m-ink)}
+.mx-badge-n{position:absolute;top:-.25rem;inset-inline-end:-.25rem;min-width:1.1rem;height:1.1rem;border-radius:999px;padding:0 .3rem;font-size:.7rem;font-weight:800;border:2px solid var(--m-bg);background:var(--m-red);color:var(--m-onink);display:grid;place-items:center;line-height:1}
 .mx-chips{display:flex;gap:.5rem;overflow-x:auto;border-top:1px solid var(--m-line);padding:.5rem 1rem}
 .mx-chips button{flex:none;background:var(--m-mist);border-radius:999px;padding:.3rem 1rem;font-size:.9rem;font-weight:600}
 /* شريط الفلاتر العلوي */
@@ -160,7 +162,9 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .mx-fbar .mx-in::-webkit-scrollbar{display:none}
 .mx-fbar .fi{flex:none;color:var(--m-muted)}
 .mx-fbar select,.mx-fbar input[type=number]{flex:none;border:1px solid var(--m-line);background:var(--m-mist);color:var(--m-fg);border-radius:999px;padding:.42rem .95rem;font:inherit;font-size:.88rem;font-weight:600;outline:0;cursor:pointer}
-.mx-fbar input[type=number]{width:5.5rem;cursor:text}
+.mx-fbar input[type=number]{width:6.5rem;cursor:text}
+#mxMin{width:8.5rem!important}
+.mx-fbar input[type=number]::-webkit-inner-spin-button,.mx-fbar input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.mx-fbar input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .mx-fbar select:focus,.mx-fbar input:focus{border-color:var(--m-ink)}
 .mx-fbar select option{color:#000}
 .mx-fbar .mx-pr{flex:none;align-items:center}
@@ -171,14 +175,18 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .dv-txt b{display:block;font-size:clamp(1.7rem,6vw,2.7rem);font-weight:900;line-height:1.3;color:var(--m-fg)}
 .dv-txt em{display:block;font-style:normal;color:var(--m-ink)}
 .dv-vis{position:relative;direction:ltr;order:-1;height:clamp(10rem,46vw,15rem);overflow:hidden}
-.dv-truck{position:absolute;left:50%;bottom:.85rem;width:min(88%,23rem);height:auto;mix-blend-mode:multiply;transform:translateX(-50%);transform-origin:50% 100%;animation:mxbob .62s ease-in-out infinite}
-.dv-road{position:absolute;left:0;right:0;bottom:.3rem;height:4px;border-radius:4px;background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--m-fg) 30%,transparent) 0 26px,transparent 26px 52px);background-size:52px 4px;animation:mxroad .45s linear infinite}
-.dv-lines i{position:absolute;height:4px;border-radius:4px;background:var(--m-ink);opacity:0;animation:mxline .9s linear infinite}
+.dv-truck{position:absolute;left:50%;bottom:.85rem;width:min(88%,23rem);height:auto;mix-blend-mode:multiply;transform:translateX(-50%);transform-origin:50% 100%;animation:mxbob .32s linear infinite,mxdrive 5s ease-in-out infinite}
+.dv-road{position:absolute;left:0;right:0;bottom:.3rem;height:4px;border-radius:4px;background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--m-fg) 40%,transparent) 0 26px,transparent 26px 52px);background-size:52px 4px;animation:mxroad .22s linear infinite}
+.dv-dust{position:absolute;left:calc(50% - 9.5rem);bottom:.55rem;width:.9rem;height:.9rem;border-radius:50%;background:color-mix(in srgb,var(--m-fg) 28%,transparent);opacity:0;animation:mxdust .7s ease-out infinite}
+.dv-dust.d2{animation-delay:.23s;bottom:.75rem}.dv-dust.d3{animation-delay:.46s;bottom:.45rem}
+.dv-lines i{position:absolute;height:4px;border-radius:4px;background:var(--m-ink);opacity:0;animation:mxline .5s linear infinite}
 .dv-lines i:nth-child(1){left:4%;top:42%;width:3rem}
 .dv-lines i:nth-child(2){left:1%;top:56%;width:2.2rem;animation-delay:.3s}
 .dv-lines i:nth-child(3){left:6%;top:70%;width:3.4rem;animation-delay:.6s}
 body.dark .dv-vis{background:#fff;border-radius:1.1rem}
-@keyframes mxbob{0%,100%{transform:translateX(-50%) translateY(0) rotate(0)}30%{transform:translateX(-50%) translateY(-3px) rotate(-.35deg)}65%{transform:translateX(-50%) translateY(-1px) rotate(.3deg)}}
+@keyframes mxbob{0%,100%{transform:translateX(-50%) translateY(0) rotate(0)}25%{transform:translateX(-50%) translateY(-3px) rotate(-.5deg)}50%{transform:translateX(-50%) translateY(0) rotate(0)}75%{transform:translateX(-50%) translateY(-2px) rotate(.5deg)}}
+@keyframes mxdrive{0%,100%{margin-left:-14px}50%{margin-left:14px}}
+@keyframes mxdust{0%{transform:translate(0,0) scale(.4);opacity:.55}100%{transform:translate(-3.2rem,-.9rem) scale(1.5);opacity:0}}
 @keyframes mxroad{to{background-position-x:-52px}}
 @keyframes mxline{0%{transform:translateX(70%);opacity:0}25%{opacity:.4}100%{transform:translateX(-90%);opacity:0}}
 @media(min-width:640px){.mx-deliv{grid-template-columns:1fr minmax(20rem,28rem);gap:1.5rem;padding:1.25rem 2.25rem;text-align:start}.dv-vis{order:0;height:15rem}.dv-truck{width:min(92%,24rem)}}
@@ -368,6 +376,8 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
   const baseList = () => { const admin = isAdminSession(); return S.items.filter(p => catOn(cat(p)) && (admin || p.active !== false)); };
   const filtersOn = () => S.tab !== 'all' || !!S.tool || S.min !== '' || S.max !== '' || S.stock;
 
+  const brandName = () => 'MEDI<span class="mx-x">X</span> STORE';
+
   function actsHtml(){
     return `<button class="mx-ib" data-act="theme" aria-label="تبديل الوضع الليلي">${ic('moon', 20)}</button>
       <button class="mx-ib" data-act="wishnav" aria-label="المفضّلة (${wish.size})">${ic('heart', 20)}${cnt(wish.size)}</button>
@@ -396,7 +406,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
 
   function headHtml(){
     return `<div class="mx-head"><div class="mx-in">
-      <a class="mx-brand" href="/home" aria-label="MEDIX Store"><img src="${esc(LOGO_URL)}" alt=""><b>MEDIX STORE</b></a>
+      <a class="mx-brand" href="/home" aria-label="MEDIX Store"><img src="${esc(LOGO_URL)}" alt=""><b>${brandName()}</b></a>
       <div class="mx-search">
         <span class="si">${ic('search', 16)}</span>
         <input id="mxQ" type="search" autocomplete="off" placeholder="ابحث عن سماعة، جهاز ضغط، طقم..." value="${esc(S.q)}" aria-label="بحث">
@@ -446,8 +456,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
   function heroHtml(){
     return `<section class="mx-hero"><div class="mx-in">
       <div><h1>${esc(cfg('headline'))}</h1><p class="lead">${esc(cfg('sub'))}</p>
-        <div class="mx-cta"><button class="mx-btn ink" data-act="go" data-id="mxFeat">تسوّق الآن</button>
-          ${catOn('bundles') ? `<button class="mx-btn line" data-act="cat" data-id="bundles">شاهد الباقات</button>` : ''}</div>
+        <div class="mx-cta"><button class="mx-btn ink" data-act="go" data-id="mxFeat">تسوّق الآن</button></div>
         <div id="mxStats">${statsHtml()}</div></div>
       <div id="mxHero">${heroVisualHtml()}</div></div></section>`;
   }
@@ -526,6 +535,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
             <div class="dv-lines"><i></i><i></i><i></i></div>
             <img class="dv-truck" src="${esc(TRUCK_URL)}" alt="" loading="lazy" onerror="this.parentNode.style.display='none'">
             <div class="dv-road"></div>
+            <span class="dv-dust"></span><span class="dv-dust d2"></span><span class="dv-dust d3"></span>
           </div>
         </div>
         <div class="mx-top" style="margin-top:1.75rem"><h2>منتجات التمريض</h2></div>
@@ -534,7 +544,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
       </div></div></section>`;
   }
   function footHtml(){
-    return `<div class="mx-fin"><div class="mx-in"><div><b class="lg">MEDIX STORE</b><p>متجر مستلزمات طلاب التمريض.</p></div>
+    return `<div class="mx-fin"><div class="mx-in"><div><b class="lg">${brandName()}</b><p>متجر مستلزمات طلاب التمريض.</p></div>
       <div class="ln"><a href="/home">العودة إلى MEDORA</a><a href="https://wa.me/${WA_NUMBER}" target="_blank" rel="noopener">تواصل عبر واتساب</a></div>
       <small>© ${new Date().getFullYear()} MEDIX Store — جزء من منصة MEDORA</small></div></div>`;
   }
