@@ -348,6 +348,17 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
 @media(min-width:640px){.mx-in{padding:0 1.5rem}.mx-browse{padding:2.5rem 2rem}}
 @media(min-width:768px){.mx-band ul{display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem 2rem;padding:1.5rem 0}.mx-nav{display:flex}.mx-chips{display:none}.mx-search{order:0;width:auto;flex:1;max-width:40rem}.mx-acts{margin-inline-start:auto}.mx-tools{grid-template-columns:repeat(4,1fr)}.mx-qvb{grid-template-columns:1fr 1fr}.mx-hero .mx-in{padding-top:4rem;padding-bottom:4rem}}
 @media(min-width:1024px){.mx-hero .mx-in{grid-template-columns:1.05fr 1fr}.mx-grid{grid-template-columns:repeat(4,1fr)}.mx-fbar .mx-in{flex-wrap:wrap;overflow:visible}}
+.mx-intro{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;background:#fff;opacity:1;transition:opacity .45s ease;cursor:pointer}
+.mx-intro.out{opacity:0;pointer-events:none}
+.mx-intro-in{display:flex;flex-direction:column;align-items:center;gap:1.4rem;opacity:0;transform:scale(.86)}
+.mx-intro.go .mx-intro-in{animation:mxIntroIn .65s cubic-bezier(.2,.8,.2,1) forwards}
+.mx-intro img{display:block;width:min(68vw,300px);height:auto;max-height:60vh;object-fit:contain;mix-blend-mode:multiply;filter:brightness(1.05) contrast(1.04)}
+.mx-intro-bar{width:min(34vw,120px);height:3px;border-radius:3px;background:#e3eef0;overflow:hidden}
+.mx-intro-bar i{display:block;height:100%;width:100%;background:#2A9D9A;border-radius:3px;transform:scaleX(0);transform-origin:left}
+.mx-intro.go .mx-intro-bar i{animation:mxIntroBar 1.05s ease-out .25s forwards}
+@keyframes mxIntroIn{from{opacity:0;transform:scale(.86)}to{opacity:1;transform:scale(1)}}
+@keyframes mxIntroBar{to{transform:scaleX(1)}}
+@media(prefers-reduced-motion:reduce){.mx-intro{display:none}}
 @media(prefers-reduced-motion:reduce){.mx-root *{animation:none!important;transition-duration:.01ms!important}}`;
     document.head.appendChild(st);
   }
@@ -592,11 +603,37 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
           <button class="mx-btn ink ${out ? 'off' : ''}" style="flex:1" data-act="addqv" data-id="${esc(p.id)}">${out ? 'غير متوفر' : 'أضف للسلة'}</button></div></div></div>`;
   }
 
+  /* ---------- انترو الشعار (مرة وحدة عند فتح الصفحة) ---------- */
+  let introDone = false;
+  function showIntro(){
+    if(introDone) return; introDone = true;
+    try{
+      if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+      const box = document.createElement('div');
+      box.className = 'mx-intro'; box.setAttribute('aria-hidden', 'true');
+      box.innerHTML = `<div class="mx-intro-in"><img src="${esc(LOGO_URL)}" alt=""><div class="mx-intro-bar"><i></i></div></div>`;
+      document.body.appendChild(box);
+      const prevOv = document.body.style.overflow; document.body.style.overflow = 'hidden';
+      let started = false, closed = false;
+      const go = () => { if(started) return; started = true; box.classList.add('go'); setTimeout(close, 1500); };
+      const close = () => {
+        if(closed) return; closed = true;
+        box.classList.add('out'); document.body.style.overflow = prevOv;
+        setTimeout(() => box.remove(), 500);
+      };
+      const img = box.querySelector('img');
+      if(img.complete) go(); else { img.addEventListener('load', go); img.addEventListener('error', go); setTimeout(go, 1200); }
+      box.addEventListener('click', close);
+      setTimeout(close, 3200);
+    }catch(e){}
+  }
+
   function page(){
     injectCss();
     if(!allowed()){
       return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>هذه الصفحة غير متاحة حاليًا</h3><p><a href="/home" style="color:var(--teal);font-weight:800;">العودة للرئيسية</a></p></div></div></section>`;
     }
+    showIntro();
     if(!S.loaded && !S.loading && !S.error) load();
     const open = S.cartOpen, qvOpen = !!by(S.qv);
     return `<div class="mx-root" id="mxRoot">
