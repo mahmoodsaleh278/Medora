@@ -171,25 +171,25 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .mx-fbar .mx-chk{flex:none;white-space:nowrap;font-size:.88rem}
 .mx-feat,.mx-hero{scroll-margin-top:5rem}
 /* بانر التوصيل */
-.mx-deliv{display:grid;gap:.25rem;align-items:center;background:var(--m-mist);border:1px solid var(--m-line);border-radius:1.75rem;padding:1rem 1.25rem 1.1rem;overflow:hidden;text-align:center}
+.mx-deliv{display:grid;gap:0;align-items:center;background:var(--m-mist);border:1px solid var(--m-line);border-radius:1.75rem;padding:.8rem 1.25rem .6rem;overflow:hidden;text-align:center}
 .dv-txt b{display:block;font-size:clamp(1.7rem,6vw,2.7rem);font-weight:900;line-height:1.3;color:var(--m-fg)}
 .dv-txt em{display:block;font-style:normal;color:var(--m-ink)}
-.dv-vis{position:relative;direction:ltr;order:-1;height:clamp(10rem,46vw,15rem);overflow:hidden}
-.dv-truck{position:absolute;left:50%;bottom:.85rem;width:min(88%,23rem);height:auto;mix-blend-mode:multiply;transform:translateX(-50%);transform-origin:50% 100%;animation:mxbob .32s linear infinite,mxdrive 5s ease-in-out infinite}
+.dv-vis{position:relative;direction:ltr;order:-1;height:clamp(7rem,32vw,10.5rem);overflow:hidden}
+.dv-truck{position:absolute;left:50%;bottom:.5rem;width:min(88%,23rem);height:auto;mix-blend-mode:multiply;transform:translateX(-50%);transform-origin:50% 100%;animation:mxbob .5s ease-in-out infinite,mxdrive 5s ease-in-out infinite}
 .dv-road{position:absolute;left:0;right:0;bottom:.3rem;height:4px;border-radius:4px;background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--m-fg) 40%,transparent) 0 26px,transparent 26px 52px);background-size:52px 4px;animation:mxroad .22s linear infinite}
-.dv-dust{position:absolute;left:calc(50% - 9.5rem);bottom:.55rem;width:.9rem;height:.9rem;border-radius:50%;background:color-mix(in srgb,var(--m-fg) 28%,transparent);opacity:0;animation:mxdust .7s ease-out infinite}
+.dv-dust{position:absolute;left:calc(50% - 9.5rem);bottom:.35rem;width:.9rem;height:.9rem;border-radius:50%;background:color-mix(in srgb,var(--m-fg) 28%,transparent);opacity:0;animation:mxdust .7s ease-out infinite}
 .dv-dust.d2{animation-delay:.23s;bottom:.75rem}.dv-dust.d3{animation-delay:.46s;bottom:.45rem}
 .dv-lines i{position:absolute;height:4px;border-radius:4px;background:var(--m-ink);opacity:0;animation:mxline .5s linear infinite}
 .dv-lines i:nth-child(1){left:4%;top:42%;width:3rem}
 .dv-lines i:nth-child(2){left:1%;top:56%;width:2.2rem;animation-delay:.3s}
 .dv-lines i:nth-child(3){left:6%;top:70%;width:3.4rem;animation-delay:.6s}
 body.dark .dv-vis{background:#fff;border-radius:1.1rem}
-@keyframes mxbob{0%,100%{transform:translateX(-50%) translateY(0) rotate(0)}25%{transform:translateX(-50%) translateY(-3px) rotate(-.5deg)}50%{transform:translateX(-50%) translateY(0) rotate(0)}75%{transform:translateX(-50%) translateY(-2px) rotate(.5deg)}}
-@keyframes mxdrive{0%,100%{margin-left:-14px}50%{margin-left:14px}}
+@keyframes mxbob{0%,100%{transform:translateX(-50%) translateY(0) rotate(0)}25%{transform:translateX(-50%) translateY(-1px) rotate(-.15deg)}50%{transform:translateX(-50%) translateY(0) rotate(0)}75%{transform:translateX(-50%) translateY(-.5px) rotate(.15deg)}}
+@keyframes mxdrive{0%,100%{margin-left:-8px}50%{margin-left:8px}}
 @keyframes mxdust{0%{transform:translate(0,0) scale(.4);opacity:.55}100%{transform:translate(-3.2rem,-.9rem) scale(1.5);opacity:0}}
 @keyframes mxroad{to{background-position-x:-52px}}
 @keyframes mxline{0%{transform:translateX(70%);opacity:0}25%{opacity:.4}100%{transform:translateX(-90%);opacity:0}}
-@media(min-width:640px){.mx-deliv{grid-template-columns:1fr minmax(20rem,28rem);gap:1.5rem;padding:1.25rem 2.25rem;text-align:start}.dv-vis{order:0;height:15rem}.dv-truck{width:min(92%,24rem)}}
+@media(min-width:640px){.mx-deliv{grid-template-columns:1fr minmax(20rem,28rem);gap:.5rem;padding:.9rem 2.25rem;text-align:start}.dv-vis{order:0;height:11rem}.dv-truck{width:min(92%,24rem)}}
 /* الهيرو */
 .mx-hero{overflow:hidden;background:var(--m-hero)}
 .mx-hero .mx-in{display:grid;gap:2rem;align-items:center;padding-top:2.5rem;padding-bottom:2.5rem}
