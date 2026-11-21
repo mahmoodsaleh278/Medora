@@ -7,6 +7,7 @@
    - بيستخدم من app.js فقط: supabaseClient, state, setData, escapeHtml,
      isAdminSession, openModal, closeModal, render, currentRoute
    ========================================================= */
+try{
 (function(){
   'use strict';
 
@@ -774,5 +775,14 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
     };
   }
 
-  window.MedixStore = { page, bind };
+  const errHtml = e => `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>تعذّر عرض المتجر</h3><p>حدّث الصفحة، وإذا استمرت المشكلة أرسل لنا الرسالة التالية:</p><p dir="ltr" style="font-size:12px;opacity:.7">${String((e && e.message) || e).replace(/[<>&"]/g, '')}</p></div></div></section>`;
+  const guard = (fn, fb) => (...a) => { try{ return fn(...a); }catch(e){ console.error('MEDIX STORE', e); return fb(e); } };
+  window.MedixStore = { page: guard(page, errHtml), bind: guard(bind, () => {}) };
 })();
+}catch(err){
+  console.error('MEDIX STORE init failed', err);
+  window.MedixStore = {
+    page: () => '<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>تعذّر تشغيل المتجر</h3><p dir="ltr" style="font-size:12px;opacity:.7">' + String((err && err.message) || err).replace(/[<>&"]/g, '') + '</p></div></div></section>',
+    bind: () => {}
+  };
+}
