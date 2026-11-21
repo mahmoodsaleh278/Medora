@@ -138,7 +138,7 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 .mx-head .mx-in{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.5rem;padding-top:.8rem;padding-bottom:.8rem}
 .mx-brand{display:flex;flex-wrap:nowrap;align-items:center;gap:.55rem;flex:none;white-space:nowrap}
 .mx-brand img{height:2rem;width:auto;border-radius:6px;flex:none}
-.mx-xs{display:inline-block;height:.72em;width:.92em;vertical-align:-.02em;margin-inline:.02em;color:inherit;overflow:visible}
+.mx-root .mx-xs{display:inline-block;flex:none;height:.74em;width:.94em;vertical-align:-.03em;margin-inline:-.02em 0;color:inherit;overflow:visible}
 .mx-brand b{direction:ltr;unicode-bidi:isolate;font-size:1.45rem;font-weight:900;color:var(--m-fg);font-family:Lexend,Cairo,system-ui,sans-serif;letter-spacing:-.01em;line-height:1}
 .mx-nav{display:none;align-items:center;gap:.25rem}
 .mx-nav button{border-radius:999px;padding:.4rem .9rem;font-size:.95rem;font-weight:600}.mx-nav button:hover{background:var(--m-mist)}
