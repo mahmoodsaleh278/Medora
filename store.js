@@ -375,6 +375,40 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
 @keyframes mxFade{to{opacity:1}}
 @keyframes mxLet{to{opacity:1;transform:rotateX(0) translateY(0)}}
 @keyframes mxRise{to{opacity:1;transform:none}}
+/* ===== صفحة الدفع CliQ ===== */
+.mx-co{position:fixed;inset:0;z-index:60;background:var(--m-bg);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.mx-co .cw{max-width:62rem;margin:0 auto;padding:1rem 1rem 3rem}
+.mx-co .ch{display:flex;align-items:center;justify-content:space-between;padding:.5rem 0 1rem}.mx-co .ch h2{font-size:1.5rem}
+.mx-co .cc{background:var(--m-surface);border:1px solid var(--m-line);border-radius:1.1rem;padding:1.1rem;margin-bottom:1rem}
+.mx-co .ct{display:flex;align-items:center;gap:.6rem;font-weight:900;color:var(--m-fg);font-size:1.05rem;margin-bottom:.8rem}
+.mx-co .cn{width:1.9rem;height:1.9rem;border-radius:50%;background:var(--m-mist);color:var(--m-ink);display:inline-flex;align-items:center;justify-content:center;font-weight:900;font-size:.9rem;flex:none}
+.mx-co .cs{display:grid;gap:.8rem;grid-template-columns:1fr}
+.mx-co .cs>div{display:flex;gap:.8rem;align-items:center;background:var(--m-mist);border:1px solid var(--m-line);border-radius:1rem;padding:.9rem}
+.mx-co .cs .ico{width:2.6rem;height:2.6rem;border-radius:50%;background:var(--m-ink);color:var(--m-onink);display:flex;align-items:center;justify-content:center;flex:none}
+.mx-co .cs b{display:block;color:var(--m-fg);font-size:.95rem}.mx-co .cs span{font-size:.8rem;color:var(--m-muted)}
+.mx-co .cq{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}
+.mx-co .cq .logo{font-weight:900;font-size:1.3rem;color:var(--m-fg);background:var(--m-mist);border:1px solid var(--m-line);border-radius:.9rem;padding:1rem 1.4rem}
+.mx-co .cq dl{margin:0;display:grid;gap:.25rem;font-size:.88rem}.mx-co .cq dt{display:inline;color:var(--m-muted)}.mx-co .cq dd{display:inline;margin:0;font-weight:800;color:var(--m-fg)}
+.mx-co .alias{font-size:1.25rem;font-weight:900;color:var(--m-ink);letter-spacing:1px;direction:ltr;display:inline-block}
+.mx-co .cp{display:inline-flex;align-items:center;gap:.3rem;margin-inline-start:.5rem;font-size:.75rem;font-weight:800;border:1px solid var(--m-line);border-radius:999px;padding:.15rem .6rem;color:var(--m-ink);background:var(--m-surface)}
+.mx-co .cg{display:grid;gap:1rem;grid-template-columns:1fr}
+.mx-co label.lb{display:block;font-size:.8rem;font-weight:800;color:var(--m-fg);margin:.7rem 0 .3rem}
+.mx-co input[type=text],.mx-co input[type=tel],.mx-co textarea{width:100%;font:inherit;font-size:.92rem;color:var(--m-fg);background:var(--m-mist);border:1px solid var(--m-line);border-radius:.7rem;padding:.65rem .8rem}
+.mx-co textarea{resize:vertical;min-height:4rem}
+.mx-co .up{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;width:100%;min-height:7.5rem;border:2px dashed var(--m-line);border-radius:.9rem;background:var(--m-mist);color:var(--m-ink);font-weight:800;font-size:.9rem;text-align:center;padding:1rem}
+.mx-co .up small{color:var(--m-muted);font-weight:500}
+.mx-co .fl{display:flex;align-items:center;justify-content:space-between;gap:.6rem;background:var(--m-mist);border:1px solid var(--m-line);border-radius:.9rem;padding:.8rem 1rem;font-size:.88rem;color:var(--m-fg);word-break:break-all}
+.mx-co .fl button{color:var(--m-red);font-weight:800;flex:none}
+.mx-co .sm-l{display:flex;justify-content:space-between;gap:.6rem;font-size:.88rem;padding:.25rem 0;color:var(--m-muted)}.mx-co .sm-l b{color:var(--m-fg)}
+.mx-co .sm-l.d b{color:var(--m-red)}
+.mx-co .tot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--m-line);margin-top:.7rem;padding-top:.8rem;font-weight:900;color:var(--m-fg)}.mx-co .tot b{font-size:1.5rem;color:var(--m-ink)}
+.mx-co .cr{display:flex;gap:.5rem}.mx-co .cr input{flex:1;direction:ltr;text-transform:uppercase;letter-spacing:1px}
+.mx-co .chip{display:flex;align-items:center;justify-content:space-between;gap:.5rem;background:var(--m-mist);border:1px solid var(--m-ink);border-radius:.8rem;padding:.55rem .8rem;font-size:.85rem;font-weight:800;color:var(--m-fg)}.mx-co .chip button{color:var(--m-red)}
+.mx-co .hint{font-size:.76rem;color:var(--m-muted);margin:.5rem 0}
+.mx-co .err{color:var(--m-red);font-size:.84rem;font-weight:700;margin:.6rem 0}
+.mx-co .ok{text-align:center;padding:2.5rem 1rem}.mx-co .ok .big{width:4.5rem;height:4.5rem;border-radius:50%;background:var(--m-ink);color:var(--m-onink);display:flex;align-items:center;justify-content:center;margin:0 auto 1rem}
+@media(min-width:640px){.mx-co .cs{grid-template-columns:1fr 1fr}}
+@media(min-width:900px){.mx-co .cg{grid-template-columns:1.15fr 1fr;align-items:start}}
 @media(prefers-reduced-motion:reduce){.mx-intro{display:none}}
 @media(prefers-reduced-motion:reduce){.mx-root *{animation:none!important;transition-duration:.01ms!important}}`;
     document.head.appendChild(st);
@@ -440,6 +474,8 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
       <div class="sp">
         <button class="mx-btn ink sm" data-act="new">＋ إضافة منتج</button>
         <button class="mx-btn line sm" data-act="texts">✏️ نصوص الصفحة</button>
+        <button class="mx-btn line sm" data-act="orders">📦 الطلبات</button>
+        <button class="mx-btn line sm" data-act="coupons">🎟️ الكوبونات</button>
         <a class="mx-btn line sm" href="/home">🛡️ العودة للمنصة</a>
       </div></div></div>`;
   }
@@ -602,8 +638,9 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
         ${dis > 0.004 ? `<div class="r d"><span>الخصم (-${dp}%)</span><b>-${fmt(dis)}</b></div>` : ''}
         <div class="r"><span>التوصيل</span><b>يُتفق عليه</b></div>
         <div class="r t"><span>الإجمالي</span><b>${fmt(tot)}</b></div>
-        <small>التوصيل والخصومات يتم الاتفاق عليها مع فريقنا عبر واتساب.</small>
-        <a class="mx-btn ink block" href="https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">${ic('wa', 18)} إتمام الطلب عبر واتساب ${ic('arrow', 16, '', 'mx-flip')}</a></div>`;
+        <small>الدفع عبر CliQ: حوّل المبلغ ثم ارفع صورة الحوالة (أو استخدم كوبون). التوصيل نتفق عليه مع فريقنا.</small>
+        <button class="mx-btn ink block" data-act="checkout">${ic('check', 18)} إتمام الشراء ${ic('arrow', 16, '', 'mx-flip')}</button>
+        <a class="mx-btn line block sm" style="margin-top:.5rem" href="https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">${ic('wa', 16)} استفسار عبر واتساب</a></div>`;
   }
   function qvHtml(){
     const p = by(S.qv); if(!p) return '';
@@ -721,6 +758,9 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
       case 'cat': S.tab = id; S.tool = ''; closeAll(); updGrid(); scrollTo('mxFeat'); break;
       case 'wishnav': if(wish.size){ S.tab = 'wish'; S.tool = ''; updGrid(); scrollTo('mxFeat'); } break;
       case 'cart': S.cartOpen = true; updOverlays(); break;
+      case 'checkout': coOpen(); break;
+      case 'orders': modalOrders(); break;
+      case 'coupons': modalCoupons(); break;
       case 'close': closeAll(); break;
       case 'go': scrollTo(id); break;
       case 'xpromo': { lsSet('mx_promo_x', promoText().trim()); const b = $('#mxPromo'); if(b) b.remove(); break; }
@@ -762,6 +802,241 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
     if(!escBound){ escBound = true; document.addEventListener('keydown', e => { if(e.key === 'Escape' && currentRoute() === 'store' && (S.cartOpen || S.qv)) closeAll(); }); }
     document.body.style.overflow = (S.cartOpen || by(S.qv)) ? 'hidden' : '';
     bindTilt();
+    coMount();
+  }
+
+  /* =========================================================
+     الدفع عبر CliQ — نفس خطوات صفحة السلة: حوالة → إثبات/كوبون → موافقة الأدمن
+     يحتاج: store-orders.sql (جداول store_orders/store_coupons + bucket store-proofs + الدوال)
+     ========================================================= */
+  const CLIQ = { alias:'MQBANK', name:'Oudeh Ashraf Oudeh Abuawad', bank:'Bank al Etihad (بنك الاتحاد)' };
+  const PROOF_BUCKET = 'store-proofs';
+  Object.assign(IC, {
+    upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+    copy:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    bank:'<path d="M3 21h18M5 21V10M9 21V10M15 21V10M19 21V10M2 10l10-7 10 7"/>',
+    receipt:'<path d="M5 2h14v20l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 7h6M9 11h6"/>'
+  });
+  const CO = { open:false, coupon:null, code:'', file:null, busy:'', msg:'', cmsg:'', done:null, f:Object.assign({ name:'', phone:'', address:'', note:'' }, lsGet('mx_cust', {})) };
+  const coDis = () => CO.coupon ? Math.round(cartTotal() * CO.coupon.percent) / 100 : 0;
+  const coTot = () => Math.max(0, Math.round((cartTotal() - coDis()) * 100) / 100);
+  const coFree = () => coTot() === 0;
+
+  function coHtml(){
+    const head = `<div class="ch"><h2>إتمام الشراء</h2><button class="mx-ib" data-co="close" aria-label="إغلاق">${ic('x', 22)}</button></div>`;
+    if(CO.done){
+      const d = CO.done, ok = d.status === 'approved';
+      return `<div class="cw">${head}<div class="cc ok"><div class="big">${ic('check', 38)}</div>
+        <h3 style="font-size:1.4rem;margin-bottom:.4rem">${ok ? 'تم تأكيد طلبك' : 'تم استلام طلبك'}</h3>
+        <p class="mx-muted">رقم الطلب: <b style="color:var(--m-fg)">#${esc(d.order_no)}</b> — الإجمالي: <b style="color:var(--m-fg)">${fmt(d.total)}</b></p>
+        <p class="mx-muted" style="margin:.6rem 0 1.4rem">${ok ? 'تم اعتماد الطلب مباشرة بالكوبون، وسيتواصل معك فريقنا للتوصيل.' : 'سيراجع الأدمن الحوالة ويعتمد طلبك خلال دقائق، وسيتواصل معك فريقنا للتوصيل.'}</p>
+        <button class="mx-btn ink" data-co="close">العودة للمتجر</button></div></div>`;
+    }
+    const L = cartLines(), sub = cartTotal(), dis = coDis(), tot = coTot(), free = coFree(), f = CO.f;
+    const steps = [['bank','حوّل عبر CliQ','افتح تطبيق البنك واختر CliQ وحوّل إلى الاسم المستعار ' + CLIQ.alias + '.'],
+      ['receipt','احفظ الإيصال','احفظ أو صوّر شاشة إيصال إتمام الحوالة.'],
+      ['upload','ارفع الإثبات أو الكوبون','أرفق لقطة الشاشة بالأسفل أو أدخل كود كوبون صالح.'],
+      ['check','تفعيل سريع','أرسل الطلب وسيعتمده الأدمن خلال دقائق.']];
+    const proof = CO.file
+      ? `<div class="fl"><span>${ic('receipt', 18)} ${esc(CO.file.name)}</span><button data-co="rmfile">إزالة</button></div>`
+      : `<button type="button" class="up" data-co="pick">${ic('upload', 26)}<span>اضغط لرفع صورة الحوالة</span><small>JPG أو PNG أو PDF</small></button>`;
+    const coupon = CO.coupon
+      ? `<div class="chip"><span>🎟️ ${esc(CO.coupon.code)} — خصم ${CO.coupon.percent}%</span><button data-co="rmcoupon">إزالة</button></div>`
+      : `<div class="cr"><input type="text" id="coCode" placeholder="أدخل الكود..." value="${esc(CO.code)}" autocomplete="off"><button class="mx-btn ink sm ${CO.busy === 'coupon' ? 'off' : ''}" data-co="apply">تطبيق</button></div>`;
+    return `<div class="cw">${head}
+      <div class="cc"><div class="ct"><span class="cn">1</span>كيف تدفع (4 خطوات سريعة)</div>
+        <div class="cs">${steps.map((s, i) => `<div><span class="ico">${ic(s[0], 20)}</span><div><b>${i + 1}. ${s[1]}</b><span>${s[2]}</span></div></div>`).join('')}</div></div>
+      <div class="cc"><div class="ct"><span class="cn">2</span>تفاصيل تحويل CliQ</div>
+        <div class="cq"><div class="logo">CliQ</div><dl>
+          <div><dt>الاسم المستعار: </dt><dd class="alias">${esc(CLIQ.alias)}</dd><button type="button" class="cp" data-co="copy">${ic('copy', 13)} نسخ</button></div>
+          <div><dt>اسم المستلم: </dt><dd dir="ltr">${esc(CLIQ.name)}</dd></div>
+          <div><dt>البنك: </dt><dd>${esc(CLIQ.bank)}</dd></div></dl></div></div>
+      <div class="cg">
+        <div class="cc"><div class="ct"><span class="cn">3</span>بيانات التوصيل وإثبات الدفع</div>
+          <label class="lb" for="coName">الاسم الكامل *</label><input type="text" id="coName" maxlength="80" value="${esc(f.name)}" autocomplete="name">
+          <label class="lb" for="coPhone">رقم الهاتف *</label><input type="tel" id="coPhone" maxlength="20" dir="ltr" placeholder="07XXXXXXXX" value="${esc(f.phone)}" autocomplete="tel">
+          <label class="lb" for="coAddr">عنوان التوصيل *</label><textarea id="coAddr" maxlength="300" placeholder="المحافظة، المنطقة، الشارع...">${esc(f.address)}</textarea>
+          <label class="lb">صورة الحوالة ${free ? '(غير مطلوبة — الكوبون 100%)' : '*'}</label>${proof}
+          <input type="file" id="coFile" accept="image/*,application/pdf" hidden>
+          <label class="lb" for="coNote">ملاحظة (اختياري)</label><textarea id="coNote" maxlength="300" placeholder="اختياري...">${esc(f.note)}</textarea></div>
+        <div class="cc"><div class="ct"><span class="cn">4</span>ملخّص الطلب</div>
+          ${L.map(x => `<div class="sm-l"><span>${esc(x.p.title)} × ${x.q}</span><b>${fmt(Number(x.p.price) * x.q)}</b></div>`).join('')}
+          <label class="lb">كود الخصم (اختياري)</label>${coupon}
+          ${CO.cmsg ? `<div class="err">${esc(CO.cmsg)}</div>` : ''}
+          <p class="hint">كوبون 100% يلغي الحاجة للحوالة والصورة.</p>
+          <div class="sm-l"><span>المجموع الفرعي</span><b>${fmt(sub)}</b></div>
+          ${dis > 0 ? `<div class="sm-l d"><span>الخصم (-${CO.coupon.percent}%)</span><b>-${fmt(dis)}</b></div>` : ''}
+          <div class="tot"><span>الإجمالي للدفع</span><b>${fmt(tot)}</b></div>
+          ${CO.msg ? `<div class="err">${esc(CO.msg)}</div>` : ''}
+          <button class="mx-btn ink block ${CO.busy === 'submit' || (!free && !CO.file) ? 'off' : ''}" style="margin-top:1rem" data-co="submit">${CO.busy === 'submit' ? 'جارِ الإرسال...' : 'إتمام الشراء'}</button>
+          <p class="hint" style="text-align:center">${free ? 'الكوبون يغطي كامل المبلغ.' : 'ارفع صورة الحوالة، أو استخدم كوبون 100%.'}</p></div>
+      </div></div>`;
+  }
+  function coMount(){
+    const root = $('#mxRoot'); if(!root) return;
+    let el = $('#mxCo');
+    if(!CO.open){ if(el) el.remove(); return; }
+    if(!el){
+      el = document.createElement('div'); el.id = 'mxCo'; el.className = 'mx-co'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+      el.onclick = coClick; el.oninput = coInput; el.onchange = coChange; root.appendChild(el);
+      if(!coMount.esc){ coMount.esc = true; document.addEventListener('keydown', e => { if(e.key === 'Escape' && CO.open && !CO.busy) coClose(); }); }
+    }
+    const st = el.scrollTop; el.innerHTML = coHtml(); el.scrollTop = st;
+    document.body.style.overflow = 'hidden';
+  }
+  function coOpen(){ if(!cartLines().length) return; S.cartOpen = false; updOverlays(); CO.open = true; CO.done = null; CO.msg = ''; CO.cmsg = ''; coMount(); const el = $('#mxCo'); if(el) el.scrollTop = 0; }
+  function coClose(){ CO.open = false; CO.done = null; coMount(); document.body.style.overflow = ''; }
+  function coClick(e){
+    const t = e.target.closest('[data-co]'); if(!t) return;
+    switch(t.dataset.co){
+      case 'close': if(!CO.busy) coClose(); break;
+      case 'copy': {
+        const done = () => { t.innerHTML = ic('check', 13) + ' تم النسخ'; };
+        try{ navigator.clipboard.writeText(CLIQ.alias).then(done, done); }catch(_){ done(); }
+        break; }
+      case 'pick': { const i = $('#coFile'); if(i) i.click(); break; }
+      case 'rmfile': CO.file = null; coMount(); break;
+      case 'rmcoupon': CO.coupon = null; CO.code = ''; CO.cmsg = ''; coMount(); break;
+      case 'apply': coApply(); break;
+      case 'submit': coSubmit(); break;
+    }
+  }
+  function coInput(e){
+    const id = e.target.id, v = e.target.value;
+    if(id === 'coName') CO.f.name = v; else if(id === 'coPhone') CO.f.phone = v; else if(id === 'coAddr') CO.f.address = v;
+    else if(id === 'coNote') CO.f.note = v; else if(id === 'coCode') CO.code = v.toUpperCase();
+  }
+  function coChange(e){
+    if(e.target.id !== 'coFile') return;
+    const f = e.target.files && e.target.files[0]; if(!f) return;
+    if(!(f.type.startsWith('image/') || f.type === 'application/pdf')){ CO.msg = 'الملف لازم يكون صورة أو PDF.'; coMount(); return; }
+    if(f.size > 15 * 1024 * 1024){ CO.msg = 'حجم الملف كبير جدًا (الحد 15MB).'; coMount(); return; }
+    CO.file = f; CO.msg = ''; coMount();
+  }
+  async function coApply(){
+    const code = (CO.code || '').trim().toUpperCase();
+    if(!code){ CO.cmsg = 'أدخل كود الكوبون.'; coMount(); return; }
+    CO.busy = 'coupon'; CO.cmsg = ''; coMount();
+    try{
+      const { data, error } = await supabaseClient.rpc('store_check_coupon', { p_code: code });
+      if(error) throw error;
+      if(data && data.ok){ CO.coupon = { code, percent: Number(data.percent) }; CO.cmsg = ''; }
+      else CO.cmsg = (data && data.msg) || 'الكوبون غير صالح.';
+    }catch(err){
+      console.error('coupon check failed', err);
+      CO.cmsg = (err && (err.code === 'PGRST202' || err.code === '42883')) ? 'نظام الدفع غير مفعّل بعد (شغّل store-orders.sql).' : 'تعذّر التحقق من الكوبون، حاول مرة ثانية.';
+    }
+    CO.busy = ''; coMount();
+  }
+  async function coSubmit(){
+    if(CO.busy) return;
+    const f = CO.f, free = coFree(), fail = m => { CO.msg = m; coMount(); };
+    if((f.name || '').trim().length < 2) return fail('اكتب اسمك الكامل.');
+    if(String(f.phone || '').replace(/\D/g, '').length < 9) return fail('اكتب رقم هاتف صحيح.');
+    if((f.address || '').trim().length < 5) return fail('اكتب عنوان التوصيل.');
+    if(!free && !CO.file) return fail('ارفع صورة الحوالة أو استخدم كوبون 100%.');
+    CO.busy = 'submit'; CO.msg = ''; coMount();
+    try{
+      let proof = null;
+      if(!free && CO.file){
+        let blob = CO.file, ext = 'pdf', ct = 'application/pdf';
+        if(CO.file.type.startsWith('image/')){ blob = await compressImage(CO.file, 1600); ext = 'jpg'; ct = 'image/jpeg'; }
+        proof = Date.now() + '-' + Math.random().toString(36).slice(2, 10) + '.' + ext;
+        const up = await supabaseClient.storage.from(PROOF_BUCKET).upload(proof, blob, { contentType: ct, upsert: false });
+        if(up.error) throw up.error;
+      }
+      const items = cartLines().map(x => ({ id: String(x.p.id), qty: x.q }));
+      const { data, error } = await supabaseClient.rpc('store_place_order', {
+        p_name: f.name.trim(), p_phone: f.phone.trim(), p_address: f.address.trim(), p_note: (f.note || '').trim(),
+        p_items: items, p_coupon: CO.coupon ? CO.coupon.code : null, p_proof: proof });
+      if(error) throw error;
+      if(!data || !data.ok){ CO.msg = (data && data.msg) || 'تعذّر إرسال الطلب.'; }
+      else {
+        lsSet('mx_cust', { name: f.name.trim(), phone: f.phone.trim(), address: f.address.trim() });
+        cart = {}; saveCart(); updActs();
+        CO.done = data; CO.coupon = null; CO.file = null; CO.code = ''; CO.f.note = '';
+      }
+    }catch(err){
+      console.error('MEDIX STORE order failed', err);
+      CO.msg = (err && (err.code === 'PGRST202' || err.code === '42883' || err.code === '42P01')) ? 'نظام الدفع غير مفعّل بعد (شغّل store-orders.sql).' : 'تعذّر إرسال الطلب، تحقق من الاتصال وحاول مرة ثانية.';
+    }
+    CO.busy = ''; coMount();
+  }
+
+  /* ---------- إدارة الطلبات والكوبونات (مشرف) ---------- */
+  const waLink = ph => { let d = String(ph || '').replace(/\D/g, ''); if(d.startsWith('00')) d = d.slice(2); else if(d.startsWith('0')) d = '962' + d.slice(1); return 'https://wa.me/' + d; };
+  const ST = { pending:['قيد المراجعة', '#b7791f'], approved:['معتمد', '#2f855a'], rejected:['مرفوض', '#c53030'] };
+  async function modalOrders(){
+    if(!isAdminSession()) return;
+    openModal(`<h3>📦 طلبات المتجر</h3><div id="mxOrd"><p class="mx-muted">جارِ التحميل...</p></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إغلاق</button></div>`);
+    document.getElementById('cancelModal').onclick = closeModal;
+    const box = document.getElementById('mxOrd');
+    const draw = async () => {
+      const { data, error } = await supabaseClient.from('store_orders').select('*').order('created_at', { ascending: false }).limit(100);
+      if(error){ box.innerHTML = `<div class="form-msg error">${esc(error.code === '42P01' ? 'شغّل ملف store-orders.sql أولًا.' : 'تعذّر تحميل الطلبات.')}</div>`; return; }
+      box.innerHTML = (data || []).length ? data.map(o => {
+        const s = ST[o.status] || ST.pending;
+        return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>#${esc(o.order_no)} — ${esc(o.name)}</b><span style="color:${s[1]};font-weight:800">${s[0]}</span></div>
+          <div style="font-size:13px;margin:4px 0"><a href="${esc(waLink(o.phone))}" target="_blank" rel="noopener" dir="ltr">${esc(o.phone)}</a> • ${esc(o.address)}</div>
+          <div style="font-size:13px">${(o.items || []).map(i => `${esc(i.title)} × ${esc(i.qty)}`).join('، ')}</div>
+          <div style="font-size:13px;margin:4px 0">الإجمالي: <b>${fmt(o.total)}</b>${Number(o.discount) > 0 ? ` (خصم ${fmt(o.discount)} — ${esc(o.coupon_code)})` : ''}${o.note ? ` • ملاحظة: ${esc(o.note)}` : ''}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+            ${o.proof_path ? `<button class="btn small" data-o="proof" data-p="${esc(o.proof_path)}">🧾 عرض الحوالة</button>` : ''}
+            ${o.status !== 'approved' ? `<button class="btn teal solid small" data-o="approved" data-id="${esc(o.id)}">✅ اعتماد</button>` : ''}
+            ${o.status !== 'rejected' ? `<button class="btn danger small" data-o="rejected" data-id="${esc(o.id)}">رفض</button>` : ''}</div></div>`;
+      }).join('') : '<p>لا توجد طلبات بعد.</p>';
+    };
+    box.onclick = async e => {
+      const b = e.target.closest('[data-o]'); if(!b) return;
+      if(b.dataset.o === 'proof'){
+        const { data, error } = await supabaseClient.storage.from(PROOF_BUCKET).createSignedUrl(b.dataset.p, 600);
+        if(error || !data) { alert('تعذّر فتح الصورة.'); return; }
+        window.open(data.signedUrl, '_blank', 'noopener'); return;
+      }
+      b.disabled = true;
+      const { error } = await supabaseClient.from('store_orders').update({ status: b.dataset.o, reviewed_at: new Date().toISOString() }).eq('id', b.dataset.id);
+      if(error){ alert('تعذّر تحديث الطلب.'); b.disabled = false; return; }
+      draw();
+    };
+    draw();
+  }
+  async function modalCoupons(){
+    if(!isAdminSession()) return;
+    const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), x => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[x % 32]).join('');
+    openModal(`<h3>🎟️ كوبونات المتجر</h3>
+      <form id="mxCpF" style="display:flex;gap:6px;flex-wrap:wrap;align-items:end;margin-bottom:12px">
+        <div class="field" style="flex:2;min-width:150px;margin:0"><label>الكود</label><input type="text" name="code" required value="${rnd()}" style="direction:ltr;text-transform:uppercase"></div>
+        <div class="field" style="flex:1;min-width:80px;margin:0"><label>الخصم %</label><input type="number" name="percent" min="1" max="100" value="100" required></div>
+        <div class="field" style="flex:1;min-width:80px;margin:0"><label>أقصى استخدام</label><input type="number" name="max" min="1" value="1"></div>
+        <button class="btn teal solid small" type="submit">＋ إنشاء</button></form>
+      <div id="mxCpL"><p class="mx-muted">جارِ التحميل...</p></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إغلاق</button></div>`);
+    document.getElementById('cancelModal').onclick = closeModal;
+    const box = document.getElementById('mxCpL');
+    const draw = async () => {
+      const { data, error } = await supabaseClient.from('store_coupons').select('*').order('created_at', { ascending: false });
+      if(error){ box.innerHTML = `<div class="form-msg error">${esc(error.code === '42P01' ? 'شغّل ملف store-orders.sql أولًا.' : 'تعذّر تحميل الكوبونات.')}</div>`; return; }
+      box.innerHTML = (data || []).length ? data.map(c => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:6px">
+        <div><b dir="ltr" style="font-family:monospace">${esc(c.code)}</b> — خصم ${esc(c.percent)}%<div style="font-size:12px;opacity:.7">استخدام: ${esc(c.used_count)}${c.max_uses != null ? ' / ' + esc(c.max_uses) : ''}</div></div>
+        <div style="display:flex;gap:6px"><button class="btn small ${c.active ? 'teal' : ''}" data-c="tog" data-id="${esc(c.id)}" data-v="${c.active}">${c.active ? '✅ مفعّل' : '⏸️ متوقف'}</button><button class="btn danger small" data-c="del" data-id="${esc(c.id)}">حذف</button></div></div>`).join('') : '<p>لا توجد كوبونات.</p>';
+    };
+    box.onclick = async e => {
+      const b = e.target.closest('[data-c]'); if(!b) return; b.disabled = true;
+      const r = b.dataset.c === 'tog'
+        ? await supabaseClient.from('store_coupons').update({ active: b.dataset.v !== 'true' }).eq('id', b.dataset.id)
+        : await supabaseClient.from('store_coupons').delete().eq('id', b.dataset.id);
+      if(r.error) alert('تعذّر تنفيذ العملية.');
+      draw();
+    };
+    document.getElementById('mxCpF').onsubmit = async e => {
+      e.preventDefault(); const fd = new FormData(e.target);
+      const { error } = await supabaseClient.from('store_coupons').insert({ code: String(fd.get('code')).trim().toUpperCase(), percent: Number(fd.get('percent')), max_uses: fd.get('max') ? Number(fd.get('max')) : null });
+      if(error){ alert(error.code === '23505' ? 'هذا الكود موجود مسبقًا.' : 'تعذّر إنشاء الكوبون.'); return; }
+      e.target.code.value = rnd(); draw();
+    };
+    draw();
   }
 
   /* ---------- إدارة المنتجات (مشرف) ---------- */
