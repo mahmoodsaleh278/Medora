@@ -513,8 +513,8 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
 
   function statsHtml(){
     if(!S.loaded) return '';
-    const v = baseList();
-    const st = [[v.length, 'منتج'], [v.filter(p => cat(p) === 'bundles').length, 'باقة'], [v.filter(p => p.in_stock !== false).length, 'متوفّر الآن']].filter(x => x[0] > 0);
+    const v = baseList().filter(p => p.in_stock !== false);   // العدّاد للمنتجات المتوفرة الآن فقط
+    const st = [[v.length, 'منتج متوفّر الآن'], [v.filter(p => cat(p) === 'bundles').length, 'باقة']].filter(x => x[0] > 0);
     return st.length ? `<div class="mx-stats">${st.map(([n, l]) => `<div class="mx-stat"><b>${n}</b><span>${l}</span></div>`).join('')}</div>` : '';
   }
 
@@ -528,8 +528,8 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
 
   function bandHtml(){
     return `<div class="mx-band"><div class="mx-in"><ul>
-      <li>${ic('shield', 24)}<span>أدوات مختارة للطلاب</span></li><li>${ic('check', 24)}<span>أسعار تناسب الطلاب</span></li>
-      <li>${ic('bag', 24)}<span>باقات البداية</span></li><li>${ic('wa', 24)}<span>طلب سهل عبر واتساب</span></li></ul></div></div>`;
+      <li>${ic('shield', 24)}<span>أدوات مختارة بعناية</span></li><li>${ic('check', 24)}<span>أسعار تناسب الطلاب</span></li>
+      <li>${ic('bag', 24)}<span>عروض مناسبة</span></li><li>${ic('wa', 24)}<span>طلب سهل</span></li></ul></div></div>`;
   }
 
   function list(){
@@ -755,6 +755,24 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
     sl.hidden = !t;
     sl.innerHTML = res.length ? res.map(p => `<button data-act="qv" data-id="${esc(p.id)}"><span>${esc(p.title)}</span><span class="mx-muted" style="font-size:.78rem">${esc(catName(p.category))}</span></button>`).join('') : '<p>لا نتائج. جرّب "سماعة" أو "ضغط".</p>';
   }
+  /* حفظ إعدادات المتجر مع فحص حقيقي: setData الأصلية بتبلع الأخطاء (RLS بيرجع error بدون throw)،
+     فكان الإعداد يبان محفوظ بالواجهة وبعد الرفرش يرجع. هون بنتأكد بقراءة القيمة بعد الكتابة. */
+  async function saveSettings(){
+    try{
+      const { error } = await supabaseClient.from('medora_data').upsert({ key:'store_settings', value:state.storeSettings, updated_at:new Date().toISOString() });
+      if(error) throw error;
+      const { data, error: e2 } = await supabaseClient.from('medora_data').select('value').eq('key', 'store_settings').maybeSingle();
+      if(e2 || !data || !data.value) throw (e2 || new Error('not persisted'));
+      const same = Object.keys(state.storeSettings).every(k => JSON.stringify(data.value[k]) === JSON.stringify(state.storeSettings[k]));
+      if(!same) throw new Error('not persisted');
+      return true;
+    }catch(err){
+      console.error('MEDIX STORE: settings save failed', err);
+      alert('تعذّر حفظ الإعداد على السيرفر، فرح يرجع للقيمة القديمة بعد الرفرش.\nشغّل ملف store-settings-fix.sql بـ Supabase ثم جرّب مرة ثانية.');
+      return false;
+    }
+  }
+
   function onKey(e){
     if(e.target.id === 'mxQ' && e.key === 'Enter'){ const b = document.querySelector('#mxSl button'); if(b){ e.preventDefault(); b.click(); } }
   }
@@ -763,8 +781,9 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
     if(e.target.id === 'mxSort'){ S.sort = e.target.value; updGrid(); return; }
     if(e.target.id === 'mxStock'){ S.stock = e.target.checked; updGrid(); return; }
     if(e.target.id !== 'mxVis') return;
-    state.storeSettings = Object.assign({}, state.storeSettings, { visible: e.target.checked });
-    setData('store_settings', state.storeSettings, true).then(() => render());
+    const prev = state.storeSettings;
+    state.storeSettings = Object.assign({}, prev, { visible: e.target.checked });
+    saveSettings().then(ok => { if(!ok) state.storeSettings = prev; render(); });
   }
   let escBound = false;
   function bind(){
@@ -1126,7 +1145,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
     document.getElementById('mxTxt').onsubmit = async e => {
       e.preventDefault(); const fd = new FormData(e.target);
       state.storeSettings = Object.assign({}, state.storeSettings, { headline: (fd.get('headline') || '').trim() || DEFAULTS.headline, sub: (fd.get('sub') || '').trim() || DEFAULTS.sub, promo: (fd.get('promo') || '').trim() });
-      await setData('store_settings', state.storeSettings, true); closeModal(); render();
+      const ok = await saveSettings(); if(!ok) return; closeModal(); render();
     };
   }
 
