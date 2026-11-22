@@ -165,7 +165,7 @@ html[dir=rtl] .mx-flip{transform:scaleX(-1)}
 /* بانر التوصيل */
 .mx-deliv{display:grid;gap:0;align-items:center;background:var(--m-mist);border:1px solid var(--m-line);border-radius:1.75rem;padding:.8rem 1.25rem .6rem;overflow:hidden;text-align:center}
 .dv-txt b{display:block;white-space:nowrap;font-size:clamp(1.1rem,5.2vw,2.2rem);font-weight:900;line-height:1.3;color:var(--m-fg)}
-.dv-txt em{display:inline;font-style:normal;color:var(--m-ink);margin-inline-start:.35em}
+.dv-txt em{display:block;font-style:normal;color:var(--m-ink);margin-inline-start:0}
 .dv-vis{position:relative;direction:ltr;order:-1;display:flex;justify-content:center;align-items:flex-end}
 .dv-truck{display:block;width:min(88%,19rem);height:auto;mix-blend-mode:multiply;animation:none}
 .dv-road{position:absolute;left:0;right:0;bottom:.3rem;height:4px;border-radius:4px;background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--m-fg) 40%,transparent) 0 26px,transparent 26px 52px);background-size:52px 4px;animation:mxroad .22s linear infinite}
