@@ -409,6 +409,9 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
 .mx-co .ok{text-align:center;padding:2.5rem 1rem}.mx-co .ok .big{width:4.5rem;height:4.5rem;border-radius:50%;background:var(--m-ink);color:var(--m-onink);display:flex;align-items:center;justify-content:center;margin:0 auto 1rem}
 @media(min-width:640px){.mx-co .cs{grid-template-columns:1fr 1fr}}
 @media(min-width:900px){.mx-co .cg{grid-template-columns:1.15fr 1fr;align-items:start}}
+.mx-co .tb{display:inline-flex;align-items:center;gap:.4rem;border-radius:999px;padding:.3rem .9rem;font-weight:900;font-size:.9rem;color:#fff}
+.mx-co .tb.pending{background:#b7791f}.mx-co .tb.approved{background:#2f855a}.mx-co .tb.rejected{background:#c53030}
+.mx-co .tr{max-width:34rem;margin:0 auto}
 @media(prefers-reduced-motion:reduce){.mx-intro{display:none}}
 @media(prefers-reduced-motion:reduce){.mx-root *{animation:none!important;transition-duration:.01ms!important}}`;
     document.head.appendChild(st);
@@ -455,6 +458,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
   function actsHtml(){
     return `<button class="mx-ib" data-act="theme" aria-label="تبديل الوضع الليلي">${ic('moon', 20)}</button>
       <button class="mx-ib" data-act="wishnav" aria-label="المفضّلة (${wish.size})">${ic('heart', 20)}${cnt(wish.size)}</button>
+      <button class="mx-ib" data-act="track" aria-label="تتبّع طلبي">${ic('receipt', 20)}</button>
       <button class="mx-ib" data-act="cart" aria-label="السلة (${cartCount()})">${ic('bag', 20)}${cnt(cartCount())}</button>`;
   }
 
@@ -759,6 +763,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
       case 'wishnav': if(wish.size){ S.tab = 'wish'; S.tool = ''; updGrid(); scrollTo('mxFeat'); } break;
       case 'cart': S.cartOpen = true; updOverlays(); break;
       case 'checkout': coOpen(); break;
+      case 'track': trOpen(false); break;
       case 'orders': modalOrders(); break;
       case 'coupons': modalCoupons(); break;
       case 'close': closeAll(); break;
@@ -802,7 +807,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
     if(!escBound){ escBound = true; document.addEventListener('keydown', e => { if(e.key === 'Escape' && currentRoute() === 'store' && (S.cartOpen || S.qv)) closeAll(); }); }
     document.body.style.overflow = (S.cartOpen || by(S.qv)) ? 'hidden' : '';
     bindTilt();
-    coMount();
+    coMount(); trMount();
   }
 
   /* =========================================================
@@ -830,7 +835,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
         <h3 style="font-size:1.4rem;margin-bottom:.4rem">${ok ? 'تم تأكيد طلبك' : 'تم استلام طلبك'}</h3>
         <p class="mx-muted">رقم الطلب: <b style="color:var(--m-fg)">#${esc(d.order_no)}</b> — الإجمالي: <b style="color:var(--m-fg)">${fmt(d.total)}</b></p>
         <p class="mx-muted" style="margin:.6rem 0 1.4rem">${ok ? 'تم اعتماد الطلب مباشرة بالكوبون، وسيتواصل معك فريقنا للتوصيل.' : 'سيراجع الأدمن الحوالة ويعتمد طلبك خلال دقائق، وسيتواصل معك فريقنا للتوصيل.'}</p>
-        <button class="mx-btn ink" data-co="close">العودة للمتجر</button></div></div>`;
+        <div style="display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap"><button class="mx-btn line" data-co="track">تتبّع طلبي</button><button class="mx-btn ink" data-co="close">العودة للمتجر</button></div></div></div>`;
     }
     const L = cartLines(), sub = cartTotal(), dis = coDis(), tot = coTot(), free = coFree(), f = CO.f;
     const steps = [['bank','حوّل عبر CliQ','افتح تطبيق البنك واختر CliQ وحوّل إلى الاسم المستعار ' + CLIQ.alias + '.'],
@@ -898,6 +903,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
       case 'rmfile': CO.file = null; coMount(); break;
       case 'rmcoupon': CO.coupon = null; CO.code = ''; CO.cmsg = ''; coMount(); break;
       case 'apply': coApply(); break;
+      case 'track': coClose(); trOpen(true); break;
       case 'submit': coSubmit(); break;
     }
   }
@@ -953,6 +959,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
       if(!data || !data.ok){ CO.msg = (data && data.msg) || 'تعذّر إرسال الطلب.'; }
       else {
         lsSet('mx_cust', { name: f.name.trim(), phone: f.phone.trim(), address: f.address.trim() });
+        lsSet('mx_last_order', { no: data.order_no, phone: f.phone.trim() });
         cart = {}; saveCart(); updActs();
         CO.done = data; CO.coupon = null; CO.file = null; CO.code = ''; CO.f.note = '';
       }
@@ -961,6 +968,76 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
       CO.msg = (err && (err.code === 'PGRST202' || err.code === '42883' || err.code === '42P01')) ? 'نظام الدفع غير مفعّل بعد (شغّل store-orders.sql).' : 'تعذّر إرسال الطلب، تحقق من الاتصال وحاول مرة ثانية.';
     }
     CO.busy = ''; coMount();
+  }
+
+  /* ---------- تتبّع الطلب (الزبون: رقم الطلب + الهاتف) ---------- */
+  const TR = { open:false, no:'', phone:'', busy:false, msg:'', res:null };
+  function trHtml(){
+    const head = `<div class="ch"><h2>تتبّع طلبك</h2><button class="mx-ib" data-tr="close" aria-label="إغلاق">${ic('x', 22)}</button></div>`;
+    let out = '';
+    if(TR.res){
+      const o = TR.res, K = {
+        pending:['قيد المراجعة', 'الأدمن يراجع الحوالة الآن، وعادةً بيتم الاعتماد خلال دقائق.'],
+        approved:['تم اعتماد طلبك', 'سيتواصل معك فريقنا على رقم هاتفك لترتيب التوصيل.'],
+        rejected:['تم رفض الطلب', o.reject_reason ? 'السبب: ' + o.reject_reason : 'لم نتمكن من اعتماد الحوالة. تواصل معنا وبنحلّها معك.']
+      }[o.status] || ['—', ''];
+      const d = o.created_at ? new Date(o.created_at).toLocaleString('ar-JO', { dateStyle:'medium', timeStyle:'short' }) : '';
+      out = `<div class="cc"><div style="display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.6rem">
+          <b style="color:var(--m-fg);font-size:1.05rem">طلب #${esc(o.order_no)}</b><span class="tb ${esc(o.status)}">${K[0]}</span></div>
+        <p style="font-size:.92rem;color:var(--m-fg);margin-bottom:.6rem">${esc(K[1])}</p>
+        ${(o.items || []).map(i => `<div class="sm-l"><span>${esc(i.title)} × ${esc(i.qty)}</span><b>${fmt(Number(i.price) * Number(i.qty))}</b></div>`).join('')}
+        <div class="tot"><span>الإجمالي</span><b>${fmt(o.total)}</b></div>
+        <p class="hint">${d ? 'تاريخ الطلب: ' + esc(d) : ''}</p>
+        ${o.status === 'rejected' ? `<a class="mx-btn line block sm" href="https://wa.me/${WA_NUMBER}?text=${encodeURIComponent('مرحبًا، بخصوص طلبي رقم #' + o.order_no)}" target="_blank" rel="noopener">${ic('wa', 16)} تواصل معنا عبر واتساب</a>` : ''}
+        <button class="mx-btn line block sm" style="margin-top:.5rem" data-tr="go">${ic('check', 16)} تحديث الحالة</button></div>`;
+    }
+    return `<div class="cw tr">${head}
+      <div class="cc"><div class="ct"><span class="cn">${ic('search', 15)}</span>أدخل بيانات طلبك</div>
+        <label class="lb" for="trNo">رقم الطلب</label><input type="text" id="trNo" inputmode="numeric" dir="ltr" maxlength="12" placeholder="مثال: 12" value="${esc(TR.no)}">
+        <label class="lb" for="trPhone">رقم الهاتف المستخدم بالطلب</label><input type="tel" id="trPhone" dir="ltr" maxlength="20" placeholder="07XXXXXXXX" value="${esc(TR.phone)}">
+        ${TR.msg ? `<div class="err">${esc(TR.msg)}</div>` : ''}
+        <button class="mx-btn ink block ${TR.busy ? 'off' : ''}" style="margin-top:1rem" data-tr="go">${TR.busy ? 'جارِ البحث...' : 'تتبّع الطلب'}</button></div>${out}</div>`;
+  }
+  function trMount(){
+    const root = $('#mxRoot'); if(!root) return;
+    let el = $('#mxTr');
+    if(!TR.open){ if(el) el.remove(); return; }
+    if(!el){
+      el = document.createElement('div'); el.id = 'mxTr'; el.className = 'mx-co'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+      el.onclick = e => { const t = e.target.closest('[data-tr]'); if(!t) return; if(t.dataset.tr === 'close') trClose(); else if(t.dataset.tr === 'go') trGo(); };
+      el.oninput = e => { if(e.target.id === 'trNo') TR.no = e.target.value.replace(/\D/g, ''); else if(e.target.id === 'trPhone') TR.phone = e.target.value; };
+      el.onkeydown = e => { if(e.key === 'Enter' && e.target.tagName === 'INPUT'){ e.preventDefault(); trGo(); } };
+      root.appendChild(el);
+      if(!trMount.esc){ trMount.esc = true; document.addEventListener('keydown', e => { if(e.key === 'Escape' && TR.open) trClose(); }); }
+    }
+    const st = el.scrollTop; el.innerHTML = trHtml(); el.scrollTop = st;
+    document.body.style.overflow = 'hidden';
+  }
+  function trOpen(auto){
+    const last = lsGet('mx_last_order', {}), cust = lsGet('mx_cust', {});
+    TR.open = true; TR.msg = ''; TR.res = null;
+    if(!TR.no) TR.no = last.no ? String(last.no) : '';
+    if(!TR.phone) TR.phone = last.phone || cust.phone || '';
+    trMount();
+    if(auto && TR.no && TR.phone) trGo();
+  }
+  function trClose(){ TR.open = false; trMount(); document.body.style.overflow = ''; }
+  async function trGo(){
+    if(TR.busy) return;
+    const no = parseInt(TR.no, 10);
+    if(!no){ TR.msg = 'اكتب رقم الطلب.'; trMount(); return; }
+    if(String(TR.phone || '').replace(/\D/g, '').length < 9){ TR.msg = 'اكتب رقم الهاتف كاملًا.'; trMount(); return; }
+    TR.busy = true; TR.msg = ''; trMount();
+    try{
+      const { data, error } = await supabaseClient.rpc('store_track_order', { p_order_no: no, p_phone: TR.phone.trim() });
+      if(error) throw error;
+      if(data && data.ok){ TR.res = data; } else { TR.res = null; TR.msg = (data && data.msg) || 'ما لقينا الطلب.'; }
+    }catch(err){
+      console.error('track failed', err);
+      TR.res = null;
+      TR.msg = (err && (err.code === 'PGRST202' || err.code === '42883')) ? 'خدمة التتبّع غير مفعّلة بعد (شغّل store-orders.sql).' : 'تعذّر الاتصال، حاول مرة ثانية.';
+    }
+    TR.busy = false; trMount();
   }
 
   /* ---------- إدارة الطلبات والكوبونات (مشرف) ---------- */
@@ -981,7 +1058,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
           <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>#${esc(o.order_no)} — ${esc(o.name)}</b><span style="color:${s[1]};font-weight:800">${s[0]}</span></div>
           <div style="font-size:13px;margin:4px 0"><a href="${esc(waLink(o.phone))}" target="_blank" rel="noopener" dir="ltr">${esc(o.phone)}</a> • ${esc(o.address)}</div>
           <div style="font-size:13px">${(o.items || []).map(i => `${esc(i.title)} × ${esc(i.qty)}`).join('، ')}</div>
-          <div style="font-size:13px;margin:4px 0">الإجمالي: <b>${fmt(o.total)}</b>${Number(o.discount) > 0 ? ` (خصم ${fmt(o.discount)} — ${esc(o.coupon_code)})` : ''}${o.note ? ` • ملاحظة: ${esc(o.note)}` : ''}</div>
+          <div style="font-size:13px;margin:4px 0">الإجمالي: <b>${fmt(o.total)}</b>${Number(o.discount) > 0 ? ` (خصم ${fmt(o.discount)} — ${esc(o.coupon_code)})` : ''}${o.note ? ` • ملاحظة: ${esc(o.note)}` : ''}${o.status === 'rejected' && o.reject_reason ? ` • سبب الرفض: ${esc(o.reject_reason)}` : ''}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
             ${o.proof_path ? `<button class="btn small" data-o="proof" data-p="${esc(o.proof_path)}">🧾 عرض الحوالة</button>` : ''}
             ${o.status !== 'approved' ? `<button class="btn teal solid small" data-o="approved" data-id="${esc(o.id)}">✅ اعتماد</button>` : ''}
@@ -995,8 +1072,10 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
         if(error || !data) { alert('تعذّر فتح الصورة.'); return; }
         window.open(data.signedUrl, '_blank', 'noopener'); return;
       }
+      let reason = null;
+      if(b.dataset.o === 'rejected'){ reason = prompt('سبب الرفض (بيظهر للزبون عند التتبّع، اختياري):'); if(reason === null) return; }
       b.disabled = true;
-      const { error } = await supabaseClient.from('store_orders').update({ status: b.dataset.o, reviewed_at: new Date().toISOString() }).eq('id', b.dataset.id);
+      const { error } = await supabaseClient.from('store_orders').update({ status: b.dataset.o, reviewed_at: new Date().toISOString(), reject_reason: (reason || '').trim() || null }).eq('id', b.dataset.id);
       if(error){ alert('تعذّر تحديث الطلب.'); b.disabled = false; return; }
       draw();
     };
