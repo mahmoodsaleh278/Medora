@@ -26,21 +26,13 @@ try{
   const catOn = id => { const c = CATS.find(x => x.id === id); return !c || c.on !== false; };
   const visCats = () => CATS.filter(c => c.on !== false);
   const cat = p => p.category || 'nursing';
-  /* فلتر الأداة: مطابقة على اسم المنتج (بدون تعديل بقاعدة البيانات) */
-  const TOOLS = [
-    { id:'steth',  name:'سماعات طبية',     art:'steth',    kw:['سماع','steth'] },
-    { id:'bp',     name:'أجهزة ضغط الدم',  art:'gauge',    kw:['ضغط','pressure','sphygm'] },
-    { id:'light',  name:'أقلام الفحص',     art:'penlight', kw:['قلم','penlight','pen light'] },
-    { id:'hammer', name:'مطارق الأعصاب',   art:'hammer',   kw:['مطرق','hammer','reflex'] },
-  ];
-  const matchTool = (p, t) => { const x = (p.title || '').toLowerCase(); return t.kw.some(k => x.includes(k)); };
   const DEFAULTS = {
     headline: 'جهّز نفسك لتميّز سنواتك السريرية.',
     sub: 'أدوات تمريض مختارة بعناية — سماعات، أجهزة ضغط، أقلام فحص وأكثر — وبأسعار تناسب الطلاب. ابدأ سنواتك السريرية بأدوات تثق فيها.',
     promo: 'اطلب بسهولة عبر واتساب — التوصيل والخصومات بنتفق عليها مع فريقنا.',
   };
 
-  const S = { loaded:false, loading:false, error:'', items:[], tab:'all', tool:'', sort:'new', min:'', max:'', stock:false, fopen:false, slide:0, q:'', cartOpen:false, qv:null, qq:1 };
+  const S = { loaded:false, loading:false, error:'', items:[], tab:'all', sort:'new', min:'', max:'', stock:false, fopen:false, slide:0, q:'', cartOpen:false, qv:null, qq:1 };
 
   /* ---------- أدوات صغيرة ---------- */
   const esc = s => escapeHtml(String(s == null ? '' : s));
@@ -225,14 +217,14 @@ body.dark .dv-vis{background:#fff;border-radius:1.1rem}
 /* تسوّق حسب الأداة */
 .mx-sec{padding:3rem 0 1rem}
 .mx-title{text-align:center;font-size:clamp(1.9rem,5vw,3rem)}
-.mx-browse{background:var(--m-mist);border-radius:2rem;padding:2rem 1rem}
-.mx-tools{margin-top:1.75rem;display:grid;gap:1rem;grid-template-columns:repeat(2,1fr)}
-.mx-tool{position:relative;display:block;min-height:9.5rem;overflow:hidden;border-radius:1.25rem;background:var(--m-surface);padding:1.1rem;text-align:start;border:2px solid transparent;transition:border-color .15s,transform .15s}
-.mx-tool:hover{transform:translateY(-2px)}.mx-tool.on{border-color:var(--m-ink)}
-.mx-tool b{position:relative;z-index:1;display:block;font-size:1.05rem;font-weight:800;color:var(--m-fg);line-height:1.4;max-width:70%}
-.mx-tool small{position:relative;z-index:1;color:var(--m-muted);font-size:.8rem}
-.mx-tool .ti{position:absolute;inset-inline-end:-.3rem;bottom:-.3rem;width:6.2rem;height:6.2rem;transition:transform .3s}
-.mx-tool:hover .ti{transform:scale(1.08) rotate(-4deg)}
+
+
+
+
+
+
+
+
 /* المتجر: فلاتر + منتجات */
 .mx-feat{padding:2.5rem 0 4rem}
 .mx-crumb{display:flex;align-items:center;gap:.4rem;font-size:.88rem;color:var(--m-muted)}.mx-crumb b{color:var(--m-fg);font-weight:600}
@@ -345,8 +337,8 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
 .mx-fin .mx-in{flex-direction:column;align-items:flex-start;gap:1rem}
 .mx-fin .ln{gap:.4rem 1.25rem}
 .mx-promo{font-size:.78rem}}
-@media(min-width:640px){.mx-in{padding:0 1.5rem}.mx-browse{padding:2.5rem 2rem}}
-@media(min-width:768px){.mx-band ul{display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem 2rem;padding:1.5rem 0}.mx-nav{display:flex}.mx-chips{display:none}.mx-search{order:0;width:auto;flex:1;max-width:40rem}.mx-acts{margin-inline-start:auto}.mx-tools{grid-template-columns:repeat(4,1fr)}.mx-qvb{grid-template-columns:1fr 1fr}.mx-hero .mx-in{padding-top:4rem;padding-bottom:4rem}}
+@media(min-width:640px){.mx-in{padding:0 1.5rem}}
+@media(min-width:768px){.mx-band ul{display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem 2rem;padding:1.5rem 0}.mx-nav{display:flex}.mx-chips{display:none}.mx-search{order:0;width:auto;flex:1;max-width:40rem}.mx-acts{margin-inline-start:auto}.mx-qvb{grid-template-columns:1fr 1fr}.mx-hero .mx-in{padding-top:4rem;padding-bottom:4rem}}
 @media(min-width:1024px){.mx-hero .mx-in{grid-template-columns:1.05fr 1fr}.mx-grid{grid-template-columns:repeat(4,1fr)}.mx-fbar .mx-in{flex-wrap:wrap;overflow:visible}}
 .mx-intro{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#fff;opacity:1;transition:opacity .5s ease;cursor:pointer;perspective:900px;overflow:hidden}
 .mx-intro.out{opacity:0;pointer-events:none}
@@ -450,7 +442,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
   const spark = c => `<svg class="mx-spark ${c}" viewBox="0 0 100 100" aria-hidden="true"><path fill="currentColor" d="M50 0C50 28 72 50 100 50 72 50 50 72 50 100 50 72 28 50 0 50 28 50 50 28 50 0Z"/></svg>`;
   const promoText = () => { const v = state.storeSettings && state.storeSettings.promo; return (v === undefined || v === null) ? DEFAULTS.promo : String(v); };
   const baseList = () => { const admin = isAdminSession(); return S.items.filter(p => catOn(cat(p)) && (admin || p.active !== false)); };
-  const filtersOn = () => S.tab !== 'all' || !!S.tool || S.min !== '' || S.max !== '' || S.stock;
+  const filtersOn = () => S.tab !== 'all' || S.min !== '' || S.max !== '' || S.stock;
 
   const XSVG = '<svg class="mx-xs" viewBox="110 100 730 575" aria-hidden="true"><path fill="currentColor" d="M150 115H292Q318 115 338 135L556 372Q564 380 556 390L300 656Q290 662 276 662H128Q116 662 126 650L380 382L146 122Q140 115 150 115Z"/><path fill="#2A9D9A" d="M510 280L668 118Q675 114 690 114H818Q830 114 822 124L604 372Q598 378 592 372L512 290Q506 284 510 280Z"/><path fill="#2A9D9A" d="M490 492L578 400Q584 394 592 400L822 650Q830 660 818 660H650Q638 660 630 652L494 500Q486 494 490 492Z"/></svg>';
   const brandName = () => 'MEDI' + XSVG + ' STORE';
@@ -502,18 +494,11 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
     const o = (v, l, n) => `<option value="${v}" ${S.tab === v ? 'selected' : ''}>${l}${ld ? ` (${n})` : ''}</option>`;
     return o('all', 'كل التصنيفات', base.length) + visCats().map(c => o(c.id, esc(c.name), base.filter(p => cat(p) === c.id).length)).join('') + (wish.size ? o('wish', '❤ المفضّلة', wish.size) : '');
   }
-  function toolOpts(){
-    const base = baseList(), ld = S.loaded;
-    return `<option value="">كل الأدوات</option>` + TOOLS.map(t => [t, base.filter(p => matchTool(p, t)).length])
-      .filter(x => !ld || x[1] > 0 || S.tool === x[0].id)
-      .map(([t, n]) => `<option value="${t.id}" ${S.tool === t.id ? 'selected' : ''}>${esc(t.name)}${ld ? ` (${n})` : ''}</option>`).join('');
-  }
   function fbarHtml(){
     const o = (v, l) => `<option value="${v}" ${S.sort === v ? 'selected' : ''}>${l}</option>`;
     return `<div class="mx-fbar" role="search" aria-label="الفلاتر"><div class="mx-in">
       <span class="fi">${ic('sliders', 18)}</span>
       <select id="mxCat" aria-label="التصنيف">${catOpts()}</select>
-      <select id="mxTool" aria-label="الأداة">${toolOpts()}</select>
       <div class="mx-pr"><input id="mxMin" type="number" min="0" step="any" inputmode="decimal" placeholder="السعر من" value="${esc(S.min)}" aria-label="أقل سعر"><input id="mxMax" type="number" min="0" step="any" inputmode="decimal" placeholder="إلى" value="${esc(S.max)}" aria-label="أعلى سعر"></div>
       <label class="mx-chk"><input type="checkbox" id="mxStock" ${S.stock ? 'checked' : ''}> المتوفّر فقط</label>
       <select id="mxSort" aria-label="ترتيب المنتجات">${o('new', 'الأحدث')}${o('asc', 'السعر: الأقل أولًا')}${o('desc', 'السعر: الأعلى أولًا')}</select>
@@ -547,25 +532,10 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
       <li>${ic('bag', 24)}<span>باقات البداية</span></li><li>${ic('wa', 24)}<span>طلب سهل عبر واتساب</span></li></ul></div></div>`;
   }
 
-  function toolTiles(){
-    const vis = baseList();
-    return TOOLS.map(t => ({ t, n: vis.filter(p => matchTool(p, t)).length }))
-      .filter(x => !S.loaded || x.n > 0)
-      .map(({ t, n }) => `<button class="mx-tool ${S.tool === t.id ? 'on' : ''}" data-act="tool" data-go="1" data-id="${t.id}" aria-pressed="${S.tool === t.id}">
-        <b>${esc(t.name)}</b>${S.loaded ? `<small>${n} منتج</small>` : ''}<span class="ti">${art(t.art)}</span></button>`).join('');
-  }
-  function toolsHtml(){
-    const tiles = toolTiles();
-    if(S.loaded && !tiles) return '';
-    return `<section class="mx-sec"><div class="mx-in"><div class="mx-browse">
-      <h2 class="mx-title">تسوّق حسب الأداة</h2><div class="mx-tools" id="mxTools">${tiles}</div></div></div></section>`;
-  }
-
   function list(){
-    const tool = TOOLS.find(t => t.id === S.tool), mn = parseFloat(S.min), mx = parseFloat(S.max);
+    const mn = parseFloat(S.min), mx = parseFloat(S.max);
     return baseList().filter(p =>
       (S.tab === 'all' || (S.tab === 'wish' ? wish.has(p.id) : cat(p) === S.tab)) &&
-      (!tool || matchTool(p, tool)) &&
       (isNaN(mn) || Number(p.price) >= mn) && (isNaN(mx) || Number(p.price) <= mx) &&
       (!S.stock || p.in_stock !== false));
   }
@@ -576,8 +546,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
   }
   function infoHtml(){
     if(!S.loaded) return '';
-    const t = TOOLS.find(x => x.id === S.tool);
-    return `<span>عرض ${list().length} منتج</span>${t ? `<button class="mx-fchip" data-act="clrtool" aria-label="إلغاء فلتر الأداة">${esc(t.name)} ${ic('x', 14)}</button>` : ''}${filtersOn() ? `<button class="mx-clr" data-act="clr">مسح الفلاتر</button>` : ''}`;
+    return `<span>عرض ${list().length} منتج</span>${filtersOn() ? `<button class="mx-clr" data-act="clr">مسح الفلاتر</button>` : ''}`;
   }
   function cardHtml(p){
     const admin = isAdminSession(), out = p.in_stock === false, w = wish.has(p.id), img = imgOf(p);
@@ -700,7 +669,7 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
     const open = S.cartOpen, qvOpen = !!by(S.qv);
     return `<div class="mx-root" id="mxRoot">
       ${promoHtml()}${adminBarHtml()}${headHtml()}${fbarHtml()}
-      <main>${heroHtml()}${bandHtml()}${toolsHtml()}${shopHtml()}</main>
+      <main>${heroHtml()}${bandHtml()}${shopHtml()}</main>
       ${footHtml()}
       <div class="mx-ov" id="mxOv" data-act="close" ${open || qvOpen ? '' : 'hidden'}></div>
       <aside class="mx-drawer ${open ? 'open' : ''}" id="mxDrawer" role="dialog" aria-modal="true" aria-label="السلة" ${open ? '' : 'inert'}>${drawerHtml()}</aside>
@@ -711,12 +680,12 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
   /* ---------- تحديثات جزئية (بدون إعادة رسم الصفحة كلها) ---------- */
   function updActs(){ const e = $('#mxActs'); if(e) e.innerHTML = actsHtml(); }
   function updFbar(){
-    const c = $('#mxCat'), t = $('#mxTool'), st = $('#mxStock');
-    if(c) c.innerHTML = catOpts(); if(t) t.innerHTML = toolOpts(); if(st) st.checked = S.stock;
+    const c = $('#mxCat'), st = $('#mxStock');
+    if(c) c.innerHTML = catOpts(); if(st) st.checked = S.stock;
   }
   function updGrid(){
-    const g = $('#mxGrid'), i = $('#mxInfo'), tl = $('#mxTools'), s = $('#mxStats');
-    if(g) g.innerHTML = gridHtml(); if(i) i.innerHTML = infoHtml(); if(tl) tl.innerHTML = toolTiles(); if(s) s.innerHTML = statsHtml();
+    const g = $('#mxGrid'), i = $('#mxInfo'), s = $('#mxStats');
+    if(g) g.innerHTML = gridHtml(); if(i) i.innerHTML = infoHtml(); if(s) s.innerHTML = statsHtml();
     updFbar();
   }
   function updOverlays(){
@@ -756,11 +725,9 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
       case 'wish': wish.has(id) ? wish.delete(id) : wish.add(id); saveWish(); if(S.tab === 'wish' && !wish.size) S.tab = 'all'; updActs(); updGrid(); break;
       case 'qv': { S.qv = id; S.qq = 1; const q = $('#mxQ'); if(q) q.value = ''; S.q = ''; if(sl) sl.hidden = true; updOverlays(); break; }
       case 'tab': S.tab = id; updGrid(); break;
-      case 'tool': S.tool = (S.tool === id ? '' : id); if(t.dataset.go){ S.tab = 'all'; if(S.tool) scrollTo('mxFeat'); } updGrid(); break;
-      case 'clrtool': S.tool = ''; updGrid(); break;
-      case 'clr': { S.tab = 'all'; S.tool = ''; S.min = ''; S.max = ''; S.stock = false; const a = $('#mxMin'), b = $('#mxMax'), c = $('#mxStock'); if(a) a.value = ''; if(b) b.value = ''; if(c) c.checked = false; updGrid(); break; }
-      case 'cat': S.tab = id; S.tool = ''; closeAll(); updGrid(); scrollTo('mxFeat'); break;
-      case 'wishnav': if(wish.size){ S.tab = 'wish'; S.tool = ''; updGrid(); scrollTo('mxFeat'); } break;
+      case 'clr': { S.tab = 'all'; S.min = ''; S.max = ''; S.stock = false; const a = $('#mxMin'), b = $('#mxMax'), c = $('#mxStock'); if(a) a.value = ''; if(b) b.value = ''; if(c) c.checked = false; updGrid(); break; }
+      case 'cat': S.tab = id; closeAll(); updGrid(); scrollTo('mxFeat'); break;
+      case 'wishnav': if(wish.size){ S.tab = 'wish'; updGrid(); scrollTo('mxFeat'); } break;
       case 'cart': S.cartOpen = true; updOverlays(); break;
       case 'checkout': coOpen(); break;
       case 'track': trOpen(false); break;
@@ -793,7 +760,6 @@ body.dark .mx-promo,body.dark .mx-band,body.dark .mx-fin{background:color-mix(in
   }
   function onChange(e){
     if(e.target.id === 'mxCat'){ S.tab = e.target.value; updGrid(); scrollTo('mxFeat'); return; }
-    if(e.target.id === 'mxTool'){ S.tool = e.target.value; updGrid(); if(S.tool) scrollTo('mxFeat'); return; }
     if(e.target.id === 'mxSort'){ S.sort = e.target.value; updGrid(); return; }
     if(e.target.id === 'mxStock'){ S.stock = e.target.checked; updGrid(); return; }
     if(e.target.id !== 'mxVis') return;
