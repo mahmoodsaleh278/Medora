@@ -10723,6 +10723,7 @@ function pageSquad(id){
   if(!state.session) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>سجّل دخولك أولًا</h3><p>لازم تسجّل دخول عشان تشارك بالمسابقة. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   if(!squadReady(id)) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
   const c = squadData.items.find(x=>x.id===id);
+  if(!c && squadData.err) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>تعذّر تحميل المسابقة</h3><p>صار خطأ بقاعدة البيانات. تأكد إن squad4.sql انشغّل، وجرّب مرة ثانية.</p></div></div></section>`;
   if(!c) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>المسابقة غير موجودة</h3><p>تأكد من الرابط أو اسأل المشرف.</p></div></div></section>`;
   return `<section class="section"><div class="wizard-wrap" style="text-align:center;"><div class="card-panel" style="padding:24px 18px;" id="sqRoot"></div></div></section>`;
 }
