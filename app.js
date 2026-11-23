@@ -10426,16 +10426,23 @@ function bindAdminExamsEvents(){
 }
 
 /* =========================================================================
-   Squad Challenge (الواجهة الأولى)
-   - المشرف: زر ⚔️ في شريط المشرف → /admin-squad: ينشئ مسابقة (عنوان + موعد)،
-     وينسخ رابطها أو يرسله كإشعار للطلاب (كل الطلاب / جامعة / تخصص).
-   - الطالب: يفتح /squad/<id> فيشوف عدًّا تنازليًا لموعد المسابقة (صفحة الانتظار).
-   - التخزين مؤقتًا في medora_data (مفتاح squad_challenges)؛ الفرق والأسئلة والنقاط بالخطوة الجاية.
+   Squad Challenge (squad.sql + squad2.sql + squad3.sql)
+   - المشرف: /admin-squad → ينشئ مسابقة (عنوان + موعد + مدة السؤال/الشرح)، يضيف الأسئلة،
+     يرسل الرابط كإشعار، ويتابع الترتيب مباشرة.
+   - الطالب: /squad/<id> → عدّ تنازلي + تكوين الفرق، وبعد البدء شاشة لعب متزامنة
+     (السيرفر هو المرجع الوحيد للوقت عبر squad_state، والهوية عبر auth.uid()).
+   - العنوان/حالة الإرسال بـ medora_data (squad_challenges)، والموعد والأسئلة والفرق بجداول squad_*.
    ========================================================================= */
 let squadData = { loaded:false, loading:false, items:[] };
 let squadTimer = null;
+let squadOffset = 0;                                   /* فرق ساعة السيرفر عن ساعة الجهاز (ms) */
+const squadNow = () => Date.now() + squadOffset;
+const SQ_LETTERS = ['أ','ب','ج','د','هـ','و'];
 const squadLink = id => location.origin + '/squad/' + id;
 const squadIdFromRoute = r => r && r.startsWith('squad/') ? decodeURIComponent(r.slice(6).split('/')[0]) : null;
+async function squadUid(){
+  try{ const { data } = await supabaseClient.auth.getSession(); return data && data.session ? data.session.user.id : null; }catch(e){ return null; }
+}
 async function squadLoad(force){
   if(squadData.loading || (squadData.loaded && !force)) return;
   squadData.loading = true;
@@ -10447,6 +10454,7 @@ async function squadLoad(force){
 }
 async function squadSave(){ await setData('squad_challenges', squadData.items, true); }
 
+/* ------------------------------ المشرف ------------------------------ */
 function pageAdminSquad(){
   if(!isAdminSession()) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
   if(!squadData.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
@@ -10457,13 +10465,15 @@ function pageAdminSquad(){
       <h2>⚔️ Squad Challenge</h2>
       <div class="toolbar-actions"><button class="btn teal solid" id="sqCreateBtn">${ICONS.plus} مسابقة جديدة</button></div>
     </div>
-    <p class="hint" style="margin:-10px 0 20px;">حدّد عنوان المسابقة وموعدها، بعدين أرسل رابطها للطلاب كإشعار. الطالب بيفتح الرابط وبيشوف العدّ التنازلي لحد ما تبدأ.</p>
+    <p class="hint" style="margin:-10px 0 20px;">أنشئ المسابقة، أضف أسئلتها (قبل الموعد فقط — بعد البداية بتنقفل)، بعدين أرسل الرابط للطلاب. اللعب بيمشي لحاله حسب ساعة السيرفر.</p>
     ${items.length ? items.map(c=>`
     <div class="card-panel" style="padding:16px 18px; margin-bottom:12px;">
       <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center;">
         <div><b style="font-size:16px;">${escapeHtml(c.title)}</b>
-          <div class="hint" style="margin:4px 0 0;">🗓️ ${examFmtDate(c.startsAt)}${c.sentAt ? ` • 📣 أُرسل ${examFmtDate(c.sentAt)}` : ' • لم يُرسل بعد'}</div></div>
+          <div class="hint" style="margin:4px 0 0;">🗓️ ${examFmtDate(c.startsAt)} • ⏱️ ${c.qSec||20}ث سؤال + ${c.rSec||8}ث شرح${c.sentAt ? ` • 📣 أُرسل ${examFmtDate(c.sentAt)}` : ' • لم يُرسل بعد'}</div></div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn small solid teal" data-sq-q="${hubAttr(c.id)}">📝 الأسئلة</button>
+          <button class="btn small" data-sq-res="${hubAttr(c.id)}">📊 النتائج</button>
           <button class="btn small teal solid" data-sq-send="${hubAttr(c.id)}">📣 إرسال للطلاب</button>
           <button class="btn small" data-sq-copy="${hubAttr(c.id)}">🔗 نسخ الرابط</button>
           <a class="btn small" href="/squad/${hubAttr(c.id)}">👁️ معاينة</a>
@@ -10480,15 +10490,22 @@ function squadCreateModal(){
     <form id="sqForm">
       <div class="field"><label>عنوان المسابقة</label><input type="text" name="title" required maxlength="100" placeholder="مثال: تحدّي الفرق — الجهاز الدوري"></div>
       <div class="field"><label>موعد البداية</label><input type="datetime-local" name="when" required></div>
+      <div class="field"><label>مدة السؤال (ثانية)</label><input type="number" name="qs" value="20" min="5" max="120"></div>
+      <div class="field"><label>مدة الشرح بين الأسئلة (ثانية)</label><input type="number" name="rs" value="8" min="3" max="60"></div>
+      <p class="hint" style="margin:0 0 8px;">المدد ما بتتغيّر بعد بداية المسابقة.</p>
       <div id="sqMsg" style="color:var(--red,#d33); font-weight:700; font-size:13px;"></div>
       <div class="modal-actions"><button type="button" class="btn small" id="sqCancel">إلغاء</button><button type="submit" class="btn teal solid small">💾 حفظ</button></div>
     </form>`);
   document.getElementById('sqCancel').addEventListener('click', closeModal);
   document.getElementById('sqForm').addEventListener('submit', async e=>{
     e.preventDefault();
-    const f = e.target.elements, startsAt = new Date(f['when'].value).getTime();
-    if(!f['title'].value.trim() || !startsAt){ document.getElementById('sqMsg').textContent = 'اكتب العنوان وحدّد الموعد.'; return; }
-    squadData.items.push({ id:'sq'+Date.now().toString(36), title:f['title'].value.trim(), startsAt, createdAt:Date.now(), sentAt:null });
+    const f = e.target.elements, startsAt = new Date(f['when'].value).getTime(), msg = document.getElementById('sqMsg');
+    if(!f['title'].value.trim() || !startsAt){ msg.textContent = 'اكتب العنوان وحدّد الموعد.'; return; }
+    const qSec = Math.min(120, Math.max(5, parseInt(f['qs'].value) || 20)), rSec = Math.min(60, Math.max(3, parseInt(f['rs'].value) || 8));
+    const id = 'sq' + Date.now().toString(36);
+    const { error } = await supabaseClient.from('squad_games').insert({ challenge_id:id, starts_at:new Date(startsAt).toISOString(), q_seconds:qSec, reveal_seconds:rSec });
+    if(error){ msg.textContent = 'تعذّر إنشاء المسابقة بقاعدة البيانات. تأكد إن squad3.sql انشغّل.'; return; }
+    squadData.items.push({ id, title:f['title'].value.trim(), startsAt, qSec, rSec, createdAt:Date.now(), sentAt:null });
     await squadSave(); closeModal(); render();
   });
 }
@@ -10519,14 +10536,129 @@ function squadSendModal(c){
   });
 }
 
+/* ---- محرر الأسئلة ---- */
+let sqq = { items:[], editing:null };
+async function squadQuestionsModal(c){
+  const started = Date.now() >= c.startsAt;
+  sqq = { items:[], editing:null };
+  openModal(`<h3>📝 أسئلة «${escapeHtml(c.title)}»</h3>
+    ${started ? '<p style="color:var(--red,#d33); font-weight:700;">المسابقة بدأت — الأسئلة مقفلة ولا يمكن تعديلها.</p>' : '<p class="hint" style="margin:0 0 10px;">كل سؤال له 2–6 خيارات وإجابة صحيحة واحدة. الإجابة الصحيحة ما بتنزل للطلاب إلا بمرحلة الشرح.</p>'}
+    <div id="sqQList"><span class="loading-dot"></span></div>
+    <div id="sqQFormBox" style="margin-top:12px;"></div>`, true);
+  /* يضمن وجود صف المسابقة (للمسابقات القديمة المحفوظة قبل squad3) */
+  await supabaseClient.from('squad_games').upsert({ challenge_id:c.id, starts_at:new Date(c.startsAt).toISOString(), q_seconds:c.qSec||20, reveal_seconds:c.rSec||8 }, { onConflict:'challenge_id', ignoreDuplicates:true });
+  await sqqReload(c, started);
+}
+async function sqqReload(c, started){
+  const { data, error } = await supabaseClient.from('squad_questions').select('*').eq('challenge_id', c.id).order('idx').order('id');
+  const list = document.getElementById('sqQList'); if(!list) return;
+  if(error){ list.innerHTML = `<p style="color:var(--red,#d33); font-weight:700;">تعذّر تحميل الأسئلة. تأكد إن squad3.sql انشغّل.</p>`; return; }
+  sqq.items = data || [];
+  sqqPaint(c, started);
+}
+function sqqPaint(c, started){
+  const list = document.getElementById('sqQList'), fbox = document.getElementById('sqQFormBox'); if(!list || !fbox) return;
+  list.innerHTML = sqq.items.length ? sqq.items.map((q,i)=>`
+    <div class="card-panel" style="padding:10px 12px; margin-bottom:8px; display:flex; gap:8px; justify-content:space-between; align-items:center;">
+      <div style="text-align:start;"><b>${i+1}.</b> ${escapeHtml(q.question)}
+        <div class="hint" style="margin:2px 0 0;">${q.options.length} خيارات • الصحيحة: ${SQ_LETTERS[q.correct_index]}</div></div>
+      <div style="display:flex; gap:4px; flex-shrink:0;">
+        <button class="btn small" data-sqq-up="${q.id}" ${started||i===0?'disabled':''}>⬆️</button>
+        <button class="btn small" data-sqq-dn="${q.id}" ${started||i===sqq.items.length-1?'disabled':''}>⬇️</button>
+        <button class="btn small" data-sqq-edit="${q.id}" ${started?'disabled':''}>✏️</button>
+        <button class="btn small danger" data-sqq-del="${q.id}" ${started?'disabled':''}>${ICONS.trash}</button>
+      </div>
+    </div>`).join('') : `<div class="empty-state" style="padding:18px;"><p>ما في أسئلة بعد.</p></div>`;
+  const msg = t => { const m = document.getElementById('sqqMsg'); if(m) m.textContent = t; };
+  const fail = error => msg(/squad_started/.test(error.message || '') ? 'المسابقة بدأت — ما بتقدر تعدّل الأسئلة.' : 'تعذّر الحفظ، جرّب مرة ثانية.');
+  list.querySelectorAll('[data-sqq-edit]').forEach(b=> b.addEventListener('click', ()=>{ sqq.editing = sqq.items.find(x=>x.id===b.dataset.sqqEdit) || null; sqqPaint(c, started); fbox.scrollIntoView({ behavior:'smooth', block:'nearest' }); }));
+  list.querySelectorAll('[data-sqq-del]').forEach(b=> b.addEventListener('click', async ()=>{
+    if(!confirm('حذف هذا السؤال؟')) return;
+    const { error } = await supabaseClient.from('squad_questions').delete().eq('id', b.dataset.sqqDel);
+    if(error){ fail(error); return; }
+    if(sqq.editing && sqq.editing.id === b.dataset.sqqDel) sqq.editing = null;
+    sqqReload(c, started);
+  }));
+  const move = async (id, dir)=>{
+    const i = sqq.items.findIndex(x=>x.id===id), j = i + dir; if(i < 0 || j < 0 || j >= sqq.items.length) return;
+    const a = sqq.items[i], b = sqq.items[j];
+    const r1 = await supabaseClient.from('squad_questions').update({ idx:b.idx }).eq('id', a.id);
+    const r2 = await supabaseClient.from('squad_questions').update({ idx:a.idx }).eq('id', b.id);
+    if(r1.error || r2.error){ fail(r1.error || r2.error); }
+    sqqReload(c, started);
+  };
+  list.querySelectorAll('[data-sqq-up]').forEach(b=> b.addEventListener('click', ()=> move(b.dataset.sqqUp, -1)));
+  list.querySelectorAll('[data-sqq-dn]').forEach(b=> b.addEventListener('click', ()=> move(b.dataset.sqqDn, 1)));
+  if(started){ fbox.innerHTML = ''; return; }
+  const e = sqq.editing;
+  fbox.innerHTML = `<form id="sqqForm" class="card-panel" style="padding:14px;">
+    <h4 style="margin:0 0 8px;">${e ? '✏️ تعديل السؤال' : '➕ سؤال جديد'}</h4>
+    <div class="field"><label>نص السؤال</label><textarea name="q" required rows="2" maxlength="600">${escapeHtml(e ? e.question : '')}</textarea></div>
+    <div class="field"><label>الخيارات (كل خيار بسطر، من 2 إلى 6)</label><textarea name="opts" required rows="4">${escapeHtml(e ? e.options.join('\n') : '')}</textarea></div>
+    <div class="field"><label>الإجابة الصحيحة</label><select name="ci" class="bank-select"></select></div>
+    <div class="field"><label>الشرح (اختياري)</label><textarea name="ex" rows="2" maxlength="800">${escapeHtml(e && e.explanation ? e.explanation : '')}</textarea></div>
+    <div id="sqqMsg" style="color:var(--red,#d33); font-weight:700; font-size:13px;"></div>
+    <div class="modal-actions" style="justify-content:flex-start;">
+      <button type="submit" class="btn teal solid small">💾 ${e ? 'حفظ التعديل' : 'إضافة السؤال'}</button>
+      ${e ? '<button type="button" class="btn small" id="sqqCancelEdit">إلغاء التعديل</button>' : ''}
+      <button type="button" class="btn small" id="sqqClose">إغلاق</button>
+    </div></form>`;
+  const form = document.getElementById('sqqForm'), sel = form.elements['ci'];
+  const parseOpts = () => form.elements['opts'].value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const fillSel = () => { const keep = sel.value || (e ? String(e.correct_index) : '0'), n = parseOpts().length;
+    sel.innerHTML = parseOpts().map((o,i)=>`<option value="${i}">${SQ_LETTERS[i] || i+1} — ${escapeHtml(o.slice(0,40))}</option>`).join('');
+    if(+keep < n) sel.value = keep; };
+  fillSel(); form.elements['opts'].addEventListener('input', fillSel);
+  document.getElementById('sqqClose').addEventListener('click', closeModal);
+  const ce = document.getElementById('sqqCancelEdit'); if(ce) ce.addEventListener('click', ()=>{ sqq.editing = null; sqqPaint(c, started); });
+  form.addEventListener('submit', async ev=>{
+    ev.preventDefault();
+    const opts = parseOpts(), question = form.elements['q'].value.trim();
+    if(!question){ msg('اكتب نص السؤال.'); return; }
+    if(opts.length < 2 || opts.length > 6){ msg('الخيارات لازم تكون بين 2 و6.'); return; }
+    const row = { question, options:opts, correct_index:+sel.value, explanation:form.elements['ex'].value.trim() || null };
+    let res;
+    if(e) res = await supabaseClient.from('squad_questions').update(row).eq('id', e.id);
+    else { const next = sqq.items.length ? Math.max(...sqq.items.map(x=>x.idx)) + 1 : 0;
+      res = await supabaseClient.from('squad_questions').insert({ ...row, challenge_id:c.id, idx:next }); }
+    if(res.error){ fail(res.error); return; }
+    sqq.editing = null; sqqReload(c, started);
+  });
+}
+
+/* ---- نتائج مباشرة للمشرف ---- */
+function squadResultsModal(c){
+  openModal(`<h3>📊 نتائج «${escapeHtml(c.title)}»</h3><div id="sqResBox"><span class="loading-dot"></span></div>`, true);
+  const PH = { nogame:'ما في أسئلة/مسابقة جاهزة', waiting:'بالانتظار', question:'سؤال جاري', reveal:'مرحلة الشرح', finished:'انتهت' };
+  const run = async ()=>{
+    const box = document.getElementById('sqResBox'); if(!box) return false;
+    const { data, error } = await supabaseClient.rpc('squad_admin_results', { p_challenge:c.id });
+    if(!document.getElementById('sqResBox')) return false;
+    if(error || !data || data.error){ box.innerHTML = `<p style="color:var(--red,#d33); font-weight:700;">تعذّر تحميل النتائج.</p>`; return true; }
+    const teams = data.teams || [];
+    box.innerHTML = `<p class="hint" style="margin:0 0 10px;">الحالة: <b>${PH[data.phase] || data.phase}</b>${data.total ? ` • سؤال ${(data.pos||0)+1} / ${data.total}` : ''}${data.answered ? ` • محسوب لحد سؤال ${data.answered}` : ''} • يتحدّث تلقائيًا</p>
+      ${teams.length ? `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; text-align:start;">
+        <tr style="border-bottom:2px solid var(--line,#d6e4e8);"><th>#</th><th>الفريق</th><th>الأعضاء</th><th>صح</th><th>النقاط</th></tr>
+        ${teams.map(t=>`<tr style="border-bottom:1px solid var(--line,#d6e4e8);"><td>${t.rk}</td><td><b>${escapeHtml(t.name)}</b></td><td>${t.members}/3</td><td>${t.correct}</td><td><b>${t.score}</b></td></tr>`).join('')}
+      </table></div>` : '<div class="empty-state" style="padding:18px;"><p>ما في نتائج بعد.</p></div>'}`;
+    return true;
+  };
+  run();
+  const iv = setInterval(async ()=>{ if(!(await run())) clearInterval(iv); }, 3000);
+}
+
 function bindSquadAdminEvents(){
   squadLoad();
   const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
   const find = id => squadData.items.find(x=>x.id===id);
   on('sqCreateBtn', squadCreateModal);
   document.querySelectorAll('[data-sq-send]').forEach(b=> b.addEventListener('click', ()=>{ const c = find(b.dataset.sqSend); if(c) squadSendModal(c); }));
+  document.querySelectorAll('[data-sq-q]').forEach(b=> b.addEventListener('click', ()=>{ const c = find(b.dataset.sqQ); if(c) squadQuestionsModal(c); }));
+  document.querySelectorAll('[data-sq-res]').forEach(b=> b.addEventListener('click', ()=>{ const c = find(b.dataset.sqRes); if(c) squadResultsModal(c); }));
   document.querySelectorAll('[data-sq-del]').forEach(b=> b.addEventListener('click', async ()=>{
-    if(!confirm('حذف هذه المسابقة؟')) return;
+    if(!confirm('حذف هذه المسابقة؟ بتنحذف معها كل الفرق والأسئلة والأصوات.')) return;
+    const { error } = await supabaseClient.from('squad_games').delete().eq('challenge_id', b.dataset.sqDel);
+    if(error){ alert('تعذّر حذف المسابقة من قاعدة البيانات.'); return; }
     squadData.items = squadData.items.filter(x=>x.id!==b.dataset.sqDel); await squadSave(); render();
   }));
   document.querySelectorAll('[data-sq-copy]').forEach(b=> b.addEventListener('click', ()=>{
@@ -10537,24 +10669,15 @@ function bindSquadAdminEvents(){
   }));
 }
 
-/* صفحة الطالب: الانتظار + العدّ التنازلي */
+/* ------------------------------ الطالب ------------------------------ */
+let sqG = { cid:null, st:null, err:false, busy:false, lastFetch:0, key:'', myChoice:null, uid:null };
+
 function pageSquad(id){
   if(!state.session) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>سجّل دخولك أولًا</h3><p>لازم تسجّل دخول عشان تشارك بالمسابقة. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
   if(!squadData.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
   const c = squadData.items.find(x=>x.id===id);
   if(!c) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>المسابقة غير موجودة</h3><p>تأكد من الرابط أو اسأل المشرف.</p></div></div></section>`;
-  const box = k => `<div style="background:var(--card,#fff); border:1px solid var(--line,#d6e4e8); border-radius:14px; padding:14px 6px; min-width:72px;"><b id="sqc-${k}" style="font-size:30px; display:block; direction:ltr;">--</b><span class="hint" style="margin:0;">${{d:'يوم',h:'ساعة',m:'دقيقة',s:'ثانية'}[k]}</span></div>`;
-  return `
-  <section class="section"><div class="wizard-wrap" style="text-align:center;">
-    <div class="card-panel" style="padding:28px 20px;">
-      <div style="font-size:42px;">⚔️</div>
-      <h2 style="margin:6px 0;">${escapeHtml(c.title)}</h2>
-      <p class="hint" style="margin:0 0 18px;">🗓️ ${examFmtDate(c.startsAt)}</p>
-      <div id="sqCountdown" style="display:flex; gap:10px; justify-content:center; margin-bottom:20px;">${['d','h','m','s'].map(box).join('')}</div>
-      <p id="sqStatus" style="font-weight:800; margin:0 0 14px;"></p>
-      <div id="sqTeamBox"></div>
-    </div>
-  </div></section>`;
+  return `<section class="section"><div class="wizard-wrap" style="text-align:center;"><div class="card-panel" style="padding:24px 18px;" id="sqRoot"></div></div></section>`;
 }
 
 function bindSquadEvents(id){
@@ -10562,30 +10685,182 @@ function bindSquadEvents(id){
   if(squadTimer){ clearInterval(squadTimer); squadTimer = null; }
   const c = squadData.items.find(x=>x.id===id);
   if(!c) return;
-  if(squadTeam.cid !== id) squadTeam = { cid:id, loaded:false, team:null, members:[], err:'' };
-  squadPaintTeam(id); squadLoadTeam(id);
-  let n = 0;
-  const tick = ()=>{
-    if(!currentRoute().startsWith('squad/')){ clearInterval(squadTimer); squadTimer = null; return; }
-    const left = Math.max(0, c.startsAt - Date.now()), s = Math.floor(left/1000);
-    const v = { d:Math.floor(s/86400), h:Math.floor(s%86400/3600), m:Math.floor(s%3600/60), s:s%60 };
-    Object.keys(v).forEach(k=>{ const el = document.getElementById('sqc-'+k); if(el) el.textContent = String(v[k]).padStart(2,'0'); });
-    if(++n % 10 === 0 && squadTeam.team && squadTeam.members.length < 3) squadLoadTeam(id, true);
-    const st = document.getElementById('sqStatus');
-    if(st) st.textContent = left ? 'المسابقة لسا ما بدأت — جهّز فريقك ⏳' : '🔥 حان موعد المسابقة!';
-  };
-  tick(); squadTimer = setInterval(tick, 1000);
+  if(squadTeam.cid !== id) squadTeam = { cid:id, loaded:false, team:null, members:[], err:'', uid:null, lastLoad:0 };
+  if(sqG.cid !== id) sqG = { cid:id, st:null, err:false, busy:false, lastFetch:0, key:'', myChoice:null, uid:null };
+  sqG.key = ''; sqG.busy = false;
+  squadUid().then(u=>{ sqG.uid = u; });
+  squadLoadTeam(id);
+  sqPaint(c);
+  sqFetch(id);
+  squadTimer = setInterval(()=> sqTick(id), 500);
 }
 
-/* ---- فرق Squad (جداول squad_teams / squad_members عبر دوال squad.sql) ---- */
-let squadTeam = { cid:null, loaded:false, team:null, members:[], err:'' };
-const SQUAD_ERR = { not_found:'الكود غير صحيح، تأكد منه مع مسؤول الفريق.', full:'الفريق مكتمل (3 طلاب).', already:'إنت أصلًا بفريق بهذي المسابقة.', bad_name:'اسم الفريق لازم يكون بين 2 و30 حرف.', auth:'سجّل دخولك مرة ثانية.' };
+async function sqFetch(cid){
+  if(sqG.busy || !supabaseClient) return;
+  sqG.busy = true; const t0 = Date.now();
+  let res;
+  try{ res = await supabaseClient.rpc('squad_state', { p_challenge:cid }); }catch(e){ res = { error:e }; }
+  sqG.busy = false; sqG.lastFetch = Date.now();
+  if(sqG.cid !== cid || !currentRoute().startsWith('squad/')) return;
+  const { data, error } = res;
+  if(error || !data || data.error){ sqG.err = true; }
+  else { sqG.err = false; sqG.st = data; squadOffset = data.now - (t0 + Date.now()) / 2; }
+  const c = squadData.items.find(x=>x.id===cid); if(c) sqPaint(c);
+}
+
+function sqTick(id){
+  if(!currentRoute().startsWith('squad/')){ clearInterval(squadTimer); squadTimer = null; return; }
+  const c = squadData.items.find(x=>x.id===id); if(!c) return;
+  const st = sqG.st, sNow = squadNow(), since = Date.now() - sqG.lastFetch, ph = st ? st.phase : 'nogame';
+  const endAt = ph === 'waiting' ? st.starts_at : (ph === 'question' || ph === 'reveal') ? st.phase_end : null;
+  sqPaintTimer(c);
+  let need = false;
+  if(endAt && sNow >= endAt + 150 && since > 900) need = true;          /* الحدّ مرّ: هات الحالة الجديدة */
+  else if(ph === 'question' && since > 2500) need = true;
+  else if(ph === 'reveal' && since > 5000) need = true;
+  else if((ph === 'waiting' || ph === 'nogame') && since > 8000) need = true;
+  else if(ph === 'finished' && since > 15000) need = true;
+  if(need){ sqG.lastFetch = Date.now(); setTimeout(()=> sqFetch(id), Math.random() * 500); }  /* عشوائية خفيفة تخفف الضغط على السيرفر */
+  if((ph === 'waiting' || ph === 'nogame') && squadTeam.team && squadTeam.members.length < 3 && Date.now() - (squadTeam.lastLoad || 0) > 10000) squadLoadTeam(id, true);
+}
+
+function sqPaint(c){
+  const root = document.getElementById('sqRoot'); if(!root) return;
+  const st = sqG.st, ph = st ? st.phase : 'nogame';
+  if(sqG.err && !st){ root.innerHTML = `<p style="color:var(--red,#d33); font-weight:700;">تعذّر تحميل حالة المسابقة. تأكد إن squad3.sql انشغّل.</p>`; sqG.key = 'err'; return; }
+  const key = (ph === 'question' || ph === 'reveal') ? ph + '|' + st.pos : ph;
+  const first = key !== sqG.key; sqG.key = key;
+  if(ph === 'waiting' || ph === 'nogame'){ if(first) sqPaintWaiting(root, c); }
+  else if(ph === 'question'){ if(first) sqPaintQuestion(root, c); sqUpdateQuestion(); }
+  else if(ph === 'reveal') sqPaintReveal(root, c);
+  else if(ph === 'finished') sqPaintFinished(root, c);
+}
+
+const sqTimerBar = `<div style="height:6px; background:var(--line,#d6e4e8); border-radius:6px; overflow:hidden; margin-bottom:16px;"><div id="sqBar" style="height:100%; width:100%; background:var(--teal,#1f7a8c); transition:width .5s linear;"></div></div>`;
+
+function sqPaintWaiting(root, c){
+  const box = k => `<div style="background:var(--card,#fff); border:1px solid var(--line,#d6e4e8); border-radius:14px; padding:14px 6px; min-width:72px;"><b id="sqc-${k}" style="font-size:30px; display:block; direction:ltr;">--</b><span class="hint" style="margin:0;">${{d:'يوم',h:'ساعة',m:'دقيقة',s:'ثانية'}[k]}</span></div>`;
+  root.innerHTML = `<div style="font-size:42px;">⚔️</div>
+    <h2 style="margin:6px 0;">${escapeHtml(c.title)}</h2>
+    <p class="hint" style="margin:0 0 18px;">🗓️ ${examFmtDate(c.startsAt)}</p>
+    <div style="display:flex; gap:10px; justify-content:center; margin-bottom:20px;">${['d','h','m','s'].map(box).join('')}</div>
+    <p id="sqStatus" style="font-weight:800; margin:0 0 14px;"></p>
+    <div id="sqTeamBox"></div>`;
+  squadPaintTeam(c.id); sqPaintTimer(c);
+}
+
+function sqPaintTimer(c){
+  const st = sqG.st, sNow = squadNow();
+  if(document.getElementById('sqc-s')){
+    const target = st && st.starts_at ? st.starts_at : c.startsAt, left = Math.max(0, target - sNow), s = Math.floor(left / 1000);
+    const v = { d:Math.floor(s/86400), h:Math.floor(s%86400/3600), m:Math.floor(s%3600/60), s:s%60 };
+    Object.keys(v).forEach(k=>{ const el = document.getElementById('sqc-' + k); if(el) el.textContent = String(v[k]).padStart(2, '0'); });
+    const t = document.getElementById('sqStatus');
+    if(t) t.textContent = left ? 'المسابقة لسا ما بدأت — جهّز فريقك ⏳' : (st && st.phase === 'nogame' ? 'المسابقة لسا ما انجهزت من المشرف ⏳' : '🔥 حان موعد المسابقة! لحظات...');
+  }
+  const tm = document.getElementById('sqTime');
+  if(tm && st && st.phase_end){
+    const left = Math.max(0, st.phase_end - sNow), total = (st.phase === 'question' ? st.q_seconds : st.reveal_seconds) * 1000;
+    tm.textContent = Math.ceil(left / 1000);
+    const bar = document.getElementById('sqBar'); if(bar) bar.style.width = Math.min(100, left / total * 100) + '%';
+  }
+}
+
+function sqPaintQuestion(root, c){
+  const st = sqG.st, hasTeam = !!st.team; sqG.myChoice = null;
+  root.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <span class="hint" style="margin:0;">سؤال ${st.pos + 1} / ${st.total}${hasTeam ? ' • 🛡️ ' + escapeHtml(st.team.name) : ''}</span>
+      <b id="sqTime" style="font-size:22px; direction:ltr;">--</b></div>
+    ${sqTimerBar}
+    <h3 style="margin:0 0 14px; text-align:start; line-height:1.7;">${escapeHtml(st.question)}</h3>
+    <div style="display:grid; gap:8px;">${(st.options || []).map((o,i)=>`<button class="btn" data-sq-opt="${i}" style="text-align:start; justify-content:flex-start;" ${hasTeam ? '' : 'disabled'}><b>${SQ_LETTERS[i]}</b>&nbsp; ${escapeHtml(String(o))}</button>`).join('')}</div>
+    <p id="sqVoteMsg" style="color:var(--red,#d33); font-weight:700; font-size:13px; margin:8px 0 0;"></p>
+    <div id="sqVotes" style="margin-top:12px; text-align:start;"></div>
+    <p class="hint" style="margin:12px 0 0;">${hasTeam ? 'تقدر تغيّر إجابتك قبل ما يخلص الوقت. الأغلبية بتحسم، وعند التعادل صوت المسؤول 👑.' : (isAdminSession() ? 'معاينة المشرف.' : 'ما إلك فريق بهذي المسابقة — بتتفرّج بس.')}</p>`;
+  root.querySelectorAll('[data-sq-opt]').forEach(b=> b.addEventListener('click', ()=> sqVote(c.id, +b.dataset.sqOpt)));
+  sqPaintTimer(c);
+}
+
+function sqUpdateQuestion(){
+  const st = sqG.st, votes = st.votes || [], mine = votes.find(v=>v.user_id === sqG.uid);
+  const my = sqG.myChoice != null ? sqG.myChoice : (mine ? mine.choice : null);
+  document.querySelectorAll('[data-sq-opt]').forEach(b=>{
+    const on = +b.dataset.sqOpt === my;
+    b.style.borderColor = on ? 'var(--teal,#1f7a8c)' : ''; b.style.background = on ? 'rgba(31,122,140,.12)' : ''; b.style.fontWeight = on ? '800' : '';
+  });
+  const box = document.getElementById('sqVotes'); if(!box) return;
+  const cap = st.team && st.team.captain_id;
+  box.innerHTML = votes.length
+    ? `<div class="hint" style="margin:0 0 6px;">أصوات فريقك:</div>` + votes.map(v=>`<div>${v.user_id === cap ? '👑' : '🧑‍⚕️'} ${escapeHtml(v.name || '')} ← <b>${SQ_LETTERS[v.choice] || '?'}</b></div>`).join('')
+    : (st.team ? '<div class="hint">ما حدا من فريقك صوّت لسا.</div>' : '');
+}
+
+async function sqVote(cid, i){
+  const st = sqG.st; if(!st || st.phase !== 'question') return;
+  const prev = sqG.myChoice, pos = st.pos, msg = document.getElementById('sqVoteMsg');
+  sqG.myChoice = i; sqUpdateQuestion(); if(msg) msg.textContent = '';
+  const { data, error } = await supabaseClient.rpc('squad_vote', { p_challenge:cid, p_pos:pos, p_choice:i });
+  if(!sqG.st || sqG.st.pos !== pos) return;
+  if(error || (data && data.error)){
+    sqG.myChoice = prev; sqUpdateQuestion();
+    const m = document.getElementById('sqVoteMsg');
+    if(m) m.textContent = data && data.error === 'closed' ? 'انتهى وقت السؤال.' : data && data.error === 'no_team' ? 'لازم تكون بفريق عشان تصوّت.' : 'تعذّر تسجيل صوتك، جرّب مرة ثانية.';
+    return;
+  }
+  sqFetch(cid);
+}
+
+function sqLeaderboardHtml(st){
+  const lb = st.leaderboard || [], mine = st.team && st.team.id;
+  if(!lb.length) return '';
+  return `<div style="text-align:start; margin-top:16px;"><h4 style="margin:0 0 8px;">🏆 الترتيب${st.teams ? ` <span class="hint" style="margin:0;">(${st.teams} فريق)</span>` : ''}</h4>
+    ${lb.map(t=>`<div class="card-panel" style="padding:8px 12px; margin-bottom:6px; display:flex; justify-content:space-between; gap:8px; ${t.id === mine ? 'border-color:var(--teal,#1f7a8c); background:rgba(31,122,140,.10);' : ''}">
+      <span><b>${t.rk}.</b> ${t.rk === 1 ? '🥇 ' : t.rk === 2 ? '🥈 ' : t.rk === 3 ? '🥉 ' : ''}${escapeHtml(t.name)}${t.id === mine ? ' <span class="hint" style="margin:0;">(فريقك)</span>' : ''}</span>
+      <span><b>${t.score}</b> <span class="hint" style="margin:0;">• ${t.correct} صح</span></span></div>`).join('')}</div>`;
+}
+
+function sqPaintReveal(root, c){
+  const st = sqG.st, mr = st.my_result, ci = st.correct_index, last = st.pos + 1 >= st.total;
+  const banner = !st.team ? '' : (mr && mr.is_correct
+    ? `<div style="padding:10px; border-radius:12px; background:rgba(46,160,67,.15); font-weight:800; margin-bottom:12px;">✅ إجابة فريقكم صح! +${mr.points} نقطة</div>`
+    : `<div style="padding:10px; border-radius:12px; background:rgba(220,50,50,.12); font-weight:800; margin-bottom:12px;">${mr && mr.choice != null ? '❌ إجابة فريقكم غلط' : '⏰ فريقكم ما جاوب على هذا السؤال'}</div>`);
+  root.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <span class="hint" style="margin:0;">شرح سؤال ${st.pos + 1} / ${st.total} • ${last ? 'النتيجة النهائية' : 'السؤال التالي'} بعد</span>
+      <b id="sqTime" style="font-size:22px; direction:ltr;">--</b></div>
+    ${sqTimerBar}
+    ${banner}
+    <h3 style="margin:0 0 12px; text-align:start; line-height:1.7;">${escapeHtml(st.question)}</h3>
+    <div style="display:grid; gap:8px;">${(st.options || []).map((o,i)=>{
+      const ok = i === ci, picked = mr && mr.choice === i;
+      return `<div class="card-panel" style="padding:10px 14px; text-align:start; ${ok ? 'border-color:#2ea043; background:rgba(46,160,67,.15); font-weight:800;' : picked ? 'border-color:#d33; background:rgba(220,50,50,.12);' : 'opacity:.7;'}">
+        <b>${SQ_LETTERS[i]}</b>&nbsp; ${escapeHtml(String(o))} ${ok ? '✅' : ''}${picked ? ' <span class="hint" style="margin:0;">(إجابة فريقكم)</span>' : ''}</div>`; }).join('')}</div>
+    ${st.explanation ? `<div class="card-panel" style="padding:12px 14px; margin-top:12px; text-align:start;"><b>💡 الشرح</b><div style="margin-top:4px; line-height:1.8;">${escapeHtml(st.explanation)}</div></div>` : ''}
+    ${sqLeaderboardHtml(st)}`;
+  sqPaintTimer(c);
+}
+
+function sqPaintFinished(root, c){
+  const st = sqG.st, mine = st.team && (st.leaderboard || []).find(t=>t.id === st.team.id);
+  root.innerHTML = `<div style="font-size:48px;">🏆</div>
+    <h2 style="margin:6px 0;">انتهت المسابقة!</h2>
+    <p class="hint" style="margin:0 0 6px;">${escapeHtml(c.title)}</p>
+    ${mine ? `<p style="font-weight:800; margin:8px 0 0;">فريقكم «${escapeHtml(mine.name)}» بالمركز ${mine.rk} بـ ${mine.score} نقطة 🎉</p>` : ''}
+    ${sqLeaderboardHtml(st)}`;
+}
+
+/* ---- فرق Squad (جداول squad_teams / squad_members عبر دوال squad3.sql) ---- */
+let squadTeam = { cid:null, loaded:false, team:null, members:[], err:'', uid:null, lastLoad:0 };
+const SQUAD_ERR = { not_found:'الكود غير صحيح، تأكد منه مع مسؤول الفريق.', full:'الفريق مكتمل (3 طلاب).', already:'إنت أصلًا بفريق بهذي المسابقة.', bad_name:'اسم الفريق لازم يكون بين 2 و30 حرف.', name_taken:'اسم الفريق مستخدم، اختر اسم ثاني.', locked:'المسابقة بدأت — ما بقدر أحد ينضم أو يطلع من الفريق.', no_game:'المسابقة لسا ما انجهزت من المشرف.', auth:'سجّل دخولك مرة ثانية.' };
 async function squadLoadTeam(cid, silent){
   if(!supabaseClient || !state.session || state.session.type !== 'student') return;
   const { data, error } = await supabaseClient.rpc('squad_my_team', { p_challenge: cid });
   if(squadTeam.cid !== cid) return;
-  if(error || (data && data.error)){ if(!silent){ squadTeam.loaded = true; squadTeam.err = 'تعذّر تحميل الفريق. تأكد إن squad.sql انشغّل.'; } }
+  squadTeam.lastLoad = Date.now();
+  if(error || (data && data.error)){ if(!silent){ squadTeam.loaded = true; squadTeam.err = 'تعذّر تحميل الفريق. تأكد إن squad3.sql انشغّل.'; } }
   else { squadTeam.team = data.team || null; squadTeam.members = data.members || []; squadTeam.loaded = true; squadTeam.err = ''; }
+  squadTeam.uid = await squadUid();
   squadPaintTeam(cid);
 }
 async function squadAct(cid, fn, args, msgEl){
@@ -10609,7 +10884,8 @@ function squadNameModal(cid, mode){
 }
 function squadPaintTeam(cid){
   const box = document.getElementById('sqTeamBox'); if(!box) return;
-  const c = squadData.items.find(x=>x.id===cid), closed = c && Date.now() >= c.startsAt;
+  const c = squadData.items.find(x=>x.id===cid), st = sqG.st;
+  const closed = c && squadNow() >= (st && st.starts_at ? st.starts_at : c.startsAt);
   const isStudent = state.session && state.session.type === 'student';
   if(!isStudent){ box.innerHTML = `<p class="hint">معاينة المشرف — تكوين الفرق للطلاب فقط.</p>`; return; }
   if(squadTeam.err){ box.innerHTML = `<p style="color:var(--red,#d33); font-weight:700;">${escapeHtml(squadTeam.err)}</p>`; return; }
@@ -10623,8 +10899,8 @@ function squadPaintTeam(cid){
     if(n) n.addEventListener('click', ()=> squadNameModal(cid,'create')); if(j) j.addEventListener('click', ()=> squadNameModal(cid,'join'));
     return;
   }
-  const me = state.session.phone, slots = [0,1,2].map(i=>{ const m = squadTeam.members[i];
-    return m ? `<div class="card-panel" style="padding:10px 14px; display:flex; gap:8px; align-items:center;"><span>${m.phone === t.captain_phone ? '👑' : '🧑‍⚕️'}</span><b>${escapeHtml(m.name || '')}</b>${m.phone === me ? '<span class="hint" style="margin:0;">(إنت)</span>' : ''}</div>`
+  const me = squadTeam.uid, slots = [0,1,2].map(i=>{ const m = squadTeam.members[i];
+    return m ? `<div class="card-panel" style="padding:10px 14px; display:flex; gap:8px; align-items:center;"><span>${m.user_id === t.captain_id ? '👑' : '🧑‍⚕️'}</span><b>${escapeHtml(m.name || '')}</b>${m.user_id === me ? '<span class="hint" style="margin:0;">(إنت)</span>' : ''}</div>`
       : `<div class="card-panel" style="padding:10px 14px; opacity:.55; border-style:dashed;">مقعد فاضي…</div>`; }).join('');
   box.innerHTML = `<div style="text-align:start;">
     <h3 style="margin:0 0 4px;">🛡️ ${escapeHtml(t.name)}</h3>
