@@ -10431,9 +10431,11 @@ function bindAdminExamsEvents(){
      يرسل الرابط كإشعار، ويتابع الترتيب مباشرة.
    - الطالب: /squad/<id> → عدّ تنازلي + تكوين الفرق، وبعد البدء شاشة لعب متزامنة
      (السيرفر هو المرجع الوحيد للوقت عبر squad_state، والهوية عبر auth.uid()).
-   - العنوان/حالة الإرسال بـ medora_data (squad_challenges)، والموعد والأسئلة والفرق بجداول squad_*.
+   - كل شي (العنوان، الموعد، المدد، حالة الإرسال، الأسئلة، الفرق) بجداول squad_* فقط (squad4.sql).
+     الطالب بقرأ بيانات المسابقة عبر الدالة squad_info، والمشرف عبر squad_admin_list — ولا شي من medora_data.
    ========================================================================= */
-let squadData = { loaded:false, loading:false, items:[] };
+let squadData = { loaded:false, loading:false, items:[], forKey:null, err:false };
+let squadMigrated = false;
 let squadTimer = null;
 let squadOffset = 0;                                   /* فرق ساعة السيرفر عن ساعة الجهاز (ms) */
 const squadNow = () => Date.now() + squadOffset;
@@ -10443,16 +10445,59 @@ const squadIdFromRoute = r => r && r.startsWith('squad/') ? decodeURIComponent(r
 async function squadUid(){
   try{ const { data } = await supabaseClient.auth.getSession(); return data && data.session ? data.session.user.id : null; }catch(e){ return null; }
 }
+/* صف squad_games (من الدوال) → الشكل اللي بيستعمله باقي الكود */
+const squadFromRow = r => ({ id:r.id, title:r.title || '', startsAt:Number(r.starts_at), qSec:r.q_seconds, rSec:r.reveal_seconds,
+  createdAt:r.created_at ? Number(r.created_at) : null, sentAt:r.sent_at ? Number(r.sent_at) : null });
+const squadReady = id => squadData.loaded && squadData.forKey === (isAdminSession() ? 'admin' : id);
+
+/* ترحيل لمرة وحدة: مسابقات قديمة كان عنوانها/إرسالها محفوظ بـ medora_data → تنتقل لجدول squad_games (المشرف فقط) */
+async function squadMigrateLegacy(rows){
+  if(squadMigrated) return false;
+  squadMigrated = true;
+  let legacy;
+  try{ legacy = await getData('squad_challenges', [], true); }catch(e){ return false; }
+  if(!Array.isArray(legacy) || !legacy.length) return false;
+  let changed = false;
+  for(const o of legacy){
+    if(!o || !o.id) continue;
+    const g = rows.find(x=>x.id === o.id), sent = o.sentAt ? new Date(o.sentAt).toISOString() : null;
+    if(!g){
+      const { error } = await supabaseClient.from('squad_games').insert({ challenge_id:o.id, title:String(o.title || '').slice(0,100),
+        starts_at:new Date(o.startsAt).toISOString(), q_seconds:o.qSec || 20, reveal_seconds:o.rSec || 8, sent_at:sent });
+      if(!error) changed = true;
+    } else if(!g.title && o.title){
+      const { error } = await supabaseClient.from('squad_games').update({ title:String(o.title).slice(0,100), sent_at:g.sent_at ? new Date(Number(g.sent_at)).toISOString() : sent }).eq('challenge_id', o.id);
+      if(!error) changed = true;
+    }
+  }
+  return changed;
+}
+
 async function squadLoad(force){
-  if(squadData.loading || (squadData.loaded && !force)) return;
+  const admin = isAdminSession(), key = admin ? 'admin' : squadIdFromRoute(currentRoute());
+  if(squadData.loading || (squadData.loaded && !force && squadData.forKey === key)) return;
   squadData.loading = true;
-  const v = await getData('squad_challenges', [], true);
-  squadData.items = Array.isArray(v) ? v : [];
+  if(squadData.forKey !== key) squadData.loaded = false;
+  let items = [], failed = false;
+  try{
+    if(admin){
+      let { data, error } = await supabaseClient.rpc('squad_admin_list');
+      if(error || !Array.isArray(data)) failed = true;
+      else {
+        if(await squadMigrateLegacy(data)){ const r2 = await supabaseClient.rpc('squad_admin_list'); if(Array.isArray(r2.data)) data = r2.data; }
+        items = data.map(squadFromRow);
+      }
+    } else if(key){
+      const { data, error } = await supabaseClient.rpc('squad_info', { p_challenge:key });
+      if(error) failed = true;
+      else if(data && !data.error && data.id) items = [squadFromRow(data)];
+    }
+  }catch(e){ failed = true; }
+  squadData.items = items; squadData.err = failed; squadData.forKey = key;
   squadData.loaded = true; squadData.loading = false;
   const r = currentRoute();
   if(r === 'admin-squad' || r.startsWith('squad/')) render();
 }
-async function squadSave(){ await setData('squad_challenges', squadData.items, true); }
 
 /* ------------------------------ المشرف ------------------------------ */
 function pageAdminSquad(){
@@ -10461,6 +10506,7 @@ function pageAdminSquad(){
   const items = squadData.items.slice().sort((a,b)=> b.startsAt - a.startsAt);
   return `
   <section class="section"><div class="container">
+    ${squadData.err ? `<p style="color:var(--red,#d33); font-weight:700;">تعذّر تحميل المسابقات. تأكد إن squad4.sql انشغّل.</p>` : ''}
     <div class="toolbar">
       <h2>⚔️ Squad Challenge</h2>
       <div class="toolbar-actions"><button class="btn teal solid" id="sqCreateBtn">${ICONS.plus} مسابقة جديدة</button></div>
@@ -10503,10 +10549,11 @@ function squadCreateModal(){
     if(!f['title'].value.trim() || !startsAt){ msg.textContent = 'اكتب العنوان وحدّد الموعد.'; return; }
     const qSec = Math.min(120, Math.max(5, parseInt(f['qs'].value) || 20)), rSec = Math.min(60, Math.max(3, parseInt(f['rs'].value) || 8));
     const id = 'sq' + Date.now().toString(36);
-    const { error } = await supabaseClient.from('squad_games').insert({ challenge_id:id, starts_at:new Date(startsAt).toISOString(), q_seconds:qSec, reveal_seconds:rSec });
-    if(error){ msg.textContent = 'تعذّر إنشاء المسابقة بقاعدة البيانات. تأكد إن squad3.sql انشغّل.'; return; }
-    squadData.items.push({ id, title:f['title'].value.trim(), startsAt, qSec, rSec, createdAt:Date.now(), sentAt:null });
-    await squadSave(); closeModal(); render();
+    const title = f['title'].value.trim().slice(0,100);
+    const { error } = await supabaseClient.from('squad_games').insert({ challenge_id:id, title, starts_at:new Date(startsAt).toISOString(), q_seconds:qSec, reveal_seconds:rSec });
+    if(error){ msg.textContent = 'تعذّر إنشاء المسابقة بقاعدة البيانات. تأكد إن squad4.sql انشغّل.'; return; }
+    squadData.items.push({ id, title, startsAt, qSec, rSec, createdAt:Date.now(), sentAt:null });
+    closeModal(); render();
   });
 }
 
@@ -10530,8 +10577,10 @@ function squadSendModal(c){
     state.notifications.push({ id:'n'+Date.now(), title:'⚔️ Squad Challenge — '+c.title,
       body:`مسابقة الفرق بتبدأ ${examFmtDate(c.startsAt)}. كوّن فريقك من 3 طلاب وادخل من الزر تحت.`,
       link:'/squad/'+c.id, target, targetValue: value || null, createdAt:Date.now() });
-    c.sentAt = Date.now();
-    await Promise.all([ setData('notifications', state.notifications, true), squadSave() ]);
+    const sentAt = Date.now();
+    const [, up] = await Promise.all([ setData('notifications', state.notifications, true),
+      supabaseClient.from('squad_games').update({ sent_at:new Date(sentAt).toISOString() }).eq('challenge_id', c.id) ]);
+    if(!up.error) c.sentAt = sentAt;
     closeModal(); render();
   });
 }
@@ -10545,8 +10594,6 @@ async function squadQuestionsModal(c){
     ${started ? '<p style="color:var(--red,#d33); font-weight:700;">المسابقة بدأت — الأسئلة مقفلة ولا يمكن تعديلها.</p>' : '<p class="hint" style="margin:0 0 10px;">كل سؤال له 2–6 خيارات وإجابة صحيحة واحدة. الإجابة الصحيحة ما بتنزل للطلاب إلا بمرحلة الشرح.</p>'}
     <div id="sqQList"><span class="loading-dot"></span></div>
     <div id="sqQFormBox" style="margin-top:12px;"></div>`, true);
-  /* يضمن وجود صف المسابقة (للمسابقات القديمة المحفوظة قبل squad3) */
-  await supabaseClient.from('squad_games').upsert({ challenge_id:c.id, starts_at:new Date(c.startsAt).toISOString(), q_seconds:c.qSec||20, reveal_seconds:c.rSec||8 }, { onConflict:'challenge_id', ignoreDuplicates:true });
   await sqqReload(c, started);
 }
 async function sqqReload(c, started){
@@ -10659,7 +10706,7 @@ function bindSquadAdminEvents(){
     if(!confirm('حذف هذه المسابقة؟ بتنحذف معها كل الفرق والأسئلة والأصوات.')) return;
     const { error } = await supabaseClient.from('squad_games').delete().eq('challenge_id', b.dataset.sqDel);
     if(error){ alert('تعذّر حذف المسابقة من قاعدة البيانات.'); return; }
-    squadData.items = squadData.items.filter(x=>x.id!==b.dataset.sqDel); await squadSave(); render();
+    squadData.items = squadData.items.filter(x=>x.id!==b.dataset.sqDel); render();
   }));
   document.querySelectorAll('[data-sq-copy]').forEach(b=> b.addEventListener('click', ()=>{
     const link = squadLink(b.dataset.sqCopy);
@@ -10674,7 +10721,7 @@ let sqG = { cid:null, st:null, err:false, busy:false, lastFetch:0, key:'', myCho
 
 function pageSquad(id){
   if(!state.session) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>سجّل دخولك أولًا</h3><p>لازم تسجّل دخول عشان تشارك بالمسابقة. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
-  if(!squadData.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
+  if(!squadReady(id)) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
   const c = squadData.items.find(x=>x.id===id);
   if(!c) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>المسابقة غير موجودة</h3><p>تأكد من الرابط أو اسأل المشرف.</p></div></div></section>`;
   return `<section class="section"><div class="wizard-wrap" style="text-align:center;"><div class="card-panel" style="padding:24px 18px;" id="sqRoot"></div></div></section>`;
