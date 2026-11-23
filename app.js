@@ -773,8 +773,9 @@ function openNotifItem(id){
     <h3>🔔 ${escapeHtml(n.title)}</h3>
     <p style="white-space:pre-wrap; color:var(--text); font-size:14.5px; margin:10px 0;">${escapeHtml(n.body)}</p>
     <p class="hint" style="font-size:12px;">${new Date(n.createdAt).toLocaleString('ar-JO',{dateStyle:'medium',timeStyle:'short'})}</p>
-    <div class="modal-actions"><button type="button" class="btn small" id="cancelModal">إغلاق</button></div>`);
+    <div class="modal-actions">${(n.link && n.link.startsWith('/')) ? `<a class="btn teal solid small" href="${escapeHtml(n.link)}" id="notifGo">⚔️ دخول</a>` : ''}<button type="button" class="btn small" id="cancelModal">إغلاق</button></div>`);
   document.getElementById('cancelModal').addEventListener('click', closeModal);
+  const go = document.getElementById('notifGo'); if(go) go.addEventListener('click', closeModal);
 }
 (function bindNotifDelegation(){
   const listEl = document.getElementById('notifDynamicList');
@@ -1729,6 +1730,7 @@ function renderNavState(){
         <a href="/admin-highyield" class="btn small" style="border-color:#fff;color:#fff;">🔥 High Yield</a>
         <a href="/admin-hubs" class="btn small" style="border-color:#fff;color:#fff;">📁 المجلدات</a>
         <a href="/admin-feedback" class="btn small" style="border-color:#fff;color:#fff;">💬 الفيدباك</a>
+        <a href="/admin-squad" class="btn small" style="border-color:#fff;color:#fff;">⚔️ Squad Challenge</a>
         <a href="/store" class="btn small" style="border-color:#fff;color:#fff;">🛍️ المتجر</a>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerDesignBtn">🎨 تصميم الموقع</button>
         <button class="btn small" style="border-color:#fff;color:#fff;" id="bannerLogout">تسجيل الخروج</button>
@@ -7967,6 +7969,9 @@ function updateSeoMeta(route){
     case 'admin-feedback':
       setPageMeta({ title: 'الفيدباك', noindex: true });
       break;
+    case 'admin-squad':
+      setPageMeta({ title: 'Squad Challenge', noindex: true });
+      break;
     case 'feedback-wall':
       setPageMeta({ title: 'آراء الطلاب', description: 'تقييمات وآراء طلاب منصة MEDORA عن الشرح والمواد.' });
       break;
@@ -7993,6 +7998,8 @@ async function render(){
     html = pageHub(hubIdFromRoute(route));
   } else if(route.startsWith('feedback/')){
     html = pageFeedback(fbIdFromRoute(route));
+  } else if(route.startsWith('squad/')){
+    html = pageSquad(squadIdFromRoute(route));
   } else {
     switch(route){
       case 'home': html = pageHome(); break;
@@ -8017,6 +8024,7 @@ async function render(){
       case 'admin-highyield': html = pageAdminHighYield(); break;
       case 'admin-hubs': html = pageAdminHubs(); break;
       case 'admin-feedback': html = pageAdminFeedback(); break;
+      case 'admin-squad': html = pageAdminSquad(); break;
       case 'feedback-wall': html = pageFeedbackWall(); break;
       default: html = pageHome();
     }
@@ -10418,6 +10426,158 @@ function bindAdminExamsEvents(){
 }
 
 /* =========================================================================
+   Squad Challenge (الواجهة الأولى)
+   - المشرف: زر ⚔️ في شريط المشرف → /admin-squad: ينشئ مسابقة (عنوان + موعد)،
+     وينسخ رابطها أو يرسله كإشعار للطلاب (كل الطلاب / جامعة / تخصص).
+   - الطالب: يفتح /squad/<id> فيشوف عدًّا تنازليًا لموعد المسابقة (صفحة الانتظار).
+   - التخزين مؤقتًا في medora_data (مفتاح squad_challenges)؛ الفرق والأسئلة والنقاط بالخطوة الجاية.
+   ========================================================================= */
+let squadData = { loaded:false, loading:false, items:[] };
+let squadTimer = null;
+const squadLink = id => location.origin + '/squad/' + id;
+const squadIdFromRoute = r => r && r.startsWith('squad/') ? decodeURIComponent(r.slice(6).split('/')[0]) : null;
+async function squadLoad(force){
+  if(squadData.loading || (squadData.loaded && !force)) return;
+  squadData.loading = true;
+  const v = await getData('squad_challenges', [], true);
+  squadData.items = Array.isArray(v) ? v : [];
+  squadData.loaded = true; squadData.loading = false;
+  const r = currentRoute();
+  if(r === 'admin-squad' || r.startsWith('squad/')) render();
+}
+async function squadSave(){ await setData('squad_challenges', squadData.items, true); }
+
+function pageAdminSquad(){
+  if(!isAdminSession()) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>غير مصرّح</h3><p>هذه الصفحة مخصّصة للمشرف فقط. <a href="/admin-login" style="color:var(--teal); font-weight:800;">تسجيل دخول المشرف</a></p></div></div></section>`;
+  if(!squadData.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
+  const items = squadData.items.slice().sort((a,b)=> b.startsAt - a.startsAt);
+  return `
+  <section class="section"><div class="container">
+    <div class="toolbar">
+      <h2>⚔️ Squad Challenge</h2>
+      <div class="toolbar-actions"><button class="btn teal solid" id="sqCreateBtn">${ICONS.plus} مسابقة جديدة</button></div>
+    </div>
+    <p class="hint" style="margin:-10px 0 20px;">حدّد عنوان المسابقة وموعدها، بعدين أرسل رابطها للطلاب كإشعار. الطالب بيفتح الرابط وبيشوف العدّ التنازلي لحد ما تبدأ.</p>
+    ${items.length ? items.map(c=>`
+    <div class="card-panel" style="padding:16px 18px; margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center;">
+        <div><b style="font-size:16px;">${escapeHtml(c.title)}</b>
+          <div class="hint" style="margin:4px 0 0;">🗓️ ${examFmtDate(c.startsAt)}${c.sentAt ? ` • 📣 أُرسل ${examFmtDate(c.sentAt)}` : ' • لم يُرسل بعد'}</div></div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn small teal solid" data-sq-send="${hubAttr(c.id)}">📣 إرسال للطلاب</button>
+          <button class="btn small" data-sq-copy="${hubAttr(c.id)}">🔗 نسخ الرابط</button>
+          <a class="btn small" href="/squad/${hubAttr(c.id)}">👁️ معاينة</a>
+          <button class="btn small danger" data-sq-del="${hubAttr(c.id)}">${ICONS.trash}</button>
+        </div>
+      </div>
+    </div>`).join('') : `<div class="empty-state" style="padding:26px;"><p>ما في مسابقات بعد. اضغط «مسابقة جديدة».</p></div>`}
+  </div></section>`;
+}
+
+function squadCreateModal(){
+  openModal(`
+    <h3>⚔️ مسابقة جديدة</h3>
+    <form id="sqForm">
+      <div class="field"><label>عنوان المسابقة</label><input type="text" name="title" required maxlength="100" placeholder="مثال: تحدّي الفرق — الجهاز الدوري"></div>
+      <div class="field"><label>موعد البداية</label><input type="datetime-local" name="when" required></div>
+      <div id="sqMsg" style="color:var(--red,#d33); font-weight:700; font-size:13px;"></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="sqCancel">إلغاء</button><button type="submit" class="btn teal solid small">💾 حفظ</button></div>
+    </form>`);
+  document.getElementById('sqCancel').addEventListener('click', closeModal);
+  document.getElementById('sqForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const f = e.target.elements, startsAt = new Date(f['when'].value).getTime();
+    if(!f['title'].value.trim() || !startsAt){ document.getElementById('sqMsg').textContent = 'اكتب العنوان وحدّد الموعد.'; return; }
+    squadData.items.push({ id:'sq'+Date.now().toString(36), title:f['title'].value.trim(), startsAt, createdAt:Date.now(), sentAt:null });
+    await squadSave(); closeModal(); render();
+  });
+}
+
+function squadSendModal(c){
+  openModal(`
+    <h3>📣 إرسال رابط المسابقة</h3>
+    <p class="hint" style="margin:0 0 10px;">«${escapeHtml(c.title)}» — بيوصل الطلاب إشعار فيه زر دخول للمسابقة.</p>
+    <form id="sqSendForm">
+      <div class="field"><label>لمين؟</label>
+        <select name="t" class="bank-select">
+          <option value="all">كل الطلاب</option>
+          ${UNIVERSITIES.map(u=>`<option value="university|${hubAttr(u.name)}">جامعة: ${escapeHtml(u.name)}</option>`).join('')}
+          ${MAJORS.map(m=>`<option value="major|${hubAttr(m.name)}">تخصص: ${escapeHtml(m.name)}</option>`).join('')}
+        </select></div>
+      <div class="modal-actions"><button type="button" class="btn small" id="sqSendCancel">إلغاء</button><button type="submit" class="btn teal solid small">📣 إرسال</button></div>
+    </form>`);
+  document.getElementById('sqSendCancel').addEventListener('click', closeModal);
+  document.getElementById('sqSendForm').addEventListener('submit', async e=>{
+    e.preventDefault();
+    const [target, value] = e.target.elements['t'].value.split('|');
+    state.notifications.push({ id:'n'+Date.now(), title:'⚔️ Squad Challenge — '+c.title,
+      body:`مسابقة الفرق بتبدأ ${examFmtDate(c.startsAt)}. كوّن فريقك من 3 طلاب وادخل من الزر تحت.`,
+      link:'/squad/'+c.id, target, targetValue: value || null, createdAt:Date.now() });
+    c.sentAt = Date.now();
+    await Promise.all([ setData('notifications', state.notifications, true), squadSave() ]);
+    closeModal(); render();
+  });
+}
+
+function bindSquadAdminEvents(){
+  squadLoad();
+  const on = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  const find = id => squadData.items.find(x=>x.id===id);
+  on('sqCreateBtn', squadCreateModal);
+  document.querySelectorAll('[data-sq-send]').forEach(b=> b.addEventListener('click', ()=>{ const c = find(b.dataset.sqSend); if(c) squadSendModal(c); }));
+  document.querySelectorAll('[data-sq-del]').forEach(b=> b.addEventListener('click', async ()=>{
+    if(!confirm('حذف هذه المسابقة؟')) return;
+    squadData.items = squadData.items.filter(x=>x.id!==b.dataset.sqDel); await squadSave(); render();
+  }));
+  document.querySelectorAll('[data-sq-copy]').forEach(b=> b.addEventListener('click', ()=>{
+    const link = squadLink(b.dataset.sqCopy);
+    const done = ()=>{ const o = b.innerHTML; b.innerHTML = '✅ تم النسخ'; setTimeout(()=>{ b.innerHTML = o; }, 1600); };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done).catch(()=> prompt('انسخ الرابط:', link));
+    else prompt('انسخ الرابط:', link);
+  }));
+}
+
+/* صفحة الطالب: الانتظار + العدّ التنازلي */
+function pageSquad(id){
+  if(!state.session) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>سجّل دخولك أولًا</h3><p>لازم تسجّل دخول عشان تشارك بالمسابقة. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
+  if(!squadData.loaded) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
+  const c = squadData.items.find(x=>x.id===id);
+  if(!c) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>المسابقة غير موجودة</h3><p>تأكد من الرابط أو اسأل المشرف.</p></div></div></section>`;
+  const box = k => `<div style="background:var(--card,#fff); border:1px solid var(--line,#d6e4e8); border-radius:14px; padding:14px 6px; min-width:72px;"><b id="sqc-${k}" style="font-size:30px; display:block; direction:ltr;">--</b><span class="hint" style="margin:0;">${{d:'يوم',h:'ساعة',m:'دقيقة',s:'ثانية'}[k]}</span></div>`;
+  return `
+  <section class="section"><div class="wizard-wrap" style="text-align:center;">
+    <div class="card-panel" style="padding:28px 20px;">
+      <div style="font-size:42px;">⚔️</div>
+      <h2 style="margin:6px 0;">${escapeHtml(c.title)}</h2>
+      <p class="hint" style="margin:0 0 18px;">🗓️ ${examFmtDate(c.startsAt)}</p>
+      <div id="sqCountdown" style="display:flex; gap:10px; justify-content:center; margin-bottom:20px;">${['d','h','m','s'].map(box).join('')}</div>
+      <p id="sqStatus" style="font-weight:800; margin:0 0 14px;"></p>
+      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+        <button class="btn teal solid" disabled>👑 أنشئ فريقك</button>
+        <button class="btn" disabled>🔑 انضم بكود</button>
+      </div>
+      <p class="hint" style="margin:14px 0 0;">تكوين الفرق بيتفعّل بالخطوة الجاية — كل فريق 3 طلاب ومعهم مسؤول.</p>
+    </div>
+  </div></section>`;
+}
+
+function bindSquadEvents(id){
+  squadLoad();
+  if(squadTimer){ clearInterval(squadTimer); squadTimer = null; }
+  const c = squadData.items.find(x=>x.id===id);
+  if(!c) return;
+  const tick = ()=>{
+    if(!currentRoute().startsWith('squad/')){ clearInterval(squadTimer); squadTimer = null; return; }
+    const left = Math.max(0, c.startsAt - Date.now()), s = Math.floor(left/1000);
+    const v = { d:Math.floor(s/86400), h:Math.floor(s%86400/3600), m:Math.floor(s%3600/60), s:s%60 };
+    Object.keys(v).forEach(k=>{ const el = document.getElementById('sqc-'+k); if(el) el.textContent = String(v[k]).padStart(2,'0'); });
+    const st = document.getElementById('sqStatus');
+    if(st) st.textContent = left ? 'المسابقة لسا ما بدأت — جهّز فريقك ⏳' : '🔥 حان موعد المسابقة!';
+  };
+  tick(); squadTimer = setInterval(tick, 1000);
+}
+
+/* =========================================================================
    الفيدباك (Feedback)
    - المشرف: صفحة /admin-feedback لإنشاء رابط فيدباك لكل مادة/محاضرة، يرسله للطلاب،
      ويستقبل آراءهم كبطاقات جاهزة (مربع للمنشورات / 9:16 للستوري) يحمّلها كصور PNG،
@@ -11910,6 +12070,8 @@ function bindPageEvents(route){
   document.documentElement.classList.toggle('fbk-lock', route.startsWith('feedback/'));
   if(route === 'admin-feedback') bindFeedbackAdminEvents();
   if(route === 'feedback-wall') fbLoadWall();
+  if(route === 'admin-squad') bindSquadAdminEvents();
+  if(route.startsWith('squad/')) bindSquadEvents(squadIdFromRoute(route));
   if(route.startsWith('exam/')) bindExamEvents(examIdFromRoute(route));
   if(route === 'admin-exams') bindAdminExamsEvents();
   document.querySelectorAll('[data-self-enroll]').forEach(btn=>{
