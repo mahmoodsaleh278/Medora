@@ -10552,11 +10552,7 @@ function pageSquad(id){
       <p class="hint" style="margin:0 0 18px;">🗓️ ${examFmtDate(c.startsAt)}</p>
       <div id="sqCountdown" style="display:flex; gap:10px; justify-content:center; margin-bottom:20px;">${['d','h','m','s'].map(box).join('')}</div>
       <p id="sqStatus" style="font-weight:800; margin:0 0 14px;"></p>
-      <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
-        <button class="btn teal solid" disabled>👑 أنشئ فريقك</button>
-        <button class="btn" disabled>🔑 انضم بكود</button>
-      </div>
-      <p class="hint" style="margin:14px 0 0;">تكوين الفرق بيتفعّل بالخطوة الجاية — كل فريق 3 طلاب ومعهم مسؤول.</p>
+      <div id="sqTeamBox"></div>
     </div>
   </div></section>`;
 }
@@ -10566,15 +10562,80 @@ function bindSquadEvents(id){
   if(squadTimer){ clearInterval(squadTimer); squadTimer = null; }
   const c = squadData.items.find(x=>x.id===id);
   if(!c) return;
+  if(squadTeam.cid !== id) squadTeam = { cid:id, loaded:false, team:null, members:[], err:'' };
+  squadPaintTeam(id); squadLoadTeam(id);
+  let n = 0;
   const tick = ()=>{
     if(!currentRoute().startsWith('squad/')){ clearInterval(squadTimer); squadTimer = null; return; }
     const left = Math.max(0, c.startsAt - Date.now()), s = Math.floor(left/1000);
     const v = { d:Math.floor(s/86400), h:Math.floor(s%86400/3600), m:Math.floor(s%3600/60), s:s%60 };
     Object.keys(v).forEach(k=>{ const el = document.getElementById('sqc-'+k); if(el) el.textContent = String(v[k]).padStart(2,'0'); });
+    if(++n % 10 === 0 && squadTeam.team && squadTeam.members.length < 3) squadLoadTeam(id, true);
     const st = document.getElementById('sqStatus');
     if(st) st.textContent = left ? 'المسابقة لسا ما بدأت — جهّز فريقك ⏳' : '🔥 حان موعد المسابقة!';
   };
   tick(); squadTimer = setInterval(tick, 1000);
+}
+
+/* ---- فرق Squad (جداول squad_teams / squad_members عبر دوال squad.sql) ---- */
+let squadTeam = { cid:null, loaded:false, team:null, members:[], err:'' };
+const SQUAD_ERR = { not_found:'الكود غير صحيح، تأكد منه مع مسؤول الفريق.', full:'الفريق مكتمل (3 طلاب).', already:'إنت أصلًا بفريق بهذي المسابقة.', bad_name:'اسم الفريق لازم يكون بين 2 و30 حرف.', auth:'سجّل دخولك مرة ثانية.' };
+async function squadLoadTeam(cid, silent){
+  if(!supabaseClient || !state.session || state.session.type !== 'student') return;
+  const { data, error } = await supabaseClient.rpc('squad_my_team', { p_challenge: cid });
+  if(squadTeam.cid !== cid) return;
+  if(error || (data && data.error)){ if(!silent){ squadTeam.loaded = true; squadTeam.err = 'تعذّر تحميل الفريق. تأكد إن squad.sql انشغّل.'; } }
+  else { squadTeam.team = data.team || null; squadTeam.members = data.members || []; squadTeam.loaded = true; squadTeam.err = ''; }
+  squadPaintTeam(cid);
+}
+async function squadAct(cid, fn, args, msgEl){
+  const { data, error } = await supabaseClient.rpc(fn, args);
+  const err = error ? 'صار خطأ، جرّب مرة ثانية.' : (data && data.error ? (SQUAD_ERR[data.error] || data.error) : '');
+  if(err){ if(msgEl) msgEl.textContent = err; return false; }
+  squadTeam.err = ''; squadTeam.loaded = false; closeModal(); await squadLoadTeam(cid); return true;
+}
+function squadNameModal(cid, mode){
+  const create = mode === 'create';
+  openModal(`<h3>${create ? '👑 أنشئ فريقك' : '🔑 انضم بكود'}</h3>
+    <form id="sqTeamForm"><div class="field"><label>${create ? 'اسم الفريق' : 'كود الفريق (6 خانات)'}</label>
+    <input type="text" name="v" required maxlength="${create ? 30 : 6}" ${create ? '' : 'dir="ltr" style="letter-spacing:4px; text-transform:uppercase;"'}></div>
+    <div id="sqTeamMsg" style="color:var(--red,#d33); font-weight:700; font-size:13px;"></div>
+    <div class="modal-actions"><button type="button" class="btn small" id="sqTeamCancel">إلغاء</button><button type="submit" class="btn teal solid small">${create ? 'إنشاء' : 'انضمام'}</button></div></form>`);
+  document.getElementById('sqTeamCancel').addEventListener('click', closeModal);
+  document.getElementById('sqTeamForm').addEventListener('submit', e=>{
+    e.preventDefault(); const v = e.target.elements['v'].value.trim(), msg = document.getElementById('sqTeamMsg');
+    squadAct(cid, create ? 'squad_create_team' : 'squad_join_team', create ? { p_challenge:cid, p_name:v } : { p_challenge:cid, p_code:v }, msg);
+  });
+}
+function squadPaintTeam(cid){
+  const box = document.getElementById('sqTeamBox'); if(!box) return;
+  const c = squadData.items.find(x=>x.id===cid), closed = c && Date.now() >= c.startsAt;
+  const isStudent = state.session && state.session.type === 'student';
+  if(!isStudent){ box.innerHTML = `<p class="hint">معاينة المشرف — تكوين الفرق للطلاب فقط.</p>`; return; }
+  if(squadTeam.err){ box.innerHTML = `<p style="color:var(--red,#d33); font-weight:700;">${escapeHtml(squadTeam.err)}</p>`; return; }
+  if(!squadTeam.loaded){ box.innerHTML = `<span class="loading-dot"></span>`; return; }
+  const t = squadTeam.team;
+  if(!t){
+    box.innerHTML = `<div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+      <button class="btn teal solid" id="sqNew" ${closed?'disabled':''}>👑 أنشئ فريقك</button><button class="btn" id="sqJoin" ${closed?'disabled':''}>🔑 انضم بكود</button></div>
+      <p class="hint" style="margin:12px 0 0;">${closed ? 'انتهى وقت تكوين الفرق.' : 'كل فريق 3 طلاب، ومنشئ الفريق بكون المسؤول.'}</p>`;
+    const n = document.getElementById('sqNew'), j = document.getElementById('sqJoin');
+    if(n) n.addEventListener('click', ()=> squadNameModal(cid,'create')); if(j) j.addEventListener('click', ()=> squadNameModal(cid,'join'));
+    return;
+  }
+  const me = state.session.phone, slots = [0,1,2].map(i=>{ const m = squadTeam.members[i];
+    return m ? `<div class="card-panel" style="padding:10px 14px; display:flex; gap:8px; align-items:center;"><span>${m.phone === t.captain_phone ? '👑' : '🧑‍⚕️'}</span><b>${escapeHtml(m.name || '')}</b>${m.phone === me ? '<span class="hint" style="margin:0;">(إنت)</span>' : ''}</div>`
+      : `<div class="card-panel" style="padding:10px 14px; opacity:.55; border-style:dashed;">مقعد فاضي…</div>`; }).join('');
+  box.innerHTML = `<div style="text-align:start;">
+    <h3 style="margin:0 0 4px;">🛡️ ${escapeHtml(t.name)}</h3>
+    <p class="hint" style="margin:0 0 12px;">شارك الكود مع زميليك: <b dir="ltr" style="letter-spacing:3px; font-size:16px;">${escapeHtml(t.code)}</b> <button class="btn small" id="sqCode">نسخ</button></p>
+    <div style="display:grid; gap:8px; margin-bottom:12px;">${slots}</div>
+    <p class="hint" style="margin:0 0 10px;">${squadTeam.members.length < 3 ? `ناقصكم ${3 - squadTeam.members.length} — بتقدروا تلعبوا حتى لو الفريق ناقص.` : 'فريقكم مكتمل ✅'}</p>
+    ${closed ? '' : '<button class="btn small danger" id="sqLeave">خروج من الفريق</button>'}</div>`;
+  document.getElementById('sqCode').addEventListener('click', e=>{ const b = e.currentTarget; const done = ()=>{ b.textContent = '✅'; setTimeout(()=>{ b.textContent = 'نسخ'; }, 1400); };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.code).then(done).catch(()=> prompt('انسخ الكود:', t.code)); else prompt('انسخ الكود:', t.code); });
+  const lv = document.getElementById('sqLeave');
+  if(lv) lv.addEventListener('click', ()=>{ if(confirm('تخرج من الفريق؟')) squadAct(cid, 'squad_leave_team', { p_challenge:cid }); });
 }
 
 /* =========================================================================
