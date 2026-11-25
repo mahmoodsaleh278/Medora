@@ -10463,7 +10463,7 @@ async function squadMigrateLegacy(rows){
     const g = rows.find(x=>x.id === o.id), sent = o.sentAt ? new Date(o.sentAt).toISOString() : null;
     if(!g){
       const { error } = await supabaseClient.from('squad_games').insert({ challenge_id:o.id, title:String(o.title || '').slice(0,100),
-        starts_at:new Date(o.startsAt).toISOString(), q_seconds:o.qSec || 20, reveal_seconds:o.rSec || 8, sent_at:sent });
+        starts_at:new Date(o.startsAt).toISOString(), q_seconds:o.qSec || 20, reveal_seconds:o.rSec || 30, sent_at:sent });
       if(!error) changed = true;
     } else if(!g.title && o.title){
       const { error } = await supabaseClient.from('squad_games').update({ title:String(o.title).slice(0,100), sent_at:g.sent_at ? new Date(Number(g.sent_at)).toISOString() : sent }).eq('challenge_id', o.id);
@@ -10516,7 +10516,7 @@ function pageAdminSquad(){
     <div class="card-panel" style="padding:16px 18px; margin-bottom:12px;">
       <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:center;">
         <div><b style="font-size:16px;">${escapeHtml(c.title)}</b>
-          <div class="hint" style="margin:4px 0 0;">🗓️ ${examFmtDate(c.startsAt)} • ⏱️ ${c.qSec||20}ث سؤال + ${c.rSec||8}ث شرح${c.sentAt ? ` • 📣 أُرسل ${examFmtDate(c.sentAt)}` : ' • لم يُرسل بعد'}</div></div>
+          <div class="hint" style="margin:4px 0 0;">🗓️ ${examFmtDate(c.startsAt)} • ⏱️ ${c.qSec||20}ث سؤال + ${c.rSec||30}ث شرح${c.sentAt ? ` • 📣 أُرسل ${examFmtDate(c.sentAt)}` : ' • لم يُرسل بعد'}</div></div>
         <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <button class="btn small solid teal" data-sq-q="${hubAttr(c.id)}">📝 الأسئلة</button>
           <button class="btn small" data-sq-res="${hubAttr(c.id)}">📊 النتائج</button>
@@ -10537,7 +10537,7 @@ function squadCreateModal(){
       <div class="field"><label>عنوان المسابقة</label><input type="text" name="title" required maxlength="100" placeholder="مثال: تحدّي الفرق — الجهاز الدوري"></div>
       <div class="field"><label>موعد البداية</label><input type="datetime-local" name="when" required></div>
       <div class="field"><label>مدة السؤال (ثانية)</label><input type="number" name="qs" value="20" min="5" max="120"></div>
-      <div class="field"><label>مدة الشرح بين الأسئلة (ثانية)</label><input type="number" name="rs" value="8" min="3" max="60"></div>
+      <div class="field"><label>مدة الشرح بين الأسئلة (ثانية)</label><input type="number" name="rs" value="30" min="3" max="60"></div>
       <p class="hint" style="margin:0 0 8px;">المدد ما بتتغيّر بعد بداية المسابقة.</p>
       <div id="sqMsg" style="color:var(--red,#d33); font-weight:700; font-size:13px;"></div>
       <div class="modal-actions"><button type="button" class="btn small" id="sqCancel">إلغاء</button><button type="submit" class="btn teal solid small">💾 حفظ</button></div>
@@ -10547,7 +10547,7 @@ function squadCreateModal(){
     e.preventDefault();
     const f = e.target.elements, startsAt = new Date(f['when'].value).getTime(), msg = document.getElementById('sqMsg');
     if(!f['title'].value.trim() || !startsAt){ msg.textContent = 'اكتب العنوان وحدّد الموعد.'; return; }
-    const qSec = Math.min(120, Math.max(5, parseInt(f['qs'].value) || 20)), rSec = Math.min(60, Math.max(3, parseInt(f['rs'].value) || 8));
+    const qSec = Math.min(120, Math.max(5, parseInt(f['qs'].value) || 20)), rSec = Math.min(60, Math.max(3, parseInt(f['rs'].value) || 30));
     const id = 'sq' + Date.now().toString(36);
     const title = f['title'].value.trim().slice(0,100);
     const { error } = await supabaseClient.from('squad_games').insert({ challenge_id:id, title, starts_at:new Date(startsAt).toISOString(), q_seconds:qSec, reveal_seconds:rSec });
@@ -10788,6 +10788,47 @@ function injectSquadStyles(){
     .sqx-sub{ margin-top:10px; font-size:clamp(14px,4vw,17px); font-weight:700; color:#9ec9d0; opacity:0; animation: sqxFade .8s ease-out 1.8s forwards; direction:rtl; }
     .sqx-skip{ position:absolute; bottom:26px; left:0; right:0; text-align:center; font-size:12.5px; color:rgba(255,255,255,.4); opacity:0; animation: sqxFade .8s ease-out 2s forwards; direction:rtl; }
     @keyframes sqxFade{ to{ opacity:1; } }
+    .sqlb{ margin-top:18px; text-align:start; }
+    .sqlb-h{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin:0 0 12px; }
+    .sqlb-h h4{ margin:0; font-size:18px; font-weight:900; }
+    .sqlb-h span{ font-size:12.5px; color:var(--sqi-mute); }
+    .sqlb-pod{ display:grid; grid-template-columns:1fr 1.18fr 1fr; gap:8px; align-items:end; margin:0 0 14px; direction:ltr; }
+    .sqlb-pc{ position:relative; direction:rtl; text-align:center; border-radius:18px 18px 10px 10px; padding:12px 6px; color:#2b2110;
+      display:flex; flex-direction:column; align-items:center; gap:3px; box-shadow:0 8px 20px rgba(0,0,0,.14); }
+    .sqlb-pc.r1{ min-height:170px; background:linear-gradient(165deg,#fbe6a2 0%,#e6b345 100%); }
+    .sqlb-pc.r2{ min-height:140px; background:linear-gradient(165deg,#eef2f4 0%,#b4c0c8 100%); }
+    .sqlb-pc.r3{ min-height:120px; background:linear-gradient(165deg,#f0c9a6 0%,#c0804a 100%); }
+    .sqlb-pc.me{ outline:3px solid var(--sqi-accent); outline-offset:2px; }
+    .sqlb-medal{ font-size:30px; line-height:1; }
+    .sqlb-pc.r1 .sqlb-medal{ font-size:38px; }
+    .sqlb-pn{ font-weight:900; font-size:13.5px; line-height:1.4; max-width:100%; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word; }
+    .sqlb-pc .sqlb-sc{ font-size:24px; font-weight:900; line-height:1.1; }
+    .sqlb-pc.r1 .sqlb-sc{ font-size:32px; }
+    .sqlb-pm{ font-size:12px; font-weight:700; opacity:.85; display:flex; gap:6px; align-items:center; justify-content:center; flex-wrap:wrap; }
+    .sqlb-tag{ margin-top:auto; font-size:11px; font-weight:900; background:rgba(0,0,0,.78); color:#fff; padding:2px 9px; border-radius:999px; }
+    .sqlb-row{ display:flex; align-items:center; gap:10px; padding:9px 12px; margin-bottom:7px; border-radius:14px; background:var(--sqi-glass); border:1px solid var(--sqi-line); }
+    .sqlb-row.me{ border-color:var(--sqi-accent); box-shadow:0 0 0 2px rgba(95,168,179,.28); }
+    .sqlb-rk{ flex:none; width:30px; height:30px; display:grid; place-items:center; border-radius:10px; font-weight:900; font-size:14px; background:rgba(95,168,179,.16); color:var(--sqi-accent); }
+    .sqlb-mid{ flex:1; min-width:0; }
+    .sqlb-nm{ display:flex; align-items:center; gap:6px; font-size:14px; }
+    .sqlb-nm b{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sqlb-nm em{ font-style:normal; font-size:11px; font-weight:800; color:var(--sqi-accent); flex:none; }
+    .sqlb-bar{ height:7px; margin-top:6px; border-radius:6px; background:rgba(127,127,127,.18); overflow:hidden; }
+    .sqlb-bar i{ display:block; height:100%; width:var(--w); border-radius:6px; background:linear-gradient(90deg,#5fa8b3,#a39cd3); }
+    .sqlb-row.me .sqlb-bar i{ background:linear-gradient(90deg,#2f7f8c,#7fc4cc); }
+    .sqlb-rs{ flex:none; display:flex; flex-direction:column; align-items:flex-end; gap:2px; }
+    .sqlb-rs .sqlb-sc{ font-size:18px; font-weight:900; }
+    .sqlb-gain{ font-size:12px; font-weight:900; color:#1f8f4a; background:rgba(46,160,67,.14); padding:1px 8px; border-radius:999px; direction:ltr; }
+    .sqlb-mv{ font-size:12px; font-weight:900; direction:ltr; flex:none; }
+    .sqlb-mv.up{ color:#1f8f4a; } .sqlb-mv.dn{ color:#d33; }
+    .sqlb-pc .sqlb-gain{ background:rgba(0,0,0,.12); color:#2b2110; }
+    .sqlb-pc .sqlb-mv.up{ color:#14693a; } .sqlb-pc .sqlb-mv.dn{ color:#a52121; }
+    .sqlb-anim .sqlb-pc{ animation: sqlbRise .7s cubic-bezier(.2,.8,.2,1) var(--d,0s) both; }
+    .sqlb-anim .sqlb-row{ animation: sqlbIn .5s ease var(--d,0s) both; }
+    .sqlb-anim .sqlb-bar i{ animation: sqlbGrow 1s cubic-bezier(.2,.8,.2,1) var(--d,0s) both; }
+    @keyframes sqlbRise{ from{ opacity:0; transform:translateY(40px) scale(.94); } }
+    @keyframes sqlbIn{ from{ opacity:0; transform:translateX(-14px); } }
+    @keyframes sqlbGrow{ from{ width:0; } }
     @media (prefers-reduced-motion: reduce){ .sq-stage *{ animation:none !important; } .sqi-step{ opacity:1; transform:none; } }`;
   document.head.appendChild(st);
 }
@@ -10855,7 +10896,7 @@ function sqPaintIntro(root, c){
   const steps = [
     ['🛡️', 'كوّن فريقك', 'فريق من 3 طلاب، ومنشئ الفريق بصير المسؤول 👑 وبشارك الكود مع زميليه.'],
     ['🗳️', 'صوّتوا سوا', 'كل واحد بصوّت على الإجابة، والأغلبية بتحسم. وعند التعادل بنحسب صوت المسؤول.'],
-    ['⏱️', 'سباق مع الوقت', `كل سؤال إله ${c.qSec} ثانية، وبعدها بتنكشف الإجابة الصحيحة مع الشرح.`],
+    ['⏱️', 'سباق مع الوقت', `كل سؤال إله ${c.qSec} ثانية، وبعدها بتنكشف الإجابة الصحيحة مع الشرح والترتيب لمدة ${c.rSec || 30} ثانية قبل السؤال اللي بعده.`],
     ['🏆', 'ترتيب مباشر', 'كل إجابة صح بتجيب نقاط لفريقكم، والترتيب بيتحدّث بعد كل سؤال.']
   ];
   root.innerHTML = `<div class="sqi">
@@ -10941,8 +10982,8 @@ function sqPaint(c){
   }
   if(ph === 'waiting' || ph === 'nogame'){ if(first){ if(sqIntroSeen(c.id)) sqPaintWaiting(root, c); else sqPaintIntro(root, c); } }
   else if(ph === 'question'){ if(first) sqPaintQuestion(root, c); sqUpdateQuestion(); }
-  else if(ph === 'reveal') sqPaintReveal(root, c);
-  else if(ph === 'finished') sqPaintFinished(root, c);
+  else if(ph === 'reveal') sqPaintReveal(root, c, first);
+  else if(ph === 'finished') sqPaintFinished(root, c, first);
 }
 
 const sqTimerBar = `<div style="height:6px; background:var(--line,#d6e4e8); border-radius:6px; overflow:hidden; margin-bottom:16px;"><div id="sqBar" style="height:100%; width:100%; background:var(--teal,#1f7a8c); transition:width .5s linear;"></div></div>`;
@@ -11026,17 +11067,72 @@ async function sqVote(cid, i){
   sqFetch(cid);
 }
 
-function sqLeaderboardHtml(st){
+function sqLeaderboardHtml(st, opt){
+  opt = opt || {};
   const lb = st.leaderboard || [], mine = st.team && st.team.id;
   if(!lb.length) return '';
-  return `<div style="text-align:start; margin-top:16px;"><h4 style="margin:0 0 8px;">🏆 الترتيب${st.teams ? ` <span class="hint" style="margin:0;">(${st.teams} فريق)</span>` : ''}</h4>
-    ${lb.map(t=>`<div class="card-panel" style="padding:8px 12px; margin-bottom:6px; display:flex; justify-content:space-between; gap:8px; ${t.id === mine ? 'border-color:var(--teal,#1f7a8c); background:rgba(31,122,140,.10);' : ''}">
-      <span><b>${t.rk}.</b> ${t.rk === 1 ? '🥇 ' : t.rk === 2 ? '🥈 ' : t.rk === 3 ? '🥉 ' : ''}${escapeHtml(t.name)}${t.id === mine ? ' <span class="hint" style="margin:0;">(فريقك)</span>' : ''}</span>
-      <span><b>${t.score}</b> <span class="hint" style="margin:0;">• ${t.correct} صح</span></span></div>`).join('')}</div>`;
+  const prevMap = {}; (opt.prev || []).forEach(p => { prevMap[p.id] = p; });
+  const max = Math.max(1, ...lb.map(t => Number(t.score) || 0));
+  const info = t => {
+    const sc = Number(t.score) || 0, p = prevMap[t.id];
+    if(opt.fromZero) return { gain:0, mv:0, from:0 };
+    const known = !!p || !!opt.zero, from = p ? (Number(p.score) || 0) : 0;
+    return { gain: known ? sc - from : 0, mv: (p && p.rk != null) ? p.rk - t.rk : 0, from: known ? from : sc };
+  };
+  const mvHtml = i => i.mv > 0 ? `<span class="sqlb-mv up">▲${i.mv}</span>` : i.mv < 0 ? `<span class="sqlb-mv dn">▼${-i.mv}</span>` : '';
+  const gainHtml = i => i.gain > 0 ? `<span class="sqlb-gain">+${i.gain}</span>` : '';
+  const scHtml = (t, i) => `<b class="sqlb-sc" data-cu="${Number(t.score) || 0}" data-from="${i.from}">${t.score}</b>`;
+  const medals = ['👑', '🥈', '🥉'], delays = ['.8s', '.4s', '.1s'];
+  const top = lb.slice(0, 3), rest = lb.slice(3);
+  const order = [1, 0, 2].filter(ix => top[ix]);
+  const pod = order.map(ix => {
+    const t = top[ix], i = info(t), me = t.id === mine;
+    return `<div class="sqlb-pc r${ix + 1}${me ? ' me' : ''}" style="--d:${delays[ix]};">
+      <div class="sqlb-medal">${ix === 0 ? '👑' : medals[ix]}</div>
+      <div class="sqlb-pn">${escapeHtml(t.name)}</div>
+      ${scHtml(t, i)}
+      <div class="sqlb-pm"><span>${t.correct} صح</span>${gainHtml(i)}${mvHtml(i)}</div>
+      ${me ? '<span class="sqlb-tag">فريقكم</span>' : ''}</div>`;
+  }).join('');
+  const rows = rest.map((t, k) => {
+    const i = info(t), me = t.id === mine, pct = Math.max(4, Math.round((Number(t.score) || 0) / max * 100));
+    return `<div class="sqlb-row${me ? ' me' : ''}" style="--d:${(0.9 + k * 0.07).toFixed(2)}s;">
+      <span class="sqlb-rk">${t.rk}</span>
+      <div class="sqlb-mid"><div class="sqlb-nm"><b>${escapeHtml(t.name)}</b>${me ? '<em>فريقكم</em>' : ''}${mvHtml(i)}</div>
+        <div class="sqlb-bar"><i style="--w:${pct}%;"></i></div></div>
+      <div class="sqlb-rs">${scHtml(t, i)}${gainHtml(i)}</div></div>`;
+  }).join('');
+  return `<div class="sqlb${opt.anim ? ' sqlb-anim' : ''}">
+    <div class="sqlb-h"><h4>🏆 ${opt.title || 'ترتيب الفرق'}</h4>${st.teams ? `<span>${st.teams} فريق</span>` : ''}</div>
+    <div class="sqlb-pod">${pod}</div>${rows}</div>`;
 }
 
-function sqPaintReveal(root, c){
+/* عدّاد النقاط: الرقم بيطلع من نقاط السؤال السابق لنقاطه الجديدة */
+function sqLbCountUp(root){
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  root.querySelectorAll('[data-cu]').forEach(el => {
+    const to = +el.dataset.cu, from = +el.dataset.from;
+    if(!(to > from)) return;
+    el.textContent = from;
+    const run = () => {
+      const t0 = performance.now(), dur = 1100;
+      const step = now => {
+        const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = Math.round(from + (to - from) * e);
+        if(k < 1 && document.body.contains(el)) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+    setTimeout(run, 700);
+  });
+}
+
+function sqPaintReveal(root, c, first){
   const st = sqG.st, mr = st.my_result, ci = st.correct_index, last = st.pos + 1 >= st.total;
+  /* نحفظ ترتيب كل سؤال عشان نعرض الصعود/النزول وفرق النقاط عن السؤال اللي قبله */
+  sqG.lbHist = sqG.lbHist || {};
+  sqG.lbHist[st.pos] = (st.leaderboard || []).map(t => ({ id:t.id, rk:t.rk, score:Number(t.score) || 0 }));
+  const prevLb = st.pos === 0 ? [] : sqG.lbHist[st.pos - 1];
   const banner = !st.team ? '' : (mr && mr.is_correct
     ? `<div style="padding:10px; border-radius:12px; background:rgba(46,160,67,.15); font-weight:800; margin-bottom:12px;">✅ إجابة فريقكم صح! +${mr.points} نقطة</div>`
     : `<div style="padding:10px; border-radius:12px; background:rgba(220,50,50,.12); font-weight:800; margin-bottom:12px;">${mr && mr.choice != null ? '❌ إجابة فريقكم غلط' : '⏰ فريقكم ما جاوب على هذا السؤال'}</div>`);
@@ -11052,17 +11148,19 @@ function sqPaintReveal(root, c){
       return `<div class="card-panel" style="padding:10px 14px; text-align:start; ${ok ? 'border-color:#2ea043; background:rgba(46,160,67,.15); font-weight:800;' : picked ? 'border-color:#d33; background:rgba(220,50,50,.12);' : 'opacity:.7;'}">
         <b>${SQ_LETTERS[i]}</b>&nbsp; ${escapeHtml(String(o))} ${ok ? '✅' : ''}${picked ? ' <span class="hint" style="margin:0;">(إجابة فريقكم)</span>' : ''}</div>`; }).join('')}</div>
     ${st.explanation ? `<div class="card-panel" style="padding:12px 14px; margin-top:12px; text-align:start;"><b>💡 الشرح</b><div style="margin-top:4px; line-height:1.8;">${escapeHtml(st.explanation)}</div></div>` : ''}
-    ${sqLeaderboardHtml(st)}`;
+    ${sqLeaderboardHtml(st, { anim:!!first, prev:prevLb, zero:st.pos === 0, title:last ? 'الترتيب قبل النتيجة النهائية' : 'ترتيب الفرق بعد هذا السؤال' })}`;
+  if(first) sqLbCountUp(root);
   sqPaintTimer(c);
 }
 
-function sqPaintFinished(root, c){
+function sqPaintFinished(root, c, first){
   const st = sqG.st, mine = st.team && (st.leaderboard || []).find(t=>t.id === st.team.id);
   root.innerHTML = `<div style="font-size:48px;">🏆</div>
     <h2 style="margin:6px 0;">انتهت المسابقة!</h2>
     <p class="hint" style="margin:0 0 6px;">${escapeHtml(c.title)}</p>
     ${mine ? `<p style="font-weight:800; margin:8px 0 0;">فريقكم «${escapeHtml(mine.name)}» بالمركز ${mine.rk} بـ ${mine.score} نقطة 🎉</p>` : ''}
-    ${sqLeaderboardHtml(st)}`;
+    ${sqLeaderboardHtml(st, { anim:!!first, fromZero:true, title:'النتيجة النهائية' })}`;
+  if(first) sqLbCountUp(root);
 }
 
 /* ---- فرق Squad (جداول squad_teams / squad_members عبر دوال squad3.sql) ---- */
