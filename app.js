@@ -10725,60 +10725,60 @@ function injectSquadStyles(){
   const st = document.createElement('style'); st.id = 'squadStyles';
   st.textContent = `
     .sq-stage{ position:relative; overflow:hidden; isolation:isolate; min-height:calc(100vh - 64px); padding:28px 0 90px;
-      background: radial-gradient(1100px 560px at 85% -10%, rgba(124,92,246,.55), transparent 60%),
-                  radial-gradient(900px 500px at 0% 105%, rgba(20,184,201,.45), transparent 60%),
-                  linear-gradient(160deg,#06131f 0%,#0a2c3d 48%,#1b1050 100%); }
+      background: radial-gradient(1100px 560px at 85% -10%, rgba(120,110,190,.18), transparent 62%),
+                  radial-gradient(900px 500px at 0% 105%, rgba(70,150,160,.16), transparent 62%),
+                  linear-gradient(165deg,#12232b 0%,#173340 52%,#1f2a42 100%); }
     .sq-stage::before{ content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
-      background-image: linear-gradient(rgba(255,255,255,.055) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.055) 1px, transparent 1px);
+      background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
       background-size:44px 44px; -webkit-mask-image:radial-gradient(ellipse at center,#000 25%,transparent 78%); mask-image:radial-gradient(ellipse at center,#000 25%,transparent 78%);
-      animation: sqGrid 26s linear infinite; }
+      animation: sqGrid 60s linear infinite; }
     @keyframes sqGrid{ to{ background-position:44px 44px, 44px 44px; } }
-    .sq-orb{ position:absolute; z-index:-1; border-radius:50%; filter:blur(64px); opacity:.5; pointer-events:none; animation: sqOrb 14s ease-in-out infinite alternate; }
-    .sq-orb.a{ width:320px; height:320px; background:#14b8c9; top:6%; left:-90px; }
-    .sq-orb.b{ width:380px; height:380px; background:#7c5cf6; bottom:4%; right:-110px; animation-delay:-6s; }
+    .sq-orb{ position:absolute; z-index:-1; border-radius:50%; filter:blur(90px); opacity:.16; pointer-events:none; animation: sqOrb 26s ease-in-out infinite alternate; }
+    .sq-orb.a{ width:320px; height:320px; background:#4fa3ad; top:6%; left:-90px; }
+    .sq-orb.b{ width:380px; height:380px; background:#8a82c4; bottom:4%; right:-110px; animation-delay:-6s; }
     @keyframes sqOrb{ to{ transform: translate(46px,-34px) scale(1.15); } }
-    .sq-float{ position:absolute; z-index:-1; font-size:30px; opacity:.17; pointer-events:none; user-select:none; animation: sqFloat 9s ease-in-out infinite; }
+    .sq-float{ position:absolute; z-index:-1; font-size:28px; opacity:.07; pointer-events:none; user-select:none; animation: sqFloat 16s ease-in-out infinite; }
     @keyframes sqFloat{ 50%{ transform: translateY(-24px) rotate(10deg); } }
-    .sq-ecg{ position:absolute; left:0; right:0; bottom:0; height:84px; z-index:-1; pointer-events:none; opacity:.55; }
-    .sq-ecg path{ fill:none; stroke:#2dd4e6; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:1000; stroke-dashoffset:1000;
-      filter: drop-shadow(0 0 6px rgba(45,212,230,.9)); animation: sqEcg 5s linear infinite; }
+    .sq-ecg{ position:absolute; left:0; right:0; bottom:0; height:84px; z-index:-1; pointer-events:none; opacity:.22; }
+    .sq-ecg path{ fill:none; stroke:#7fc4cc; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:1000; stroke-dashoffset:1000;
+      animation: sqEcg 9s linear infinite; }
     @keyframes sqEcg{ to{ stroke-dashoffset:-1000; } }
 
     .sq-card{ position:relative; max-width:560px; margin:0 auto; text-align:center; background:var(--card,#fff); color:var(--ink,#0b2530);
       border:1px solid rgba(255,255,255,.2); border-radius:22px; padding:24px 18px;
-      box-shadow: 0 24px 70px rgba(0,0,0,.45), 0 0 0 1px rgba(45,212,230,.22); }
-    .sq-card::before{ content:''; position:absolute; top:0; left:20px; right:20px; height:3px; border-radius:0 0 6px 6px; background:linear-gradient(90deg,#14b8c9,#7c5cf6,#f59e0b); }
+      box-shadow: 0 18px 50px rgba(0,0,0,.28); }
+    .sq-card::before{ content:''; position:absolute; top:0; left:20px; right:20px; height:3px; border-radius:0 0 6px 6px; background:linear-gradient(90deg,#4fa3ad,#8a82c4); }
     .sq-card.sq-intro-mode{ background:transparent; border-color:transparent; box-shadow:none; color:#fff; padding:8px 4px; }
     .sq-card.sq-intro-mode::before{ display:none; }
 
     .sqi{ color:#fff; text-align:center; }
     .sqi-badge{ display:inline-block; padding:6px 16px; border-radius:999px; font-size:12px; font-weight:800; letter-spacing:2.5px; direction:ltr;
-      color:#9fe9f2; background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.22); }
+      color:#b5dde2; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.16); }
     .sqi-emblem{ position:relative; width:112px; height:112px; margin:22px auto 14px; display:grid; place-items:center; font-size:56px; }
-    .sqi-emblem::before, .sqi-emblem::after{ content:''; position:absolute; inset:0; border-radius:50%; border:2px solid rgba(45,212,230,.6); animation: sqPing 2.8s ease-out infinite; }
+    .sqi-emblem::before, .sqi-emblem::after{ content:''; position:absolute; inset:0; border-radius:50%; border:2px solid rgba(127,196,204,.35); animation: sqPing 3.6s ease-out infinite; }
     .sqi-emblem::after{ animation-delay:1.4s; }
-    .sqi-emblem span{ filter: drop-shadow(0 0 20px rgba(45,212,230,.95)); animation: sqBob 3.2s ease-in-out infinite; }
+    .sqi-emblem span{ filter: drop-shadow(0 0 12px rgba(127,196,204,.45)); animation: sqBob 4.5s ease-in-out infinite; }
     @keyframes sqPing{ 0%{ transform:scale(.7); opacity:.95; } 100%{ transform:scale(1.55); opacity:0; } }
     @keyframes sqBob{ 50%{ transform: translateY(-7px) scale(1.06); } }
     .sqi h1{ margin:4px 0 8px; font-size:clamp(26px,6.4vw,38px); font-weight:900; line-height:1.4;
-      background:linear-gradient(90deg,#fff,#9fe9f2 50%,#c4b5fd); -webkit-background-clip:text; background-clip:text; color:transparent; }
-    .sqi-sub{ max-width:430px; margin:0 auto 16px; font-size:15px; line-height:1.9; color:rgba(255,255,255,.8); }
+      background:linear-gradient(90deg,#f4f8f9,#c3e3e7 55%,#d4cff0); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .sqi-sub{ max-width:430px; margin:0 auto 16px; font-size:15px; line-height:1.9; color:rgba(255,255,255,.78); }
     .sqi-chips{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:20px; }
     .sqi-chip{ padding:7px 13px; border-radius:12px; font-size:13px; font-weight:700; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.17); }
     .sqi-steps{ display:grid; gap:10px; text-align:start; margin:0 0 22px; }
     .sqi-step{ display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border-radius:16px; background:rgba(255,255,255,.07);
       border:1px solid rgba(255,255,255,.14); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); opacity:0; transform:translateY(14px); animation: sqUp .6s ease forwards; }
     .sqi-step i{ font-style:normal; font-size:24px; width:44px; height:44px; flex:none; display:grid; place-items:center; border-radius:13px;
-      background:linear-gradient(135deg, rgba(20,184,201,.4), rgba(124,92,246,.4)); }
+      background:rgba(127,196,204,.16); }
     .sqi-step b{ display:block; font-size:15px; margin-bottom:2px; }
     .sqi-step span{ font-size:13px; line-height:1.75; color:rgba(255,255,255,.76); }
     @keyframes sqUp{ to{ opacity:1; transform:none; } }
-    .sqi-cta{ border:0; cursor:pointer; font-family:inherit; font-weight:900; font-size:17px; padding:15px 40px; border-radius:999px; color:#04202a;
-      background:linear-gradient(90deg,#2dd4e6,#a78bfa); box-shadow:0 10px 32px rgba(45,212,230,.42); animation: sqPulse 2.4s ease-in-out infinite; }
+    .sqi-cta{ border:0; cursor:pointer; font-family:inherit; font-weight:900; font-size:17px; padding:15px 40px; border-radius:999px; color:#0d2630;
+      background:linear-gradient(90deg,#8fd0d8,#b9b2e6); box-shadow:0 8px 24px rgba(0,0,0,.25); animation: sqPulse 3.4s ease-in-out infinite; }
     .sqi-cta:active{ transform:scale(.97); }
-    @keyframes sqPulse{ 50%{ transform:scale(1.045); box-shadow:0 14px 40px rgba(167,139,250,.5); } }
+    @keyframes sqPulse{ 50%{ transform:scale(1.025); } }
     .sqi-cd{ margin-top:14px; font-size:13.5px; color:rgba(255,255,255,.75); }
-    .sqi-cd b{ color:#9fe9f2; font-size:15px; }
+    .sqi-cd b{ color:#b5dde2; font-size:15px; }
     @media (prefers-reduced-motion: reduce){
       .sq-stage *, .sq-stage::before{ animation:none !important; }
       .sqi-step{ opacity:1; transform:none; }
@@ -10824,7 +10824,7 @@ function sqPaintIntro(root, c){
   root.innerHTML = `<div class="sqi">
     <span class="sqi-badge">MEDORA · SQUAD CHALLENGE</span>
     <div class="sqi-emblem"><span>⚔️</span></div>
-    <p style="margin:0; font-weight:700; color:#9fe9f2;">${nm ? 'أهلًا ' + escapeHtml(nm) + '،' : 'أهلًا فيك،'} جاهز للتحدي؟</p>
+    <p style="margin:0; font-weight:700; color:#b5dde2;">${nm ? 'أهلًا ' + escapeHtml(nm) + '،' : 'أهلًا فيك،'} جاهز للتحدي؟</p>
     <h1>${escapeHtml(c.title)}</h1>
     <p class="sqi-sub">مسابقة فرق مباشرة وبنفس الوقت لكل المشاركين. اجمع فريقك، فكّروا سوا، وخلّوا فريقكم يوصل للقمة.</p>
     <div class="sqi-chips"><span class="sqi-chip">🗓️ ${examFmtDate(c.startsAt)}</span><span class="sqi-chip">👥 3 طلاب بالفريق</span></div>
