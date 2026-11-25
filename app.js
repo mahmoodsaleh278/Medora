@@ -10724,77 +10724,51 @@ function injectSquadStyles(){
   if(document.getElementById('squadStyles')) return;
   const st = document.createElement('style'); st.id = 'squadStyles';
   st.textContent = `
-    .sq-stage{ position:relative; overflow:hidden; isolation:isolate; min-height:calc(100vh - 64px); padding:28px 0 90px;
-      background: radial-gradient(1100px 560px at 85% -10%, rgba(120,110,190,.18), transparent 62%),
-                  radial-gradient(900px 500px at 0% 105%, rgba(70,150,160,.16), transparent 62%),
-                  linear-gradient(165deg,#12232b 0%,#173340 52%,#1f2a42 100%); }
-    .sq-stage::before{ content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
-      background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
-      background-size:44px 44px; -webkit-mask-image:radial-gradient(ellipse at center,#000 25%,transparent 78%); mask-image:radial-gradient(ellipse at center,#000 25%,transparent 78%);
-      animation: sqGrid 60s linear infinite; }
-    @keyframes sqGrid{ to{ background-position:44px 44px, 44px 44px; } }
-    .sq-orb{ position:absolute; z-index:-1; border-radius:50%; filter:blur(90px); opacity:.16; pointer-events:none; animation: sqOrb 26s ease-in-out infinite alternate; }
-    .sq-orb.a{ width:320px; height:320px; background:#4fa3ad; top:6%; left:-90px; }
-    .sq-orb.b{ width:380px; height:380px; background:#8a82c4; bottom:4%; right:-110px; animation-delay:-6s; }
-    @keyframes sqOrb{ to{ transform: translate(46px,-34px) scale(1.15); } }
-    .sq-float{ position:absolute; z-index:-1; font-size:28px; opacity:.07; pointer-events:none; user-select:none; animation: sqFloat 16s ease-in-out infinite; }
-    @keyframes sqFloat{ 50%{ transform: translateY(-24px) rotate(10deg); } }
-    .sq-ecg{ position:absolute; left:0; right:0; bottom:0; height:84px; z-index:-1; pointer-events:none; opacity:.22; }
-    .sq-ecg path{ fill:none; stroke:#7fc4cc; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:1000; stroke-dashoffset:1000;
-      animation: sqEcg 9s linear infinite; }
-    @keyframes sqEcg{ to{ stroke-dashoffset:-1000; } }
+    .sq-stage{ --sqi-fg:#16323d; --sqi-mute:#4d6a75; --sqi-accent:#2f7f8c; --sqi-glass:rgba(255,255,255,.72); --sqi-line:rgba(22,50,61,.12);
+      position:relative; overflow:hidden; min-height:calc(100vh - 64px); padding:28px 0 80px;
+      background: linear-gradient(170deg,#eef5f7 0%,#e7eff4 55%,#eceaf4 100%); }
+    body.dark .sq-stage{ --sqi-fg:#e8f1f3; --sqi-mute:#a9bfc6; --sqi-accent:#7fc4cc; --sqi-glass:rgba(255,255,255,.06); --sqi-line:rgba(255,255,255,.12);
+      background: linear-gradient(170deg,#14242c 0%,#182f3a 55%,#1f2a3f 100%); }
 
     .sq-card{ position:relative; max-width:560px; margin:0 auto; text-align:center; background:var(--card,#fff); color:var(--ink,#0b2530);
-      border:1px solid rgba(255,255,255,.2); border-radius:22px; padding:24px 18px;
-      box-shadow: 0 18px 50px rgba(0,0,0,.28); }
-    .sq-card::before{ content:''; position:absolute; top:0; left:20px; right:20px; height:3px; border-radius:0 0 6px 6px; background:linear-gradient(90deg,#4fa3ad,#8a82c4); }
-    .sq-card.sq-intro-mode{ background:transparent; border-color:transparent; box-shadow:none; color:#fff; padding:8px 4px; }
+      border:1px solid var(--sqi-line); border-radius:22px; padding:24px 18px; box-shadow:0 10px 34px rgba(22,50,61,.10); }
+    body.dark .sq-card{ box-shadow:0 14px 40px rgba(0,0,0,.3); }
+    .sq-card::before{ content:''; position:absolute; top:0; left:22px; right:22px; height:3px; border-radius:0 0 6px 6px; background:linear-gradient(90deg,#5fa8b3,#a39cd3); }
+    .sq-card.sq-intro-mode{ background:transparent; border-color:transparent; box-shadow:none; color:var(--sqi-fg); padding:8px 4px; }
     .sq-card.sq-intro-mode::before{ display:none; }
 
-    .sqi{ color:#fff; text-align:center; }
+    .sqi{ color:var(--sqi-fg); text-align:center; }
     .sqi-badge{ display:inline-block; padding:6px 16px; border-radius:999px; font-size:12px; font-weight:800; letter-spacing:2.5px; direction:ltr;
-      color:#b5dde2; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.16); }
-    .sqi-emblem{ position:relative; width:112px; height:112px; margin:22px auto 14px; display:grid; place-items:center; font-size:56px; }
-    .sqi-emblem::before, .sqi-emblem::after{ content:''; position:absolute; inset:0; border-radius:50%; border:2px solid rgba(127,196,204,.35); animation: sqPing 3.6s ease-out infinite; }
-    .sqi-emblem::after{ animation-delay:1.4s; }
-    .sqi-emblem span{ filter: drop-shadow(0 0 12px rgba(127,196,204,.45)); animation: sqBob 4.5s ease-in-out infinite; }
-    @keyframes sqPing{ 0%{ transform:scale(.7); opacity:.95; } 100%{ transform:scale(1.55); opacity:0; } }
-    @keyframes sqBob{ 50%{ transform: translateY(-7px) scale(1.06); } }
-    .sqi h1{ margin:4px 0 8px; font-size:clamp(26px,6.4vw,38px); font-weight:900; line-height:1.4;
-      background:linear-gradient(90deg,#f4f8f9,#c3e3e7 55%,#d4cff0); -webkit-background-clip:text; background-clip:text; color:transparent; }
-    .sqi-sub{ max-width:430px; margin:0 auto 16px; font-size:15px; line-height:1.9; color:rgba(255,255,255,.78); }
+      color:var(--sqi-accent); background:var(--sqi-glass); border:1px solid var(--sqi-line); }
+    .sqi-emblem{ width:96px; height:96px; margin:22px auto 12px; display:grid; place-items:center; font-size:48px; border-radius:50%;
+      background:var(--sqi-glass); border:1px solid var(--sqi-line); }
+    .sqi-emblem span{ animation: sqBob 6s ease-in-out infinite; }
+    @keyframes sqBob{ 50%{ transform: translateY(-4px); } }
+    .sqi h1{ margin:6px 0 8px; font-size:clamp(25px,6vw,34px); font-weight:900; line-height:1.4; color:var(--sqi-fg); }
+    .sqi-sub{ max-width:430px; margin:0 auto 16px; font-size:15px; line-height:1.9; color:var(--sqi-mute); }
     .sqi-chips{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:20px; }
-    .sqi-chip{ padding:7px 13px; border-radius:12px; font-size:13px; font-weight:700; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.17); }
+    .sqi-chip{ padding:7px 13px; border-radius:12px; font-size:13px; font-weight:700; background:var(--sqi-glass); border:1px solid var(--sqi-line); }
     .sqi-steps{ display:grid; gap:10px; text-align:start; margin:0 0 22px; }
-    .sqi-step{ display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border-radius:16px; background:rgba(255,255,255,.07);
-      border:1px solid rgba(255,255,255,.14); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); opacity:0; transform:translateY(14px); animation: sqUp .6s ease forwards; }
-    .sqi-step i{ font-style:normal; font-size:24px; width:44px; height:44px; flex:none; display:grid; place-items:center; border-radius:13px;
-      background:rgba(127,196,204,.16); }
+    .sqi-step{ display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border-radius:16px; background:var(--sqi-glass);
+      border:1px solid var(--sqi-line); opacity:0; transform:translateY(10px); animation: sqUp .6s ease forwards; }
+    .sqi-step i{ font-style:normal; font-size:23px; width:44px; height:44px; flex:none; display:grid; place-items:center; border-radius:13px; background:rgba(95,168,179,.16); }
     .sqi-step b{ display:block; font-size:15px; margin-bottom:2px; }
-    .sqi-step span{ font-size:13px; line-height:1.75; color:rgba(255,255,255,.76); }
+    .sqi-step span{ font-size:13px; line-height:1.75; color:var(--sqi-mute); }
     @keyframes sqUp{ to{ opacity:1; transform:none; } }
-    .sqi-cta{ border:0; cursor:pointer; font-family:inherit; font-weight:900; font-size:17px; padding:15px 40px; border-radius:999px; color:#0d2630;
-      background:linear-gradient(90deg,#8fd0d8,#b9b2e6); box-shadow:0 8px 24px rgba(0,0,0,.25); animation: sqPulse 3.4s ease-in-out infinite; }
+    .sqi-cta{ border:0; cursor:pointer; font-family:inherit; font-weight:900; font-size:17px; padding:14px 38px; border-radius:999px; color:#fff;
+      background:#2f7f8c; box-shadow:0 6px 18px rgba(47,127,140,.28); transition:transform .15s, background .15s; }
+    .sqi-cta:hover{ background:#296f7b; }
     .sqi-cta:active{ transform:scale(.97); }
-    @keyframes sqPulse{ 50%{ transform:scale(1.025); } }
-    .sqi-cd{ margin-top:14px; font-size:13.5px; color:rgba(255,255,255,.75); }
-    .sqi-cd b{ color:#b5dde2; font-size:15px; }
-    @media (prefers-reduced-motion: reduce){
-      .sq-stage *, .sq-stage::before{ animation:none !important; }
-      .sqi-step{ opacity:1; transform:none; }
-    }`;
+    body.dark .sqi-cta{ background:#7fc4cc; color:#0d2630; }
+    .sqi-cd{ margin-top:14px; font-size:13.5px; color:var(--sqi-mute); }
+    .sqi-cd b{ color:var(--sqi-accent); font-size:15px; }
+    @media (prefers-reduced-motion: reduce){ .sq-stage *{ animation:none !important; } .sqi-step{ opacity:1; transform:none; } }`;
   document.head.appendChild(st);
 }
 
 function sqWrap(inner, rootId){
   injectSquadStyles();
-  const fl = [['⚔️','8%','6%','0s'],['🛡️','22%','88%','-2s'],['🏆','62%','5%','-4s'],['🩺','74%','90%','-1s'],['🧬','40%','93%','-5s'],['✚','12%','46%','-3s'],['⚔️','86%','52%','-6s']];
-  return `<section class="sq-stage">
-    <span class="sq-orb a"></span><span class="sq-orb b"></span>
-    ${fl.map(f=>`<span class="sq-float" style="top:${f[1]}; left:${f[2]}; animation-delay:${f[3]};">${f[0]}</span>`).join('')}
-    <svg class="sq-ecg" viewBox="0 0 1200 84" preserveAspectRatio="none" aria-hidden="true"><path pathLength="1000" d="M0 42 H110 L128 42 L142 12 L162 74 L178 42 H330 L346 42 L360 20 L378 68 L392 42 H560 L578 42 L592 10 L612 76 L628 42 H790 L806 42 L820 18 L838 70 L852 42 H1010 L1028 42 L1042 12 L1062 74 L1078 42 H1200"/></svg>
-    <div class="wizard-wrap"><div class="sq-card"${rootId ? ` id="${rootId}"` : ''}>${inner}</div></div>
-  </section>`;
+  return `<section class="sq-stage"><div class="wizard-wrap"><div class="sq-card"${rootId ? ` id="${rootId}"` : ''}>${inner}</div></div></section>`;
 }
 
 function pageSquad(id){
@@ -10824,7 +10798,7 @@ function sqPaintIntro(root, c){
   root.innerHTML = `<div class="sqi">
     <span class="sqi-badge">MEDORA · SQUAD CHALLENGE</span>
     <div class="sqi-emblem"><span>⚔️</span></div>
-    <p style="margin:0; font-weight:700; color:#b5dde2;">${nm ? 'أهلًا ' + escapeHtml(nm) + '،' : 'أهلًا فيك،'} جاهز للتحدي؟</p>
+    <p style="margin:0; font-weight:700; color:var(--sqi-accent);">${nm ? 'أهلًا ' + escapeHtml(nm) + '،' : 'أهلًا فيك،'} جاهز للتحدي؟</p>
     <h1>${escapeHtml(c.title)}</h1>
     <p class="sqi-sub">مسابقة فرق مباشرة وبنفس الوقت لكل المشاركين. اجمع فريقك، فكّروا سوا، وخلّوا فريقكم يوصل للقمة.</p>
     <div class="sqi-chips"><span class="sqi-chip">🗓️ ${examFmtDate(c.startsAt)}</span><span class="sqi-chip">👥 3 طلاب بالفريق</span></div>
