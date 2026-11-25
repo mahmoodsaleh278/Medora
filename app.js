@@ -10719,13 +10719,128 @@ function bindSquadAdminEvents(){
 /* ------------------------------ الطالب ------------------------------ */
 let sqG = { cid:null, st:null, err:false, busy:false, lastFetch:0, key:'', myChoice:null, uid:null };
 
+/* ---- خلفية + شكل صفحة Squad Challenge ---- */
+function injectSquadStyles(){
+  if(document.getElementById('squadStyles')) return;
+  const st = document.createElement('style'); st.id = 'squadStyles';
+  st.textContent = `
+    .sq-stage{ position:relative; overflow:hidden; isolation:isolate; min-height:calc(100vh - 64px); padding:28px 0 90px;
+      background: radial-gradient(1100px 560px at 85% -10%, rgba(124,92,246,.55), transparent 60%),
+                  radial-gradient(900px 500px at 0% 105%, rgba(20,184,201,.45), transparent 60%),
+                  linear-gradient(160deg,#06131f 0%,#0a2c3d 48%,#1b1050 100%); }
+    .sq-stage::before{ content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
+      background-image: linear-gradient(rgba(255,255,255,.055) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.055) 1px, transparent 1px);
+      background-size:44px 44px; -webkit-mask-image:radial-gradient(ellipse at center,#000 25%,transparent 78%); mask-image:radial-gradient(ellipse at center,#000 25%,transparent 78%);
+      animation: sqGrid 26s linear infinite; }
+    @keyframes sqGrid{ to{ background-position:44px 44px, 44px 44px; } }
+    .sq-orb{ position:absolute; z-index:-1; border-radius:50%; filter:blur(64px); opacity:.5; pointer-events:none; animation: sqOrb 14s ease-in-out infinite alternate; }
+    .sq-orb.a{ width:320px; height:320px; background:#14b8c9; top:6%; left:-90px; }
+    .sq-orb.b{ width:380px; height:380px; background:#7c5cf6; bottom:4%; right:-110px; animation-delay:-6s; }
+    @keyframes sqOrb{ to{ transform: translate(46px,-34px) scale(1.15); } }
+    .sq-float{ position:absolute; z-index:-1; font-size:30px; opacity:.17; pointer-events:none; user-select:none; animation: sqFloat 9s ease-in-out infinite; }
+    @keyframes sqFloat{ 50%{ transform: translateY(-24px) rotate(10deg); } }
+    .sq-ecg{ position:absolute; left:0; right:0; bottom:0; height:84px; z-index:-1; pointer-events:none; opacity:.55; }
+    .sq-ecg path{ fill:none; stroke:#2dd4e6; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:1000; stroke-dashoffset:1000;
+      filter: drop-shadow(0 0 6px rgba(45,212,230,.9)); animation: sqEcg 5s linear infinite; }
+    @keyframes sqEcg{ to{ stroke-dashoffset:-1000; } }
+
+    .sq-card{ position:relative; max-width:560px; margin:0 auto; text-align:center; background:var(--card,#fff); color:var(--ink,#0b2530);
+      border:1px solid rgba(255,255,255,.2); border-radius:22px; padding:24px 18px;
+      box-shadow: 0 24px 70px rgba(0,0,0,.45), 0 0 0 1px rgba(45,212,230,.22); }
+    .sq-card::before{ content:''; position:absolute; top:0; left:20px; right:20px; height:3px; border-radius:0 0 6px 6px; background:linear-gradient(90deg,#14b8c9,#7c5cf6,#f59e0b); }
+    .sq-card.sq-intro-mode{ background:transparent; border-color:transparent; box-shadow:none; color:#fff; padding:8px 4px; }
+    .sq-card.sq-intro-mode::before{ display:none; }
+
+    .sqi{ color:#fff; text-align:center; }
+    .sqi-badge{ display:inline-block; padding:6px 16px; border-radius:999px; font-size:12px; font-weight:800; letter-spacing:2.5px; direction:ltr;
+      color:#9fe9f2; background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.22); }
+    .sqi-emblem{ position:relative; width:112px; height:112px; margin:22px auto 14px; display:grid; place-items:center; font-size:56px; }
+    .sqi-emblem::before, .sqi-emblem::after{ content:''; position:absolute; inset:0; border-radius:50%; border:2px solid rgba(45,212,230,.6); animation: sqPing 2.8s ease-out infinite; }
+    .sqi-emblem::after{ animation-delay:1.4s; }
+    .sqi-emblem span{ filter: drop-shadow(0 0 20px rgba(45,212,230,.95)); animation: sqBob 3.2s ease-in-out infinite; }
+    @keyframes sqPing{ 0%{ transform:scale(.7); opacity:.95; } 100%{ transform:scale(1.55); opacity:0; } }
+    @keyframes sqBob{ 50%{ transform: translateY(-7px) scale(1.06); } }
+    .sqi h1{ margin:4px 0 8px; font-size:clamp(26px,6.4vw,38px); font-weight:900; line-height:1.4;
+      background:linear-gradient(90deg,#fff,#9fe9f2 50%,#c4b5fd); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .sqi-sub{ max-width:430px; margin:0 auto 16px; font-size:15px; line-height:1.9; color:rgba(255,255,255,.8); }
+    .sqi-chips{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:20px; }
+    .sqi-chip{ padding:7px 13px; border-radius:12px; font-size:13px; font-weight:700; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.17); }
+    .sqi-steps{ display:grid; gap:10px; text-align:start; margin:0 0 22px; }
+    .sqi-step{ display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border-radius:16px; background:rgba(255,255,255,.07);
+      border:1px solid rgba(255,255,255,.14); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); opacity:0; transform:translateY(14px); animation: sqUp .6s ease forwards; }
+    .sqi-step i{ font-style:normal; font-size:24px; width:44px; height:44px; flex:none; display:grid; place-items:center; border-radius:13px;
+      background:linear-gradient(135deg, rgba(20,184,201,.4), rgba(124,92,246,.4)); }
+    .sqi-step b{ display:block; font-size:15px; margin-bottom:2px; }
+    .sqi-step span{ font-size:13px; line-height:1.75; color:rgba(255,255,255,.76); }
+    @keyframes sqUp{ to{ opacity:1; transform:none; } }
+    .sqi-cta{ border:0; cursor:pointer; font-family:inherit; font-weight:900; font-size:17px; padding:15px 40px; border-radius:999px; color:#04202a;
+      background:linear-gradient(90deg,#2dd4e6,#a78bfa); box-shadow:0 10px 32px rgba(45,212,230,.42); animation: sqPulse 2.4s ease-in-out infinite; }
+    .sqi-cta:active{ transform:scale(.97); }
+    @keyframes sqPulse{ 50%{ transform:scale(1.045); box-shadow:0 14px 40px rgba(167,139,250,.5); } }
+    .sqi-cd{ margin-top:14px; font-size:13.5px; color:rgba(255,255,255,.75); }
+    .sqi-cd b{ color:#9fe9f2; font-size:15px; }
+    @media (prefers-reduced-motion: reduce){
+      .sq-stage *, .sq-stage::before{ animation:none !important; }
+      .sqi-step{ opacity:1; transform:none; }
+    }`;
+  document.head.appendChild(st);
+}
+
+function sqWrap(inner, rootId){
+  injectSquadStyles();
+  const fl = [['⚔️','8%','6%','0s'],['🛡️','22%','88%','-2s'],['🏆','62%','5%','-4s'],['🩺','74%','90%','-1s'],['🧬','40%','93%','-5s'],['✚','12%','46%','-3s'],['⚔️','86%','52%','-6s']];
+  return `<section class="sq-stage">
+    <span class="sq-orb a"></span><span class="sq-orb b"></span>
+    ${fl.map(f=>`<span class="sq-float" style="top:${f[1]}; left:${f[2]}; animation-delay:${f[3]};">${f[0]}</span>`).join('')}
+    <svg class="sq-ecg" viewBox="0 0 1200 84" preserveAspectRatio="none" aria-hidden="true"><path pathLength="1000" d="M0 42 H110 L128 42 L142 12 L162 74 L178 42 H330 L346 42 L360 20 L378 68 L392 42 H560 L578 42 L592 10 L612 76 L628 42 H790 L806 42 L820 18 L838 70 L852 42 H1010 L1028 42 L1042 12 L1062 74 L1078 42 H1200"/></svg>
+    <div class="wizard-wrap"><div class="sq-card"${rootId ? ` id="${rootId}"` : ''}>${inner}</div></div>
+  </section>`;
+}
+
 function pageSquad(id){
-  if(!state.session) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>سجّل دخولك أولًا</h3><p>لازم تسجّل دخول عشان تشارك بالمسابقة. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a></p></div></div></section>`;
-  if(!squadReady(id)) return `<section class="section"><div class="container" style="text-align:center;"><span class="loading-dot"></span> جارِ التحميل...</div></section>`;
+  const msg = (t, p) => sqWrap(`<h3 style="margin:0 0 8px;">${t}</h3><p style="margin:0;">${p}</p>`);
+  if(!state.session) return msg('سجّل دخولك أولًا', 'لازم تسجّل دخول عشان تشارك بالمسابقة. <a href="/login" style="color:var(--teal); font-weight:800;">تسجيل الدخول</a>');
+  if(!squadReady(id)) return sqWrap(`<span class="loading-dot"></span> جارِ التحميل...`);
   const c = squadData.items.find(x=>x.id===id);
-  if(!c && squadData.err) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>تعذّر تحميل المسابقة</h3><p>صار خطأ بقاعدة البيانات. تأكد إن squad4.sql انشغّل، وجرّب مرة ثانية.</p></div></div></section>`;
-  if(!c) return `<section class="section"><div class="wizard-wrap"><div class="empty-state"><h3>المسابقة غير موجودة</h3><p>تأكد من الرابط أو اسأل المشرف.</p></div></div></section>`;
-  return `<section class="section"><div class="wizard-wrap" style="text-align:center;"><div class="card-panel" style="padding:24px 18px;" id="sqRoot"></div></div></section>`;
+  if(!c && squadData.err) return msg('تعذّر تحميل المسابقة', 'صار خطأ بقاعدة البيانات. تأكد إن squad4.sql انشغّل، وجرّب مرة ثانية.');
+  if(!c) return msg('المسابقة غير موجودة', 'تأكد من الرابط أو اسأل المشرف.');
+  return sqWrap('', 'sqRoot');
+}
+
+/* ---- انترو المسابقة: بيظهر مرة وحدة لكل جلسة، وبس قبل بداية اللعب ---- */
+const sqIntroMem = {};
+const sqIntroSeen = cid => { if(sqIntroMem[cid]) return true; try{ return sessionStorage.getItem('sq_intro_' + cid) === '1'; }catch(e){ return false; } };
+function sqIntroDone(cid){ sqIntroMem[cid] = true; try{ sessionStorage.setItem('sq_intro_' + cid, '1'); }catch(e){} }
+
+function sqPaintIntro(root, c){
+  root.classList.add('sq-intro-mode');
+  const nm = state.session && state.session.name ? String(state.session.name).split(' ')[0] : '';
+  const steps = [
+    ['🛡️', 'كوّن فريقك', 'فريق من 3 طلاب، ومنشئ الفريق بصير المسؤول 👑 وبشارك الكود مع زميليه.'],
+    ['🗳️', 'صوّتوا سوا', 'كل واحد بصوّت على الإجابة، والأغلبية بتحسم. وعند التعادل بنحسب صوت المسؤول.'],
+    ['⏱️', 'سباق مع الوقت', `كل سؤال إله ${c.qSec} ثانية، وبعدها بتنكشف الإجابة الصحيحة مع الشرح.`],
+    ['🏆', 'ترتيب مباشر', 'كل إجابة صح بتجيب نقاط لفريقكم، والترتيب بيتحدّث بعد كل سؤال.']
+  ];
+  root.innerHTML = `<div class="sqi">
+    <span class="sqi-badge">MEDORA · SQUAD CHALLENGE</span>
+    <div class="sqi-emblem"><span>⚔️</span></div>
+    <p style="margin:0; font-weight:700; color:#9fe9f2;">${nm ? 'أهلًا ' + escapeHtml(nm) + '،' : 'أهلًا فيك،'} جاهز للتحدي؟</p>
+    <h1>${escapeHtml(c.title)}</h1>
+    <p class="sqi-sub">مسابقة فرق مباشرة وبنفس الوقت لكل المشاركين. اجمع فريقك، فكّروا سوا، وخلّوا فريقكم يوصل للقمة.</p>
+    <div class="sqi-chips"><span class="sqi-chip">🗓️ ${examFmtDate(c.startsAt)}</span><span class="sqi-chip">👥 3 طلاب بالفريق</span></div>
+    <div class="sqi-steps">${steps.map((t,i)=>`<div class="sqi-step" style="animation-delay:${0.15 + i * 0.12}s;"><i>${t[0]}</i><div><b>${t[1]}</b><span>${t[2]}</span></div></div>`).join('')}</div>
+    <button class="sqi-cta" id="sqEnter">ادخل الساحة ⚔️</button>
+    <div class="sqi-cd">⏳ بتبدأ المسابقة بعد <b id="sqIntroCd" dir="ltr">--</b></div>
+  </div>`;
+  document.getElementById('sqEnter').addEventListener('click', () => {
+    sqIntroDone(c.id);
+    const r = document.getElementById('sqRoot'); if(!r) return;
+    r.classList.remove('sq-intro-mode');
+    if(sqG.st && (sqG.st.phase === 'question' || sqG.st.phase === 'reveal' || sqG.st.phase === 'finished')){ sqG.key = ''; sqPaint(c); }
+    else sqPaintWaiting(r, c);
+    window.scrollTo({ top:0, behavior:'smooth' });
+  });
+  sqPaintTimer(c);
 }
 
 function bindSquadEvents(id){
@@ -10780,7 +10895,8 @@ function sqPaint(c){
   if(sqG.err && !st){ root.innerHTML = `<p style="color:var(--red,#d33); font-weight:700;">تعذّر تحميل حالة المسابقة. تأكد إن squad3.sql انشغّل.</p>`; sqG.key = 'err'; return; }
   const key = (ph === 'question' || ph === 'reveal') ? ph + '|' + st.pos : ph;
   const first = key !== sqG.key; sqG.key = key;
-  if(ph === 'waiting' || ph === 'nogame'){ if(first) sqPaintWaiting(root, c); }
+  if(first) root.classList.remove('sq-intro-mode');
+  if(ph === 'waiting' || ph === 'nogame'){ if(first){ if(sqIntroSeen(c.id)) sqPaintWaiting(root, c); else sqPaintIntro(root, c); } }
   else if(ph === 'question'){ if(first) sqPaintQuestion(root, c); sqUpdateQuestion(); }
   else if(ph === 'reveal') sqPaintReveal(root, c);
   else if(ph === 'finished') sqPaintFinished(root, c);
@@ -10801,6 +10917,12 @@ function sqPaintWaiting(root, c){
 
 function sqPaintTimer(c){
   const st = sqG.st, sNow = squadNow();
+  const ic = document.getElementById('sqIntroCd');
+  if(ic){
+    const left = Math.max(0, (st && st.starts_at ? st.starts_at : c.startsAt) - sNow), s = Math.floor(left / 1000), p2 = n => String(n).padStart(2, '0');
+    const d = Math.floor(s / 86400), hms = p2(Math.floor(s % 86400 / 3600)) + ':' + p2(Math.floor(s % 3600 / 60)) + ':' + p2(s % 60);
+    ic.textContent = left ? (d ? d + ' يوم ' : '') + hms : 'لحظات... 🔥';
+  }
   if(document.getElementById('sqc-s')){
     const target = st && st.starts_at ? st.starts_at : c.startsAt, left = Math.max(0, target - sNow), s = Math.floor(left / 1000);
     const v = { d:Math.floor(s/86400), h:Math.floor(s%86400/3600), m:Math.floor(s%3600/60), s:s%60 };
