@@ -10762,6 +10762,32 @@ function injectSquadStyles(){
     body.dark .sqi-cta{ background:#7fc4cc; color:#0d2630; }
     .sqi-cd{ margin-top:14px; font-size:13.5px; color:var(--sqi-mute); }
     .sqi-cd b{ color:var(--sqi-accent); font-size:15px; }
+    .sqi-hold *{ animation-play-state:paused !important; }
+    #sqx{ position:fixed; inset:0; z-index:99999; display:grid; place-items:center; cursor:pointer; overflow:hidden; direction:ltr;
+      background: radial-gradient(900px 520px at 50% 45%, #1a3a47 0%, #0f222b 60%, #0a161d 100%); transition:opacity .7s ease, visibility .7s; }
+    #sqx.sqx-out{ opacity:0; visibility:hidden; }
+    .sqx-box{ position:relative; display:flex; flex-direction:column; align-items:center; }
+    .sqx-arena{ position:relative; width:260px; height:250px; animation: sqxShake .45s ease-in-out .62s both; }
+    @keyframes sqxShake{ 0%,100%{ transform:none; } 20%{ transform:translate(-5px,3px); } 40%{ transform:translate(5px,-3px); } 60%{ transform:translate(-3px,2px); } 80%{ transform:translate(2px,-1px); } }
+    .sqx-sword{ position:absolute; left:calc(50% - 26px); top:20px; width:52px; height:210px; opacity:0; filter:drop-shadow(0 6px 10px rgba(0,0,0,.45)); }
+    .sqx-sword.l{ animation: sqxL 1.1s cubic-bezier(.5,0,.4,1) .1s forwards; }
+    .sqx-sword.r{ animation: sqxR 1.1s cubic-bezier(.5,0,.4,1) .1s forwards; }
+    @keyframes sqxL{ 0%{ transform:translateX(-230px) rotate(-25deg); opacity:0; } 12%{ opacity:1; } 50%{ transform:translateX(0) rotate(40deg); opacity:1; }
+      60%{ transform:translateX(-6px) rotate(33deg); } 72%,100%{ transform:translateX(0) rotate(38deg); opacity:1; } }
+    @keyframes sqxR{ 0%{ transform:translateX(230px) rotate(25deg); opacity:0; } 12%{ opacity:1; } 50%{ transform:translateX(0) rotate(-40deg); opacity:1; }
+      60%{ transform:translateX(6px) rotate(-33deg); } 72%,100%{ transform:translateX(0) rotate(-38deg); opacity:1; } }
+    .sqx-flash{ position:absolute; left:calc(50% - 90px); top:calc(50% - 100px); width:180px; height:180px; border-radius:50%; opacity:0;
+      background: radial-gradient(circle, #fff 0%, rgba(255,236,190,.85) 25%, rgba(255,220,150,0) 68%); animation: sqxFlash .7s ease-out .6s forwards; }
+    @keyframes sqxFlash{ 0%{ transform:scale(.2); opacity:1; } 100%{ transform:scale(1.7); opacity:0; } }
+    .sqx-spark{ position:absolute; left:50%; top:calc(50% - 10px); width:3px; height:16px; margin-left:-1.5px; border-radius:3px; opacity:0;
+      background:linear-gradient(#fff,#ffd98a); transform-origin:50% 0; animation: sqxSpark .65s ease-out .62s forwards; }
+    @keyframes sqxSpark{ 0%{ opacity:1; transform:rotate(var(--a)) translateY(8px); } 100%{ opacity:0; transform:rotate(var(--a)) translateY(86px); } }
+    .sqx-title{ margin-top:6px; font-weight:900; font-size:clamp(26px,8vw,46px); letter-spacing:.7em; color:#eaf4f6; text-align:center; white-space:nowrap;
+      opacity:0; text-shadow:0 0 24px rgba(143,208,216,.45); animation: sqxTitle 1s ease-out 1.15s forwards; }
+    @keyframes sqxTitle{ 0%{ opacity:0; letter-spacing:.9em; transform:translateY(8px); } 100%{ opacity:1; letter-spacing:.22em; transform:none; } }
+    .sqx-sub{ margin-top:10px; font-size:clamp(14px,4vw,17px); font-weight:700; color:#9ec9d0; opacity:0; animation: sqxFade .8s ease-out 1.8s forwards; direction:rtl; }
+    .sqx-skip{ position:absolute; bottom:26px; left:0; right:0; text-align:center; font-size:12.5px; color:rgba(255,255,255,.4); opacity:0; animation: sqxFade .8s ease-out 2s forwards; direction:rtl; }
+    @keyframes sqxFade{ to{ opacity:1; } }
     @media (prefers-reduced-motion: reduce){ .sq-stage *{ animation:none !important; } .sqi-step{ opacity:1; transform:none; } }`;
   document.head.appendChild(st);
 }
@@ -10785,6 +10811,43 @@ function pageSquad(id){
 const sqIntroMem = {};
 const sqIntroSeen = cid => { if(sqIntroMem[cid]) return true; try{ return sessionStorage.getItem('sq_intro_' + cid) === '1'; }catch(e){ return false; } };
 function sqIntroDone(cid){ sqIntroMem[cid] = true; try{ sessionStorage.setItem('sq_intro_' + cid, '1'); }catch(e){} }
+
+
+/* ---- مقدمة سينمائية: سيفين بيتضاربوا وبتطلع كلمة Squad Challenge ---- */
+let sqFxT = null;
+let sqFxVisit = null;   /* id المسابقة اللي انعرضت لها المقدمة بهاي الزيارة؛ بتتصفّر لما الطالب يطلع من الصفحة */
+const sqFxSeen = cid => { if(sqIntroMem['fx_' + cid]) return true; try{ return sessionStorage.getItem('sq_fx_' + cid) === '1'; }catch(e){ return false; } };
+function sqSwordSvg(cls){
+  return `<svg class="sqx-sword ${cls}" viewBox="0 0 52 210" aria-hidden="true">
+    <defs><linearGradient id="sqxBlade${cls}" x1="0" x2="1"><stop offset="0" stop-color="#8fa3ad"/><stop offset=".5" stop-color="#f1f6f8"/><stop offset="1" stop-color="#8fa3ad"/></linearGradient></defs>
+    <path d="M26 2 L35 30 L35 128 L17 128 L17 30 Z" fill="url(#sqxBlade${cls})"/>
+    <path d="M26 8 L26 126" stroke="rgba(60,80,90,.35)" stroke-width="2"/>
+    <rect x="6" y="127" width="40" height="9" rx="4.5" fill="#d6b36a"/>
+    <rect x="22" y="136" width="8" height="46" rx="3" fill="#6b4a2f"/>
+    <path d="M22 146 H30 M22 156 H30 M22 166 H30" stroke="rgba(0,0,0,.25)" stroke-width="1.5"/>
+    <circle cx="26" cy="190" r="8" fill="#d6b36a"/></svg>`;
+}
+function sqFinishOpening(cid){
+  const o = document.getElementById('sqx'); if(!o || o.dataset.end) return;
+  o.dataset.end = '1'; clearTimeout(sqFxT);
+  sqIntroMem['fx_' + cid] = true; try{ sessionStorage.setItem('sq_fx_' + cid, '1'); }catch(e){}
+  o.classList.add('sqx-out');
+  document.querySelectorAll('.sqi-hold').forEach(e => e.classList.remove('sqi-hold'));
+  setTimeout(() => { if(o.parentNode) o.parentNode.removeChild(o); }, 800);
+}
+function sqPlayOpening(cid){
+  if(document.getElementById('sqx')) return;
+  const sparks = [-80,-55,-30,-8,12,35,60,85,115,150,-115,-150].map(a => `<i class="sqx-spark" style="--a:${a}deg;"></i>`).join('');
+  const o = document.createElement('div'); o.id = 'sqx';
+  o.innerHTML = `<div class="sqx-box">
+      <div class="sqx-arena">${sqSwordSvg('l')}${sqSwordSvg('r')}<span class="sqx-flash"></span>${sparks}</div>
+      <div class="sqx-title">SQUAD CHALLENGE</div>
+      <div class="sqx-sub">تحدّي الفرق</div>
+    </div><div class="sqx-skip">اضغط بأي مكان للمتابعة</div>`;
+  o.addEventListener('click', () => sqFinishOpening(cid));
+  document.body.appendChild(o);
+  sqFxT = setTimeout(() => sqFinishOpening(cid), 3600);
+}
 
 function sqPaintIntro(root, c){
   root.classList.add('sq-intro-mode');
@@ -10815,6 +10878,7 @@ function sqPaintIntro(root, c){
     window.scrollTo({ top:0, behavior:'smooth' });
   });
   sqPaintTimer(c);
+  if(document.getElementById('sqx')){ const q = root.querySelector('.sqi'); if(q) q.classList.add('sqi-hold'); }
 }
 
 function bindSquadEvents(id){
@@ -10848,7 +10912,7 @@ async function sqFetch(cid){
 }
 
 function sqTick(id){
-  if(!currentRoute().startsWith('squad/')){ clearInterval(squadTimer); squadTimer = null; return; }
+  if(!currentRoute().startsWith('squad/')){ clearInterval(squadTimer); squadTimer = null; const fx = document.getElementById('sqx'); if(fx) fx.remove(); return; }
   const c = squadData.items.find(x=>x.id===id); if(!c) return;
   const st = sqG.st, sNow = squadNow(), since = Date.now() - sqG.lastFetch, ph = st ? st.phase : 'nogame';
   const endAt = ph === 'waiting' ? st.starts_at : (ph === 'question' || ph === 'reveal') ? st.phase_end : null;
@@ -10870,6 +10934,11 @@ function sqPaint(c){
   const key = (ph === 'question' || ph === 'reveal') ? ph + '|' + st.pos : ph;
   const first = key !== sqG.key; sqG.key = key;
   if(first) root.classList.remove('sq-intro-mode');
+  if((ph === 'waiting' || ph === 'nogame') && sqFxVisit !== c.id){
+    sqFxVisit = c.id;
+    const reducedFx = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!reducedFx) sqPlayOpening(c.id);
+  }
   if(ph === 'waiting' || ph === 'nogame'){ if(first){ if(sqIntroSeen(c.id)) sqPaintWaiting(root, c); else sqPaintIntro(root, c); } }
   else if(ph === 'question'){ if(first) sqPaintQuestion(root, c); sqUpdateQuestion(); }
   else if(ph === 'reveal') sqPaintReveal(root, c);
@@ -12527,6 +12596,7 @@ function bindHubEvents(id){
 }
 
 function bindPageEvents(route){
+  if(!route.startsWith('squad/')) sqFxVisit = null;   /* الطالب طلع من صفحة المسابقة: المرة الجاية تنعرض المقدمة من جديد */
   /* الاختبارات: لو الطالب غادر صفحة الاختبار أثناء الحل نحفظ تقدّمه ونوقف المؤقتات (المحاولة تبقى محفوظة بالسيرفر وتُستأنف من الرابط) */
   if(examRun && !route.startsWith('exam/')){
     if(examRun.step === 'running' && examRun.dirty) examSaveProgress(examRun);
