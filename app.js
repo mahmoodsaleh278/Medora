@@ -10729,6 +10729,8 @@ function pageSquad(id){
 }
 
 function bindSquadEvents(id){
+  /* لو الطالب مش مسجّل دخول: نحفظ مسار المسابقة، وبعد تسجيل الدخول/إنشاء الحساب بيرجع لها مباشرة */
+  if(!state.session && id){ setAfterLoginRoute('squad/' + id); return; }
   squadLoad();
   if(squadTimer){ clearInterval(squadTimer); squadTimer = null; }
   const c = squadData.items.find(x=>x.id===id);
@@ -12446,7 +12448,7 @@ function bindPageEvents(route){
       a.textContent = '→ رجوع إلى المجلد'; app.insertBefore(a, app.firstChild);
     }
   } else if(!route.startsWith('folder/')){ try{ sessionStorage.removeItem(HUB_BACK_KEY); }catch(e){} }
-  if(route !== 'login' && !route.startsWith('exam/') && !route.startsWith('hy/') && !route.startsWith('folder/')){ try{ sessionStorage.removeItem(EXAM_RETURN_KEY); }catch(e){} }
+  if(route !== 'login' && !route.startsWith('exam/') && !route.startsWith('hy/') && !route.startsWith('folder/') && !route.startsWith('squad/')){ try{ sessionStorage.removeItem(EXAM_RETURN_KEY); }catch(e){} }
   if(route.startsWith('hy/')) bindHyEvents(hyIdFromRoute(route));
   if(route === 'admin-highyield') bindHyAdminEvents();
   if(route.startsWith('folder/')) bindHubEvents(hubIdFromRoute(route));
