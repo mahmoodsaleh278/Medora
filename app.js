@@ -10719,6 +10719,81 @@ function bindSquadAdminEvents(){
 /* ------------------------------ الطالب ------------------------------ */
 let sqG = { cid:null, st:null, err:false, busy:false, lastFetch:0, key:'', myChoice:null, uid:null };
 
+/* =========================================================================
+   رسائل جاهزة بين أعضاء الفريق (squad5.sql)
+   - الطالب بيضغط على رسالة جاهزة (مش كتابة حرة) → بتوصل لزملاءه بنفس الفريق فقط.
+   - السيرفر بيتحقق إنه عضو بالفريق وبيحدّ السرعة؛ الرسالة بتتخزّن كرقم (key) والنص من SQ_MSGS هون.
+   - slot: -1 قبل البداية، سؤال n = n*2، شرح سؤال n = n*2+1 (عشان كل مرحلة إلها شات خاص فيها).
+   ========================================================================= */
+const SQ_MSGS = {
+  1:['👍','موافق معكم'], 2:['🤔','مش متأكد'], 3:['⏰','استعجلوا، الوقت بخلص!'], 4:['💪','أنا واثق من إجابتي'], 5:['🙏','بدي مساعدتكم'],
+  6:['🔄','فكّروا مرة ثانية قبل ما نثبّت'], 7:['👑','يا كابتن، قرّر!'], 8:['😅','سؤال صعب'], 9:['😎','سؤال سهل'], 10:['✅','خلّونا نصوّت على نفس الإجابة'],
+  11:['🔥','يلا نكسبها!'], 12:['👋','أنا جاهز'], 13:['⏳','وينكم يا شباب؟'], 14:['🔗','ناقصنا واحد، ادعوا زميل'],
+  15:['🎉','برافو يا فريق!'], 16:['😭','كنا قريبين'], 17:['💡','الشرح مفيد'], 18:['👏','كملوا هيك'], 19:['🧠','راجعوا الشرح قبل السؤال الجاي']
+};
+const SQ_MSG_SETS = { wait:[12,13,14,11], question:[4,2,1,10,6,5,3,7,8,9], reveal:[15,18,16,19,17,11] };
+let sqChat = { cid:null, slot:null, msgs:[], shown:0, busy:false, sending:false, lastFetch:0, coolUntil:0 };
+
+function sqChatCtx(){
+  const st = sqG.st, ph = st ? st.phase : 'nogame';
+  if(ph === 'question') return st.team ? { set:'question', slot:st.pos * 2 } : null;
+  if(ph === 'reveal') return st.team ? { set:'reveal', slot:st.pos * 2 + 1 } : null;
+  if(ph === 'waiting' || ph === 'nogame') return squadTeam.team ? { set:'wait', slot:-1 } : null;
+  return null;
+}
+function sqChatSync(cid, ctx){
+  if(sqChat.cid !== cid || sqChat.slot !== ctx.slot) sqChat = { cid, slot:ctx.slot, msgs:[], shown:0, busy:false, sending:false, lastFetch:0, coolUntil:0 };
+}
+async function sqChatFetch(cid){
+  const ctx = sqChatCtx(); if(!ctx || !supabaseClient) return;
+  sqChatSync(cid, ctx);
+  if(sqChat.busy || sqChat.sending) return;
+  sqChat.busy = true; sqChat.lastFetch = Date.now();
+  const slot = ctx.slot; let res;
+  try{ res = await supabaseClient.rpc('squad_team_msgs', { p_challenge:cid, p_slot:slot }); }catch(e){ res = { error:e }; }
+  if(sqChat.cid !== cid || sqChat.slot !== slot) return;
+  sqChat.busy = false;
+  const { data, error } = res;
+  if(error || !data || data.error || !Array.isArray(data.msgs) || sqChat.sending) return;
+  sqChat.msgs = data.msgs; sqChatPaint();
+}
+function sqChatTick(cid){
+  const ctx = sqChatCtx(); if(!ctx) return;
+  sqChatSync(cid, ctx);
+  const every = ctx.set === 'question' ? 3000 : ctx.set === 'reveal' ? 4000 : 6000;
+  if(Date.now() - sqChat.lastFetch > every){ sqChat.lastFetch = Date.now(); setTimeout(()=> sqChatFetch(cid), Math.random() * 800); }
+}
+function sqChatPaint(){
+  const box = document.getElementById('sqChat'); if(!box) return;
+  const ctx = sqChatCtx(); if(!ctx){ box.innerHTML = ''; return; }
+  const cid = sqG.cid; sqChatSync(cid, ctx);
+  const me = squadTeam.uid || sqG.uid, cool = Date.now() < sqChat.coolUntil;
+  const feed = sqChat.msgs.filter(m => SQ_MSGS[m.key]).slice(-4);
+  box.innerHTML = `<div class="sqc">
+    ${feed.length ? `<div class="sqc-feed">${feed.map(m=>{
+      const d = SQ_MSGS[m.key], mine = m.user_id === me, fresh = !mine && typeof m.id === 'number' && m.id > sqChat.shown;
+      return `<div class="sqc-b${mine ? ' me' : ''}${fresh ? ' new' : ''}"><span class="sqc-n">${mine ? 'أنا' : escapeHtml(m.name || '')}</span><span>${d[0]} ${escapeHtml(d[1])}</span></div>`; }).join('')}</div>` : ''}
+    <div class="sqc-h">💬 رسالة سريعة لفريقك</div>
+    <div class="sqc-chips">${SQ_MSG_SETS[ctx.set].map(k=>`<button type="button" class="sqc-chip" data-sq-msg="${k}" ${cool ? 'disabled' : ''}>${SQ_MSGS[k][0]} ${escapeHtml(SQ_MSGS[k][1])}</button>`).join('')}</div></div>`;
+  sqChat.shown = sqChat.msgs.reduce((a, m) => typeof m.id === 'number' && m.id > a ? m.id : a, sqChat.shown);
+  box.querySelectorAll('[data-sq-msg]').forEach(b => b.addEventListener('click', () => sqChatSend(cid, +b.dataset.sqMsg)));
+}
+async function sqChatSend(cid, key){
+  const ctx = sqChatCtx(); if(!ctx || !SQ_MSGS[key] || !supabaseClient) return;
+  sqChatSync(cid, ctx);
+  if(Date.now() < sqChat.coolUntil) return;
+  sqChat.coolUntil = Date.now() + 1500; setTimeout(()=> sqChatPaint(), 1550);
+  const me = squadTeam.uid || sqG.uid, mem = squadTeam.members.find(m => m.user_id === me), slot = ctx.slot;
+  sqChat.sending = true;
+  sqChat.msgs = sqChat.msgs.concat([{ id:'t' + Date.now(), user_id:me, name:(mem && mem.name) || '', key, tmp:true }]); sqChatPaint();
+  let res; try{ res = await supabaseClient.rpc('squad_send_msg', { p_challenge:cid, p_slot:slot, p_key:key }); }catch(e){ res = { error:e }; }
+  if(sqChat.cid !== cid || sqChat.slot !== slot) return;
+  sqChat.sending = false;
+  const { data, error } = res;
+  if(error || (data && data.error && data.error !== 'slow')){ sqChat.msgs = sqChat.msgs.filter(m => !m.tmp); sqChatPaint(); return; }
+  sqChat.busy = false; sqChatFetch(cid);
+}
+
 /* ---- خلفية + شكل صفحة Squad Challenge ---- */
 function injectSquadStyles(){
   if(document.getElementById('squadStyles')) return;
@@ -10829,6 +10904,17 @@ function injectSquadStyles(){
     @keyframes sqlbRise{ from{ opacity:0; transform:translateY(40px) scale(.94); } }
     @keyframes sqlbIn{ from{ opacity:0; transform:translateX(-14px); } }
     @keyframes sqlbGrow{ from{ width:0; } }
+    .sqc{ margin-top:14px; text-align:start; border-top:1px dashed var(--sqi-line); padding-top:12px; }
+    .sqc-feed{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+    .sqc-b{ align-self:flex-start; max-width:92%; display:flex; flex-direction:column; gap:1px; padding:7px 12px; border-radius:14px; background:var(--sqi-glass); border:1px solid var(--sqi-line); font-weight:700; font-size:14px; line-height:1.5; }
+    .sqc-b.me{ align-self:flex-end; background:rgba(47,127,140,.14); }
+    .sqc-b.new{ animation:sqcIn .35s cubic-bezier(.2,.9,.3,1.3); }
+    .sqc-n{ font-size:11px; font-weight:800; color:var(--sqi-accent); }
+    .sqc-h{ font-size:12px; font-weight:800; color:var(--sqi-mute); margin-bottom:6px; }
+    .sqc-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+    .sqc-chip{ border:1px solid var(--sqi-line); background:var(--sqi-glass); color:inherit; font:inherit; font-size:13px; font-weight:700; padding:7px 11px; border-radius:999px; cursor:pointer; transition:transform .12s, background .2s; -webkit-tap-highlight-color:transparent; }
+    .sqc-chip:hover{ background:rgba(47,127,140,.14); } .sqc-chip:active{ transform:scale(.95); } .sqc-chip:disabled{ opacity:.5; cursor:default; }
+    @keyframes sqcIn{ from{ opacity:0; transform:translateY(8px) scale(.94); } }
     @media (prefers-reduced-motion: reduce){ .sq-stage *{ animation:none !important; } .sqi-step{ opacity:1; transform:none; } }`;
   document.head.appendChild(st);
 }
@@ -10931,6 +11017,7 @@ function bindSquadEvents(id){
   if(!c) return;
   if(squadTeam.cid !== id) squadTeam = { cid:id, loaded:false, team:null, members:[], err:'', uid:null, lastLoad:0 };
   if(sqG.cid !== id) sqG = { cid:id, st:null, err:false, busy:false, lastFetch:0, key:'', myChoice:null, uid:null };
+  if(sqChat.cid !== id) sqChat = { cid:id, slot:null, msgs:[], shown:0, busy:false, sending:false, lastFetch:0, coolUntil:0 };
   sqG.key = ''; sqG.busy = false;
   squadUid().then(u=>{ sqG.uid = u; });
   squadLoadTeam(id);
@@ -10966,6 +11053,7 @@ function sqTick(id){
   else if(ph === 'finished' && since > 15000) need = true;
   if(need){ sqG.lastFetch = Date.now(); setTimeout(()=> sqFetch(id), Math.random() * 500); }  /* عشوائية خفيفة تخفف الضغط على السيرفر */
   if((ph === 'waiting' || ph === 'nogame') && squadTeam.team && squadTeam.members.length < 3 && Date.now() - (squadTeam.lastLoad || 0) > 10000) squadLoadTeam(id, true);
+  sqChatTick(id);
 }
 
 function sqPaint(c){
@@ -10995,8 +11083,9 @@ function sqPaintWaiting(root, c){
     <p class="hint" style="margin:0 0 18px;">🗓️ ${examFmtDate(c.startsAt)}</p>
     <div style="display:flex; gap:10px; justify-content:center; margin-bottom:20px;">${['d','h','m','s'].map(box).join('')}</div>
     <p id="sqStatus" style="font-weight:800; margin:0 0 14px;"></p>
-    <div id="sqTeamBox"></div>`;
-  squadPaintTeam(c.id); sqPaintTimer(c);
+    <div id="sqTeamBox"></div>
+    <div id="sqChat"></div>`;
+  squadPaintTeam(c.id); sqPaintTimer(c); sqChatPaint();
 }
 
 function sqPaintTimer(c){
@@ -11033,8 +11122,10 @@ function sqPaintQuestion(root, c){
     <div style="display:grid; gap:8px;">${(st.options || []).map((o,i)=>`<button class="btn" data-sq-opt="${i}" style="text-align:start; justify-content:flex-start;" ${hasTeam ? '' : 'disabled'}><b>${SQ_LETTERS[i]}</b>&nbsp; ${escapeHtml(String(o))}</button>`).join('')}</div>
     <p id="sqVoteMsg" style="color:var(--red,#d33); font-weight:700; font-size:13px; margin:8px 0 0;"></p>
     <div id="sqVotes" style="margin-top:12px; text-align:start;"></div>
+    <div id="sqChat"></div>
     <p class="hint" style="margin:12px 0 0;">${hasTeam ? 'تقدر تغيّر إجابتك قبل ما يخلص الوقت. الأغلبية بتحسم، وعند التعادل صوت المسؤول 👑.' : (isAdminSession() ? 'معاينة المشرف.' : 'ما إلك فريق بهذي المسابقة — بتتفرّج بس.')}</p>`;
   root.querySelectorAll('[data-sq-opt]').forEach(b=> b.addEventListener('click', ()=> sqVote(c.id, +b.dataset.sqOpt)));
+  sqChatPaint();
   sqPaintTimer(c);
 }
 
@@ -11148,9 +11239,11 @@ function sqPaintReveal(root, c, first){
       return `<div class="card-panel" style="padding:10px 14px; text-align:start; ${ok ? 'border-color:#2ea043; background:rgba(46,160,67,.15); font-weight:800;' : picked ? 'border-color:#d33; background:rgba(220,50,50,.12);' : 'opacity:.7;'}">
         <b>${SQ_LETTERS[i]}</b>&nbsp; ${escapeHtml(String(o))} ${ok ? '✅' : ''}${picked ? ' <span class="hint" style="margin:0;">(إجابة فريقكم)</span>' : ''}</div>`; }).join('')}</div>
     ${st.explanation ? `<div class="card-panel" style="padding:12px 14px; margin-top:12px; text-align:start;"><b>💡 الشرح</b><div style="margin-top:4px; line-height:1.8;">${escapeHtml(st.explanation)}</div></div>` : ''}
+    <div id="sqChat"></div>
     ${sqLeaderboardHtml(st, { anim:!!first, prev:prevLb, zero:st.pos === 0, title:last ? 'الترتيب قبل النتيجة النهائية' : 'ترتيب الفرق بعد هذا السؤال' })}`;
   if(first) sqLbCountUp(root);
   sqPaintTimer(c);
+  sqChatPaint();
 }
 
 function sqPaintFinished(root, c, first){
@@ -11197,6 +11290,7 @@ function squadNameModal(cid, mode){
 }
 function squadPaintTeam(cid){
   const box = document.getElementById('sqTeamBox'); if(!box) return;
+  sqChatPaint();
   const c = squadData.items.find(x=>x.id===cid), st = sqG.st;
   const closed = c && squadNow() >= (st && st.starts_at ? st.starts_at : c.startsAt);
   const isStudent = state.session && state.session.type === 'student';
