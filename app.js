@@ -2740,6 +2740,7 @@ function pageCourseDetail(courseId){
         <div class="lecture-lock-msg">${ICONS.lock} ${lockMsg}</div>`}
         ${canManageLectures ? `<div class="lecture-row-admin">
           <button class="btn ${l.hidden?'teal':''} small" data-toggle-lecture-hidden="${l.id}">${l.hidden ? '👁️ إظهار للطلاب' : 'إخفاء عن الطلاب'}</button>
+          <button class="btn ${l.shareToken?'teal solid':''} small" data-share-lecture="${l.id}">🔗 ${l.shareToken ? 'رابط المحاضرة المجانية' : 'رابط مجاني للمشاركة'}</button>
           <button class="btn edit small" data-edit-lecture="${l.id}">${ICONS.edit} تعديل</button>
           <button class="btn danger small" data-del-lecture="${l.id}">${ICONS.trash} حذف المحاضرة</button>
         </div>` : ''}
@@ -6243,6 +6244,106 @@ function modalEditLecture(lectureId){
   });
 }
 
+/* =========================================================
+   رابط محاضرة مجاني للمشاركة (/watch/<token>)
+   - المشرف/المدرّس يولّد رابط للمحاضرة من زر "🔗 رابط مجاني للمشاركة".
+   - أي شخص معه الرابط يشاهد فيديوهات هذه المحاضرة فقط، بدون تسجيل دخول وبدون اشتراك.
+   - الرابط مستقل عن إخفاء المحاضرة (hidden) وعن حالة القسم (مدفوع/مجاني).
+   - "إلغاء الرابط" يحذف الـ token فيتوقف الرابط القديم فورًا، و"رابط جديد" يولّد token بديل.
+   ========================================================= */
+function genShareToken(){
+  const a = new Uint8Array(12);
+  crypto.getRandomValues(a);
+  return Array.from(a, b => b.toString(16).padStart(2,'0')).join('');
+}
+function lectureShareUrl(lecture){
+  return location.origin + '/watch/' + lecture.shareToken;
+}
+function modalShareLecture(lectureId){
+  const lecture = state.lectures.find(l=>l.id===lectureId);
+  if(!lecture) return;
+  const active = !!lecture.shareToken;
+  openModal(`
+    <h3>🔗 رابط محاضرة مجاني للمشاركة</h3>
+    <p class="hint" style="margin-bottom:12px;"><b>${escapeHtml(lecture.title)}</b></p>
+    ${active ? `
+      <div class="field">
+        <label>الرابط (أي شخص معه الرابط يقدر يشاهد بدون تسجيل دخول)</label>
+        <input type="text" id="shareLinkInput" readonly value="${escapeHtml(lectureShareUrl(lecture))}" dir="ltr" style="text-align:left;">
+      </div>
+      <p class="hint" id="shareCopyMsg" style="min-height:18px;"></p>
+      <div class="modal-actions" style="flex-wrap:wrap; gap:8px;">
+        <button type="button" class="btn teal solid small" id="shareCopyBtn">نسخ الرابط</button>
+        <button type="button" class="btn small" id="shareRegenBtn">رابط جديد (يبطل القديم)</button>
+        <button type="button" class="btn danger small" id="shareRevokeBtn">إلغاء الرابط</button>
+        <button type="button" class="btn small" id="cancelModal">إغلاق</button>
+      </div>` : `
+      <p class="hint">هذا الرابط يفتح فيديوهات هذه المحاضرة فقط للمشاهدة المباشرة، بدون تسجيل دخول أو اشتراك. تقدر تلغيه بأي وقت.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn small" id="cancelModal">إلغاء</button>
+        <button type="button" class="btn teal solid small" id="shareCreateBtn">إنشاء الرابط</button>
+      </div>`}
+  `);
+  document.getElementById('cancelModal').addEventListener('click', closeModal);
+  const save = async (token)=>{
+    if(token) lecture.shareToken = token; else delete lecture.shareToken;
+    await setData('lectures', state.lectures, true);
+    modalShareLecture(lectureId);
+    render();
+  };
+  const $ = id => document.getElementById(id);
+  if($('shareCreateBtn')) $('shareCreateBtn').addEventListener('click', ()=> save(genShareToken()));
+  if($('shareRegenBtn')) $('shareRegenBtn').addEventListener('click', ()=>{
+    if(confirm('الرابط القديم رح يتوقف عن العمل. متأكد؟')) save(genShareToken());
+  });
+  if($('shareRevokeBtn')) $('shareRevokeBtn').addEventListener('click', ()=>{
+    if(confirm('سيتوقف الرابط نهائيًا. متأكد؟')) save(null);
+  });
+  if($('shareCopyBtn')) $('shareCopyBtn').addEventListener('click', async ()=>{
+    const url = $('shareLinkInput').value;
+    try{ await navigator.clipboard.writeText(url); $('shareCopyMsg').textContent = '✅ تم نسخ الرابط'; }
+    catch(e){ $('shareLinkInput').select(); document.execCommand('copy'); $('shareCopyMsg').textContent = '✅ تم نسخ الرابط'; }
+  });
+}
+/* الصفحة العامة التي يفتحها الطالب من الرابط — لا تتطلب تسجيل دخول */
+function pageSharedLecture(token){
+  const lecture = token ? state.lectures.find(l=>l.shareToken && l.shareToken === token) : null;
+  if(!lecture){
+    return `<section class="section"><div class="container"><div class="empty-state"><h3>الرابط غير صالح</h3><p>ربما تم إلغاء هذا الرابط. <a href="/courses" style="color:var(--teal); font-weight:800;">تصفّح الدورات</a></p></div></div></section>`;
+  }
+  const course = state.courses.find(c=>c.id===lecture.courseId);
+  const videos = lecture.videos || [];
+  const videosHtml = videos.map((v,idx)=>{
+    const label = v.label ? escapeHtml(v.label) : ('مشاهدة الفيديو' + (videos.length>1 ? ' '+(idx+1) : ''));
+    if(v.bunnyGuid){
+      const libMatch = (v.url||'').match(/\/embed\/(\d+)\//);
+      const libraryId = libMatch ? libMatch[1] : '';
+      return `
+        <button type="button" class="lecture-action-btn watch watch-secure"
+          data-library-id="${escapeHtml(libraryId)}" data-video-guid="${escapeHtml(v.bunnyGuid)}" data-embed-url="${escapeHtml(v.url)}">
+          <span class="action-icon">${ICONS.play}</span>
+          <span><span class="label-main">${label}</span><span class="label-sub">تشغيل الفيديو</span></span>
+        </button>
+        <div class="video-player-slot" data-player-for="${escapeHtml(v.bunnyGuid)}"></div>`;
+    }
+    return `
+      <a class="lecture-action-btn watch" href="${escapeHtml(v.url)}" target="_blank" rel="noopener">
+        <span class="action-icon">${ICONS.play}</span>
+        <span><span class="label-main">${label}</span><span class="label-sub">تشغيل الفيديو</span></span>
+      </a>`;
+  }).join('');
+  return `
+  <section class="section"><div class="container" style="max-width:820px;">
+    <div class="empty-state" style="text-align:start; padding:22px;">
+      <p class="hint" style="margin:0 0 6px;">🆓 محاضرة مجانية${course ? ' — ' + escapeHtml(course.title) : ''}</p>
+      <h2 style="margin:0 0 10px;">${escapeHtml(lecture.title)}</h2>
+      ${lecture.description ? `<p style="color:var(--muted); margin-bottom:14px;">${escapeHtml(lecture.description)}</p>` : ''}
+      <div class="lecture-actions">${videosHtml || `<div class="lecture-lock-msg">${ICONS.play} لا يوجد فيديو لهذه المحاضرة بعد</div>`}</div>
+      <p style="margin-top:20px;"><a class="btn teal solid small" href="/courses">تصفّح باقي الدورات</a></p>
+    </div>
+  </div></section>`;
+}
+
 function lectureOptionsFor(courseId, selectedLectureId){
   const opts = state.lectures.filter(l=>l.courseId===courseId).map(l=>`<option value="${l.id}" ${selectedLectureId===l.id?'selected':''}>${escapeHtml(l.title)}</option>`).join('');
   return `<option value="" ${!selectedLectureId?'selected':''}>— سؤال عام (غير مرتبط بمحاضرة) —</option>${opts}`;
@@ -8000,6 +8101,8 @@ async function render(){
     html = pageFeedback(fbIdFromRoute(route));
   } else if(route.startsWith('squad/')){
     html = pageSquad(squadIdFromRoute(route));
+  } else if(route.startsWith('watch/')){
+    html = pageSharedLecture(decodeURIComponent(route.slice(6).split('/')[0].split('?')[0]));
   } else {
     switch(route){
       case 'home': html = pageHome(); break;
@@ -13066,6 +13169,9 @@ function bindPageEvents(route){
         const up = btn.dataset.moveLectureUp;
         moveLecture(up || btn.dataset.moveLectureDown, up ? -1 : 1);
       });
+    });
+    document.querySelectorAll('[data-share-lecture]').forEach(btn=>{
+      btn.addEventListener('click', ()=> modalShareLecture(btn.dataset.shareLecture));
     });
     document.querySelectorAll('[data-toggle-lecture-hidden]').forEach(btn=>{
       btn.addEventListener('click', ()=> toggleLectureHidden(btn.dataset.toggleLectureHidden));
