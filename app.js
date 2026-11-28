@@ -874,7 +874,57 @@ async function redeemBankCoupon(rawCode){
 async function redeemAnyCoupon(rawCode){
   const bank = await redeemBankCoupon(rawCode);
   if(!bank.notFound) return bank;
+  /* كوبون الباقات (السعر حسب عدد المواد): نفحصه قبل الكوبونات العادية */
+  const bundle = await lookupBundleCoupon(rawCode);
+  if(bundle && bundle.is_bundle){
+    if(!bundle.ok) return { ok:false, msg: bundle.msg || 'تعذّر تفعيل الكوبون.' };
+    return { ok:false, needsBundleChoice:true, bundle };
+  }
   return redeemCoupon(rawCode);
+}
+
+/* ---------------- كوبون الباقات: السعر حسب عدد المواد ----------------
+   الأدمن بيحدد جدول أسعار (1 مادة = X، 2 = Y، 3 = Z ...) والطالب بيختار مواده،
+   والسعر بيتحدد تلقائيًا حسب عدد المواد المختارة. التفعيل يظل يدويًا من الدعم
+   (نفس منطق بطاقة الخصم)، والبطاقة بتحمل المواد المختارة والسعر النهائي. */
+/* عملة العرض بالرسائل (غيّرها إذا لزم) */
+const BUNDLE_CURRENCY = 'دينار';
+async function lookupBundleCoupon(rawCode){
+  const code = (rawCode||'').trim().toUpperCase();
+  if(!code || !supabaseClient || !state.session || state.session.type !== 'student') return null;
+  try{
+    const { data, error } = await supabaseClient.rpc('get_bundle_coupon', { p_code: code });
+    if(error){ return null; } /* الدالة غير موجودة بعد (ما انشغّل ملف SQL) → نكمل بالمسار العادي */
+    return data;
+  }catch(e){ return null; }
+}
+function bundleTierFor(tiers, n){
+  return (tiers||[]).find(t=>Number(t.n)===Number(n)) || null;
+}
+async function redeemBundleCoupon(rawCode, courseIds){
+  if(!state.session || state.session.type !== 'student') return { ok:false, msg:'سجّل الدخول كطالب أولًا لاستخدام كوبون.' };
+  const code = (rawCode||'').trim().toUpperCase();
+  const phone = state.session.phone;
+  let res;
+  try{
+    const { data, error } = await supabaseClient.rpc('redeem_bundle_coupon', { p_code: code, p_course_ids: courseIds });
+    if(error) throw error;
+    res = data;
+  }catch(e){ console.error('redeem_bundle_coupon failed', e); return { ok:false, msg:'تعذّر الاتصال بالخادم حاليًا، حاول مرة ثانية بعد قليل.' }; }
+  if(!res || !res.ok) return { ok:false, msg:(res && res.msg) || 'تعذّر تفعيل الكوبون.' };
+  const titles = courseIds.map(id=>{ const c = state.courses.find(x=>x.id===id); return c ? c.title : ''; }).filter(Boolean);
+  const sectionTxt = res.section ? ` (قسم ${SECTION_LABELS[res.section]} فقط)` : '';
+  const orig = res.original_total != null ? Number(res.original_total) : null;
+  const priceTxt = orig ? `بدل ${orig} صارت ${res.total_price}` : `${res.total_price}`;
+  const msg = `📦 تم تفعيل كوبون الباقة: ${courseIds.length} ${courseIds.length===1?'مادة':'مواد'}${sectionTxt} بسعر ${priceTxt} ${BUNDLE_CURRENCY}. حمّل البطاقة أدناه وأرسلها للدعم الفني لإتمام تفعيل اشتراكك بالسعر المخفّض.`;
+  const card = {
+    bundle:true, studentName: state.session.name || '', phone,
+    price: res.total_price, originalPrice: orig, count: courseIds.length,
+    courseTitle: titles.join('، '),
+    targetLabel: `${courseIds.length} ${courseIds.length===1?'مادة':'مواد'}${sectionTxt}: ${titles.join('، ')}`,
+    serial: res.serial, code, issuedAt: Number(res.used_at),
+  };
+  return { ok:true, msg, card };
 }
 
 /* ---------------- Coupons (كوبونات الخصم/الفتح المجاني) ----------------
@@ -1056,15 +1106,22 @@ async function buildCouponCardDataUrl(card){
   ctx.fillStyle = '#177a8c';
   ctx.textAlign = 'center'; ctx.direction='ltr';
   ctx.font = '800 32px Cairo, sans-serif';
-  ctx.fillText(`${card.discountPercent}%`, circX, circY+2);
-  ctx.font = '700 15px Cairo, sans-serif';
-  ctx.direction='rtl';
-  ctx.fillText('خصم', circX, circY+28);
+  if(card.bundle){
+    ctx.fillText(`${card.price}`, circX, circY+2);
+    ctx.font = '700 15px Cairo, sans-serif';
+    ctx.direction='rtl';
+    ctx.fillText(card.originalPrice ? `بدل ${card.originalPrice}` : 'السعر النهائي', circX, circY+28);
+  } else {
+    ctx.fillText(`${card.discountPercent}%`, circX, circY+2);
+    ctx.font = '700 15px Cairo, sans-serif';
+    ctx.direction='rtl';
+    ctx.fillText('خصم', circX, circY+28);
+  }
 
   ctx.direction='rtl'; ctx.textAlign='right';
   ctx.fillStyle = '#16232f';
   ctx.font = '700 19px Cairo, sans-serif';
-  wrapCanvasText(ctx, card.targetLabel, px+pw-40, py+250, pw-280, 26);
+  wrapCanvasText(ctx, card.targetLabel, px+pw-40, py+(card.bundle?232:250), pw-280, card.bundle?24:26);
 
   ctx.fillStyle = '#5c7185';
   ctx.font = '600 15px Cairo, sans-serif';
@@ -1375,10 +1432,11 @@ async function loadCoupons(){
     const byCoupon = {};
     uses.forEach(u=>{
       (byCoupon[u.coupon_id] = byCoupon[u.coupon_id] || []).push(
-        Object.assign({ phone: u.phone, usedAt: Number(u.used_at), courseId: u.course_id }, u.serial ? { serial: u.serial } : {}));
+        Object.assign({ phone: u.phone, usedAt: Number(u.used_at), courseId: u.course_id, courseIds: u.course_ids || null, bundlePrice: u.bundle_price == null ? null : Number(u.bundle_price) }, u.serial ? { serial: u.serial } : {}));
     });
     state.coupons = cps.map(c=> ({
       id: c.id, code: c.code, type: c.type, discountPercent: c.discount_percent, courseId: c.course_id,
+      bundleTiers: c.bundle_tiers || null,
       section: c.section, maxUses: c.max_uses, expiresAt: c.expires_at == null ? null : Number(c.expires_at),
       active: c.active, note: c.note || '', createdAt: Number(c.created_at), usedBy: byCoupon[c.id] || [],
     }));
@@ -3787,6 +3845,9 @@ function pageAdminAnalytics(){
    PAGE: ADMIN COUPONS (كوبونات الفتح المجاني والخصم)
    ========================================================= */
 function couponTargetLabel(coupon){
+  if(coupon.type==='bundle'){
+    return coupon.section ? `📦 باقة — المواد من اختيار الطالب — قسم ${SECTION_LABELS[coupon.section]} فقط` : '📦 باقة — المواد من اختيار الطالب — كل الأقسام';
+  }
   if(!coupon.courseId){
     return coupon.section ? `🧑‍🎓 من اختيار الطالب — قسم ${SECTION_LABELS[coupon.section]} فقط` : '🧑‍🎓 المادة من اختيار الطالب — كل الأقسام';
   }
@@ -3797,7 +3858,9 @@ function couponTargetLabel(coupon){
 function couponCardHtml(coupon){
   const usesLeft = couponUsesLeft(coupon);
   const usesText = coupon.maxUses==null ? `${(coupon.usedBy||[]).length} استخدام (بدون حد أقصى)` : `${(coupon.usedBy||[]).length} / ${coupon.maxUses} استخدام`;
-  const typeTag = coupon.type==='free' ? `<span class="lecture-tier-tag">🆓 فتح مجاني</span>` : `<span class="lecture-tier-tag locked">🏷️ خصم ${coupon.discountPercent}%</span>`;
+  const typeTag = coupon.type==='free' ? `<span class="lecture-tier-tag">🆓 فتح مجاني</span>`
+    : coupon.type==='bundle' ? `<span class="lecture-tier-tag locked">📦 باقة: ${(coupon.bundleTiers||[]).map(t=>`${t.n}←${t.price}`).join(' • ')}</span>`
+    : `<span class="lecture-tier-tag locked">🏷️ خصم ${coupon.discountPercent}%</span>`;
   const expired = isCouponExpired(coupon);
   const expiryTag = coupon.expiresAt ? (expired
       ? `<span class="lecture-tier-tag locked" style="background:var(--danger); color:#fff;">⏰ منتهي الصلاحية</span>`
@@ -3808,7 +3871,7 @@ function couponCardHtml(coupon){
       <details style="margin-top:8px;">
         <summary style="cursor:pointer; font-size:13px; color:var(--teal); font-weight:700;">🔎 عرض الأرقام التسلسلية للبطاقات الصادرة (${serials.length})</summary>
         <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
-          ${serials.map(u=>`<div style="font-size:12.5px; color:var(--muted); direction:ltr; text-align:right;">${escapeHtml(u.serial)} — ${escapeHtml(u.phone)} — ${new Date(u.usedAt).toLocaleDateString('ar-JO')}</div>`).join('')}
+          ${serials.map(u=>`<div style="font-size:12.5px; color:var(--muted); direction:ltr; text-align:right;">${escapeHtml(u.serial)} — ${escapeHtml(u.phone)} — ${new Date(u.usedAt).toLocaleDateString('ar-JO')}${u.courseIds ? ` — ${escapeHtml((u.courseIds||[]).map(id=>{ const c = state.courses.find(x=>x.id===id); return c ? c.title : id; }).join('، '))} — ${u.bundlePrice}` : ''}</div>`).join('')}
         </div>
         <p class="hint" style="margin-top:6px; font-size:12px;">قارن هذا الرقم مع الرقم المكتوب على بطاقة الخصم التي أرسلها الطالب؛ إن لم يتطابق فالبطاقة مزوَّرة.</p>
       </details>` : '';
@@ -3986,7 +4049,14 @@ function modalCreateCoupon(){
         <select name="type" id="couponTypeSelect">
           <option value="free">🆓 فتح مجاني (يفتح مباشرة عند الاستخدام)</option>
           <option value="discount">🏷️ خصم بنسبة (رسالة توضيحية فقط، التفعيل يدوي)</option>
+          <option value="bundle">📦 باقة — السعر حسب عدد المواد (الطالب يختار مواده)</option>
         </select>
+      </div>
+      <div class="field" id="couponBundleField" style="display:none;">
+        <label>جدول أسعار الباقة (السعر حسب عدد المواد التي يختارها الطالب)</label>
+        <div id="bundleTierRows"></div>
+        <button type="button" class="btn small" id="addBundleTierBtn">➕ إضافة صف (مادة إضافية)</button>
+        <p class="hint" style="margin-top:6px;">"السعر الأصلي" اختياري ويُستخدم فقط لعرض "بدل X" على بطاقة الطالب. أقصى عدد مواد يقدر الطالب يختارها = عدد الصفوف.</p>
       </div>
       <div class="field" id="couponDiscountField" style="display:none;">
         <label>نسبة الخصم %</label>
@@ -4040,6 +4110,44 @@ function modalCreateCoupon(){
     // في وضع اختيار الطالب، الأقسام المعروضة عامة (فيرست/ميد/فاينال) وليست تابعة لكورس محدد
     sectionSelect.innerHTML = studentChooses ? sectionOptionsFor(null) : sectionOptionsFor(courseSelect.value);
   });
+  /* ---- نوع "باقة": جدول أسعار حسب عدد المواد ---- */
+  const bundleField = document.getElementById('couponBundleField');
+  const bundleRowsEl = document.getElementById('bundleTierRows');
+  let bundleRows = [ {orig:12, price:8}, {orig:20, price:15}, {orig:24, price:20} ];
+  const renderBundleRows = ()=>{
+    bundleRowsEl.innerHTML = bundleRows.map((r,i)=>`
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+        <b style="min-width:72px;">${i+1} ${i===0?'مادة':'مواد'}</b>
+        <input type="number" min="0" step="0.01" data-bundle-orig="${i}" value="${r.orig==null?'':r.orig}" placeholder="السعر الأصلي" style="flex:1; direction:ltr;">
+        <span>←</span>
+        <input type="number" min="0" step="0.01" data-bundle-price="${i}" value="${r.price==null?'':r.price}" placeholder="السعر بالكوبون" style="flex:1; direction:ltr;">
+        ${(i===bundleRows.length-1 && bundleRows.length>1) ? `<button type="button" class="btn danger small" data-bundle-del="1">✕</button>` : '<span style="width:38px;"></span>'}
+      </div>`).join('');
+    bundleRowsEl.querySelectorAll('[data-bundle-orig]').forEach(inp=> inp.addEventListener('input', ()=>{ bundleRows[Number(inp.dataset.bundleOrig)].orig = inp.value; }));
+    bundleRowsEl.querySelectorAll('[data-bundle-price]').forEach(inp=> inp.addEventListener('input', ()=>{ bundleRows[Number(inp.dataset.bundlePrice)].price = inp.value; }));
+    bundleRowsEl.querySelectorAll('[data-bundle-del]').forEach(btn=> btn.addEventListener('click', ()=>{ bundleRows.pop(); renderBundleRows(); }));
+  };
+  renderBundleRows();
+  document.getElementById('addBundleTierBtn').addEventListener('click', ()=>{ bundleRows.push({orig:'', price:''}); renderBundleRows(); });
+  const syncCouponTypeUI = ()=>{
+    const t = typeSelect.value;
+    const isBundle = t==='bundle';
+    discountField.style.display = t==='discount' ? '' : 'none';
+    bundleField.style.display = isBundle ? '' : 'none';
+    const chooseField = studentChooseCheckbox.closest('.field');
+    if(isBundle){
+      if(chooseField) chooseField.style.display = 'none';
+      courseFieldWrap.style.display = 'none';
+      courseSelect.required = false;
+      sectionHint.style.display = '';
+      sectionSelect.innerHTML = sectionOptionsFor(null);
+    } else {
+      if(chooseField) chooseField.style.display = '';
+      studentChooseCheckbox.dispatchEvent(new Event('change'));
+    }
+  };
+  typeSelect.addEventListener('change', syncCouponTypeUI);
+
   document.getElementById('couponForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -4047,7 +4155,8 @@ function modalCreateCoupon(){
     const code = (fd.get('code')||'').trim().toUpperCase();
     if(!code){ msgBox.innerHTML = `<div class="form-msg error">أدخل كود الكوبون.</div>`; return; }
     if(findCouponByCode(code) || findBankCouponByCode(code)){ msgBox.innerHTML = `<div class="form-msg error">هذا الكود مستخدم مسبقًا لكوبون آخر، اختر كودًا مختلفًا.</div>`; return; }
-    const studentChooses = studentChooseCheckbox.checked;
+    const isBundle = fd.get('type')==='bundle';
+    const studentChooses = isBundle || studentChooseCheckbox.checked;
     let courseId = null;
     if(!studentChooses){
       courseId = fd.get('courseId');
@@ -4059,6 +4168,20 @@ function modalCreateCoupon(){
     if(type==='discount' && (!discountPercent || discountPercent<1 || discountPercent>100)){
       msgBox.innerHTML = `<div class="form-msg error">أدخل نسبة خصم صحيحة بين 1 و100.</div>`; return;
     }
+    let bundleTiers = null;
+    if(type==='bundle'){
+      bundleTiers = [];
+      for(let i=0;i<bundleRows.length;i++){
+        const priceRaw = bundleRows[i].price, origRaw = bundleRows[i].orig;
+        if(priceRaw==='' || priceRaw==null || isNaN(Number(priceRaw)) || Number(priceRaw)<0){
+          msgBox.innerHTML = `<div class="form-msg error">أدخل سعرًا صحيحًا في صف ${i+1} ${i===0?'مادة':'مواد'}.</div>`; return;
+        }
+        const tier = { n:i+1, price:Number(priceRaw) };
+        if(origRaw!=='' && origRaw!=null && !isNaN(Number(origRaw)) && Number(origRaw)>0) tier.original = Number(origRaw);
+        bundleTiers.push(tier);
+      }
+      if(!bundleTiers.length){ msgBox.innerHTML = `<div class="form-msg error">أضف صفًّا واحدًا على الأقل.</div>`; return; }
+    }
     const maxUsesRaw = fd.get('maxUses');
     const maxUses = maxUsesRaw ? Number(maxUsesRaw) : null;
     const expiresAtRaw = fd.get('expiresAt');
@@ -4067,15 +4190,16 @@ function modalCreateCoupon(){
       msgBox.innerHTML = `<div class="form-msg error">تاريخ انتهاء الصلاحية يجب أن يكون في المستقبل.</div>`; return;
     }
     const newCoupon = {
-      id:'cp'+Date.now(), code, type, discountPercent, courseId, section,
+      id:'cp'+Date.now(), code, type, discountPercent, courseId, section, bundleTiers,
       maxUses, expiresAt, usedBy: [], active:true, note:(fd.get('note')||'').trim(), createdAt: Date.now(),
     };
     const { error: cpErr } = await supabaseClient.from('coupons').insert({
       id: newCoupon.id, code, type, discount_percent: discountPercent, course_id: courseId, section,
+      ...(bundleTiers ? { bundle_tiers: bundleTiers } : {}),
       max_uses: maxUses, expires_at: expiresAt, active: true, note: newCoupon.note, created_at: newCoupon.createdAt,
     });
     if(cpErr){
-      msgBox.innerHTML = `<div class="form-msg error">${cpErr.code==='23505' ? 'هذا الكود مستخدم مسبقًا، اختر كودًا مختلفًا.' : 'تعذّر حفظ الكوبون، تأكد من صلاحياتك وحاول مرة ثانية.'}</div>`;
+      msgBox.innerHTML = `<div class="form-msg error">${cpErr.code==='23505' ? 'هذا الكود مستخدم مسبقًا، اختر كودًا مختلفًا.' : (bundleTiers && (cpErr.code==='PGRST204' || cpErr.code==='23514')) ? 'قاعدة البيانات غير جاهزة لكوبونات الباقات — شغّل ملف bundle_coupons.sql من Supabase SQL Editor أولًا.' : 'تعذّر حفظ الكوبون، تأكد من صلاحياتك وحاول مرة ثانية.'}</div>`;
       console.error('coupon insert failed', cpErr); return;
     }
     state.coupons.push(newCoupon);
@@ -13465,6 +13589,70 @@ function bindPageEvents(route){
         await showCouponResult(result);
       });
     };
+    /* كوبون الباقة: الطالب يختار مواده (checkbox) والسعر يتحدد حسب العدد، ثم يؤكد */
+    const showBundleChoiceStep = (code, bundle)=>{
+      const msgBox = document.getElementById('couponRedeemMsg');
+      if(!msgBox) return;
+      const studentUni = state.session && state.session.type === 'student' ? state.session.university : null;
+      const studentMajor = state.session && state.session.type === 'student' ? state.session.major : null;
+      if(!studentUni || !studentMajor){
+        msgBox.innerHTML = `<div class="form-msg error">جامعتك أو تخصصك غير محدَّدين في حسابك، الرجاء تحديثهما من صفحة الملف الشخصي ثم إعادة المحاولة.</div>`;
+        return;
+      }
+      const tiers = (bundle.tiers||[]).slice().sort((a,b)=>a.n-b.n);
+      const maxN = tiers.length ? Number(tiers[tiers.length-1].n) : 0;
+      const sec = bundle.section || null;
+      const eligible = state.courses.filter(c =>
+        (c.university === studentUni || c.university === 'عام') && (c.major || 'التمريض') === studentMajor
+        && !courseIsAllFree(c)
+        && (sec ? (courseSections(c.id).includes(sec) && !sectionUnlocked(c.id, sec)) : !courseFullyUnlocked(c.id)));
+      if(!eligible.length){
+        msgBox.innerHTML = `<div class="form-msg error">لا توجد مواد مدفوعة متاحة لجامعتك وتخصصك حاليًا لتفعيل هذا الكوبون عليها.</div>`;
+        return;
+      }
+      const tiersHtml = tiers.map(t=>`<span class="lecture-tier-tag" style="margin-inline-end:6px;">${t.n} ${t.n===1?'مادة':'مواد'}: ${t.original?`<s style="opacity:.6;">${t.original}</s> `:''}<b>${t.price}</b></span>`).join('');
+      const cardsHtml = eligible.map(c=>`
+        <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; padding:12px 14px; border-radius:12px; border:2px solid var(--border); background:var(--card);">
+          <span class="i18n-skip" style="display:flex; flex-direction:column; gap:3px;">
+            <b style="font-size:15px;">${escapeHtml(c.title)}</b>
+            <span style="font-size:12.5px; color:var(--muted); font-weight:400;">${escapeHtml(c.university)} — ${escapeHtml(c.major || 'التمريض')}</span>
+          </span>
+          <input type="checkbox" name="bundleCourse" value="${c.id}" style="width:18px; height:18px; accent-color:var(--teal); flex-shrink:0;">
+        </label>`).join('');
+      msgBox.innerHTML = `
+        <div class="form-msg" style="background:var(--teal-light); color:var(--teal); border:1px solid var(--teal);">
+          📦 كوبون باقة: اختر المواد التي تريدها (حتى ${maxN}) والسعر بيتحدد تلقائيًا حسب عدد المواد.${sec ? ` (ينطبق على قسم ${SECTION_LABELS[sec]} فقط)` : ''}
+        </div>
+        <div style="margin-top:10px;">${tiersHtml}</div>
+        <div class="field" style="margin-top:10px;">
+          <label>اختر المواد</label>
+          <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">${cardsHtml}</div>
+        </div>
+        <div id="bundleSummary" style="margin-top:12px; font-weight:700;"></div>
+        <button type="button" class="btn teal solid small" style="margin-top:14px;" id="confirmBundleBtn" disabled>تأكيد وتفعيل الكوبون</button>`;
+      const boxes = Array.from(msgBox.querySelectorAll('input[name="bundleCourse"]'));
+      const summary = document.getElementById('bundleSummary');
+      const confirmBtn = document.getElementById('confirmBundleBtn');
+      const update = ()=>{
+        const n = boxes.filter(b=>b.checked).length;
+        boxes.forEach(b=>{ if(!b.checked) b.disabled = n >= maxN; });
+        const tier = bundleTierFor(tiers, n);
+        if(!n) summary.innerHTML = 'اختر مادة واحدة على الأقل.';
+        else if(!tier) summary.innerHTML = `<span style="color:var(--danger);">لا يوجد سعر محدد لـ ${n} مواد في هذا الكوبون.</span>`;
+        else summary.innerHTML = `${n} ${n===1?'مادة':'مواد'} ← السعر: <span style="color:var(--teal); font-size:18px;">${tier.price} ${BUNDLE_CURRENCY}</span>${tier.original ? ` <s style="opacity:.6; font-weight:400;">${tier.original}</s>` : ''}`;
+        confirmBtn.disabled = !tier;
+      };
+      boxes.forEach(b=>b.addEventListener('change', update));
+      update();
+      confirmBtn.addEventListener('click', async ()=>{
+        const ids = boxes.filter(b=>b.checked).map(b=>b.value);
+        if(!ids.length) return;
+        confirmBtn.disabled = true;
+        const result = await redeemBundleCoupon(code, ids);
+        if(!result.ok) confirmBtn.disabled = false;
+        await showCouponResult(result);
+      });
+    };
     if(couponForm) couponForm.addEventListener('submit', async (e)=>{
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -13473,6 +13661,7 @@ function bindPageEvents(route){
       submitBtn.disabled = true;
       const result = await redeemAnyCoupon(code);
       submitBtn.disabled = false;
+      if(result.needsBundleChoice){ showBundleChoiceStep(code, result.bundle); return; }
       if(result.needsCourseChoice){ showCourseChoiceStep(code); return; }
       await showCouponResult(result);
     });
